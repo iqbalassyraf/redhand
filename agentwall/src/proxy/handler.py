@@ -38,6 +38,8 @@ class ProxyDispatcher:
         body: dict[str, Any],
         agent_id: str = "agent-anonymous",
         caller_identity: str = "internal-service",
+        user_id: str | None = None,
+        user_roles: list[str] | None = None,
     ) -> dict[str, Any]:
         trace_id = uuid4().hex
         span_id = uuid4().hex[:16]
@@ -61,6 +63,7 @@ class ProxyDispatcher:
                 arguments=parsed.arguments,
                 agent_id=agent_id,
                 caller_identity=caller_identity,
+                user_roles=user_roles,
             )
 
             # Block decision
@@ -92,6 +95,8 @@ class ProxyDispatcher:
                 target_audience=verdict.target_audience,
                 provider_name=verdict.iam_provider,
                 ttl_seconds=30,
+                user_id=user_id,
+                user_roles=user_roles,
             )
 
             upstream_res, status_code = await self._forward_upstream(
@@ -133,6 +138,8 @@ class ProxyDispatcher:
         body: dict[str, Any],
         agent_id: str = "agent-anonymous",
         caller_identity: str = "internal-service",
+        user_id: str | None = None,
+        user_roles: list[str] | None = None,
     ) -> dict[str, Any]:
         trace_id = uuid4().hex
         span_id = uuid4().hex[:16]
@@ -150,6 +157,7 @@ class ProxyDispatcher:
                 arguments=call.arguments,
                 agent_id=agent_id,
                 caller_identity=caller_identity,
+                user_roles=user_roles,
             )
 
             if verdict.decision == "BLOCK":
@@ -179,6 +187,8 @@ class ProxyDispatcher:
                 target_audience=verdict.target_audience,
                 provider_name=verdict.iam_provider,
                 ttl_seconds=30,
+                user_id=user_id,
+                user_roles=user_roles,
             )
 
             upstream_res, status_code = await self._forward_upstream(

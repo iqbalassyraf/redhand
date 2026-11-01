@@ -38,6 +38,8 @@ class SQLASTGuardrail:
         query: str,
         allowed_statements: list[str] | None = None,
         forbidden_clauses: list[str] | None = None,
+        forbidden_columns: list[str] | None = None,
+        max_rows_limit: int | None = None,
     ) -> tuple[bool, list[str]]:
         violations: list[str] = []
         if not query or not query.strip():
@@ -62,6 +64,7 @@ class SQLASTGuardrail:
             return False, violations
 
         allowed = [s.upper() for s in (allowed_statements or ["SELECT"])]
+        forbidden_col_set = {c.lower() for c in (forbidden_columns or [])}
 
         for idx, expression in enumerate(parsed_expressions):
             if expression is None:
@@ -81,13 +84,39 @@ class SQLASTGuardrail:
                         f"Prohibited destructive AST node detected: '{type(node).__name__}'"
                     )
 
+            # Column-level policy enforcement (Data Exfiltration Prevention)
+            if forbidden_col_set:
+                for col_node in expression.find_all(exp.Column):
+                    col_name = col_node.name.lower()
+                    if col_name in forbidden_col_set:
+                        violations.append(
+                            f"Access to sensitive column '{col_node.name}' is prohibited by data governance policy."
+                        )
+
+            # Hard row limit enforcement (Preventing Full Table Dump Exfiltration)
+            if max_rows_limit is not None and expr_name == "SELECT":
+                limit_node = expression.find(exp.Limit)
+                if not limit_node:
+                    violations.append(
+                        f"Query lacks mandatory LIMIT clause (enforced maximum: {max_rows_limit} rows)."
+                    )
+                else:
+                    try:
+                        limit_val = int(str(limit_node.expression).strip("'\""))
+                        if limit_val > max_rows_limit:
+                            violations.append(
+                                f"Requested LIMIT {limit_val} exceeds maximum allowed row limit of {max_rows_limit}."
+                            )
+                    except Exception:
+                        violations.append("Invalid or unparseable LIMIT clause in SQL query.")
+
         return len(violations) == 0, violations
 
 
 class ShellASTGuardrail:
     """
     POSIX-compliant shell command lexer & AST guardrail.
-    Prevents command chaining, subshells, substitution, and dangerous primitives.
+    Enforces positive binary allowlists and anti-evasion checks over fragile denylists.
     """
 
     CHAINING_OPERATORS = {"&&", "||", ";", "&"}
@@ -96,6 +125,13 @@ class ShellASTGuardrail:
         re.compile(r"`.*`"),              # `command`
         re.compile(r"<\(.*\)"),           # <(process substitution)
         re.compile(r">\(.*\)"),           # >(process substitution)
+        re.compile(r"\$\{.*\}"),          # ${VAR} expansion evasion
+    ]
+    EVASION_PATTERNS = [
+        re.compile(r"\\x[0-9a-fA-F]{2}"), # Hex escape evasion
+        re.compile(r"\\u[0-9a-fA-F]{4}"), # Unicode escape evasion
+        re.compile(r"base64\s+(?:-d|--decode)", re.IGNORECASE), # Base64 decoded execution
+        re.compile(r"(?:python|perl|ruby|node|sh|bash)\s+-c", re.IGNORECASE), # Dynamic inline execution
     ]
     DANGEROUS_PRIMITIVES = {
         "sudo", "su", "eval", "exec", "curl", "wget", "nc", "netcat", "ncat",
@@ -116,19 +152,24 @@ class ShellASTGuardrail:
         if not command_str or not command_str.strip():
             return False, ["Shell command cannot be empty."]
 
-        # 1. Subshell & command substitution detection
+        # 1. Anti-evasion & Obfuscation Detection
+        for evasion_pat in cls.EVASION_PATTERNS:
+            if evasion_pat.search(command_str):
+                violations.append(f"Command obfuscation or dynamic code evaluation detected: '{evasion_pat.pattern}'")
+
+        # 2. Subshell & command substitution detection
         if block_subshells:
             for pattern in cls.SUBSHELL_PATTERNS:
                 if pattern.search(command_str):
                     violations.append(f"Subshell or command substitution syntax detected: {pattern.pattern}")
 
-        # 2. Command chaining detection via raw string & lexer
+        # 3. Command chaining detection via raw string & lexer
         if block_chaining:
             for op in cls.CHAINING_OPERATORS:
                 if op in command_str:
                     violations.append(f"Command chaining operator '{op}' is prohibited.")
 
-        # 3. Lexical tokenization using shlex
+        # 4. Lexical tokenization using shlex
         try:
             tokens = shlex.split(command_str, posix=True)
         except Exception as exc:
@@ -141,13 +182,17 @@ class ShellASTGuardrail:
         if "/" in base_cmd:
             base_cmd = base_cmd.split("/")[-1]
 
-        # 4. Check base binary against allowlist
-        if allowed_binaries:
+        # 5. Positive Allowlist Enforcement (Deny-by-default)
+        if allowed_binaries is not None:
             allowed_set = {b.lower() for b in allowed_binaries}
             if base_cmd not in allowed_set:
-                violations.append(f"Executable '{base_cmd}' is not in allowed binaries list: {allowed_binaries}")
+                violations.append(
+                    f"Executable '{base_cmd}' is not in the positive security allowlist: {allowed_binaries}. Deny-by-default enforced."
+                )
+        else:
+            violations.append("Shell execution blocked: zero-trust policy mandates an explicit allowed_binaries allowlist.")
 
-        # 5. Check dangerous primitives anywhere in arguments
+        # 6. Check dangerous primitives anywhere in arguments
         if block_dangerous_primitives:
             for token in tokens:
                 clean_tok = token.lower().strip()
@@ -156,7 +201,7 @@ class ShellASTGuardrail:
                 if "169.254.169.254" in clean_tok or "/dev/tcp" in clean_tok:
                     violations.append(f"Network exfiltration or SSRF target detected: '{clean_tok}'")
 
-        # 6. Pipe redirection check
+        # 7. Pipe redirection check
         if "|" in command_str:
             violations.append("Pipe operator '|' is prohibited in containment mode.")
 

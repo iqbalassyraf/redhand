@@ -3,6 +3,7 @@ HashiCorp Vault Dynamic Secret Lease Provider.
 """
 
 import time
+from typing import Any
 from uuid import uuid4
 from .base import BaseSTSProvider, EphemeralToken
 
@@ -23,6 +24,9 @@ class VaultSTSProvider(BaseSTSProvider):
         tool_name: str,
         target_audience: str,
         ttl_seconds: int = 60,
+        user_id: str | None = None,
+        user_roles: list[str] | None = None,
+        **kwargs: Any,
     ) -> EphemeralToken:
         ttl = max(1, min(ttl_seconds, 60))
         now = time.time()
@@ -42,8 +46,9 @@ class VaultSTSProvider(BaseSTSProvider):
             bound_agent_id=agent_id,
             bound_tool_name=tool_name,
             provider_type="vault",
+            user_id=user_id,
+            user_roles=user_roles or [],
         )
 
     async def validate_token(self, token: EphemeralToken) -> bool:
         return not token.is_expired() and token.access_token.startswith("hvs.CAES")
-

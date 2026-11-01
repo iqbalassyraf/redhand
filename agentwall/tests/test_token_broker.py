@@ -4,8 +4,11 @@ Unit tests for the Ephemeral IAM Token Broker, STS providers, and WORM audit log
 
 import time
 import pytest
+from agentwall.src.broker.providers.aws_sts import AWSSTSProvider
+from agentwall.src.broker.providers.azure_sts import AzureSTSProvider
 from agentwall.src.broker.providers.gcp_sts import GCPSTSProvider
 from agentwall.src.broker.providers.local_mock import LocalMockSTSProvider
+from agentwall.src.broker.providers.saas_token import SaaSTokenProvider
 from agentwall.src.broker.providers.vault import VaultSTSProvider
 from agentwall.src.broker.token_manager import EphemeralTokenBroker
 from agentwall.src.telemetry.audit_logger import TamperEvidentAuditLogger
@@ -71,6 +74,68 @@ async def test_gcp_and_vault_providers() -> None:
     )
     assert vault_token.access_token.startswith("hvs.CAES")
     assert await vault_provider.validate_token(vault_token) is True
+
+
+@pytest.mark.asyncio
+async def test_aws_azure_and_saas_providers_with_delegated_identity() -> None:
+    aws_prov = AWSSTSProvider(account_id="999888777666")
+    azure_prov = AzureSTSProvider(tenant_id="contoso-corp")
+    saas_prov = SaaSTokenProvider()
+
+    # 1. AWS STS
+    aws_token = await aws_prov.mint_token(
+        agent_id="agent-aws-s3",
+        tool_name="read_s3_bucket",
+        target_audience="arn:aws:s3:::customer-data",
+        ttl_seconds=45,
+        user_id="user-123",
+        user_roles=["cloud_operator"],
+    )
+    assert aws_token.access_token.startswith("ASIA")
+    assert aws_token.user_id == "user-123"
+    assert "cloud_operator" in aws_token.user_roles
+    assert await aws_prov.validate_token(aws_token) is True
+
+    # 2. Azure Entra ID / Managed Identity
+    az_token = await azure_prov.mint_token(
+        agent_id="agent-az-data",
+        tool_name="azure_blob_inspect",
+        target_audience="https://management.azure.com",
+        ttl_seconds=30,
+        user_id="alice@contoso.com",
+        user_roles=["cloud_operator", "admin"],
+    )
+    assert "agentwall_az_" in az_token.access_token
+    assert az_token.user_id == "alice@contoso.com"
+    assert await azure_prov.validate_token(az_token) is True
+
+    # 3. SaaS Tokens (GitHub, Slack, Google Workspace)
+    gh_token = await saas_prov.mint_token(
+        agent_id="agent-coder",
+        tool_name="github_read_issue",
+        target_audience="https://api.github.com/repos/org/repo",
+        ttl_seconds=30,
+    )
+    assert gh_token.access_token.startswith("ghs_")
+    assert await saas_prov.validate_token(gh_token) is True
+
+    slack_token = await saas_prov.mint_token(
+        agent_id="agent-notify",
+        tool_name="send_slack_message",
+        target_audience="https://slack.com/api",
+        ttl_seconds=30,
+    )
+    assert slack_token.access_token.startswith("xoxb-ephemeral-")
+    assert await saas_prov.validate_token(slack_token) is True
+
+    gsuite_token = await saas_prov.mint_token(
+        agent_id="agent-mailer",
+        tool_name="read_email",
+        target_audience="https://gmail.googleapis.com",
+        ttl_seconds=30,
+    )
+    assert gsuite_token.access_token.startswith("ya29.gsuite_obo_")
+    assert await saas_prov.validate_token(gsuite_token) is True
 
 
 def test_tamper_evident_audit_logger_hash_chain() -> None:

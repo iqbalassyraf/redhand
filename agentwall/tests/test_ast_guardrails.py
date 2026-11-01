@@ -60,6 +60,49 @@ class TestSQLASTGuardrail:
         assert passed is False
         assert any("INTO OUTFILE" in v for v in violations)
 
+    def test_forbidden_columns_are_blocked_preventing_data_leakage(self) -> None:
+        query = "SELECT id, username, password_hash, ssn FROM users LIMIT 10;"
+        passed, violations = SQLASTGuardrail.evaluate(
+            query,
+            allowed_statements=["SELECT"],
+            forbidden_columns=["password_hash", "ssn", "secret_key"],
+            max_rows_limit=50,
+        )
+        assert passed is False
+        assert any("password_hash" in v for v in violations)
+        assert any("ssn" in v for v in violations)
+
+    def test_mandatory_row_limits_prevent_full_table_dumps(self) -> None:
+        # Missing LIMIT clause
+        dump_query = "SELECT * FROM users WHERE active = 1;"
+        passed, violations = SQLASTGuardrail.evaluate(
+            dump_query,
+            allowed_statements=["SELECT"],
+            max_rows_limit=50,
+        )
+        assert passed is False
+        assert any("mandatory LIMIT clause" in v for v in violations)
+
+        # Exceeding LIMIT clause
+        excessive_query = "SELECT * FROM users LIMIT 500;"
+        passed, violations = SQLASTGuardrail.evaluate(
+            excessive_query,
+            allowed_statements=["SELECT"],
+            max_rows_limit=50,
+        )
+        assert passed is False
+        assert any("exceeds maximum allowed row limit of 50" in v for v in violations)
+
+        # Valid LIMIT within bounds
+        valid_query = "SELECT * FROM users LIMIT 25;"
+        passed, violations = SQLASTGuardrail.evaluate(
+            valid_query,
+            allowed_statements=["SELECT"],
+            max_rows_limit=50,
+        )
+        assert passed is True
+        assert len(violations) == 0
+
 
 class TestShellASTGuardrail:
     def test_benign_shell_commands_pass(self) -> None:
@@ -127,7 +170,32 @@ class TestShellASTGuardrail:
             allowed_binaries=["ls", "cat", "echo"],
         )
         assert passed is False
-        assert any("python" in v.lower() for v in violations)
+        assert any("obfuscation" in v.lower() or "python" in v.lower() for v in violations)
+
+    def test_shell_obfuscation_and_encoding_evasions_are_blocked(self) -> None:
+        # Hex evasion
+        passed_hex, violations_hex = ShellASTGuardrail.evaluate(
+            "cat /etc/\\x70\\x61\\x73\\x73\\x77\\x64",
+            allowed_binaries=["cat"],
+        )
+        assert passed_hex is False
+        assert any("obfuscation" in v.lower() for v in violations_hex)
+
+        # Base64 decode execution evasion
+        passed_b64, violations_b64 = ShellASTGuardrail.evaluate(
+            "echo bWFsX2NtZAo= | base64 --decode",
+            allowed_binaries=["echo", "base64"],
+        )
+        assert passed_b64 is False
+        assert any("obfuscation" in v.lower() or "pipe" in v.lower() for v in violations_b64)
+
+        # Positive allowlist deny-by-default
+        passed_denied, violations_denied = ShellASTGuardrail.evaluate(
+            "nmap -sV 192.168.1.1",
+            allowed_binaries=["ls", "cat", "grep"],
+        )
+        assert passed_denied is False
+        assert any("positive security allowlist" in v for v in violations_denied)
 
 
 class TestEgressTaintGuardrail:

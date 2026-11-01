@@ -55,6 +55,7 @@ class FirewallPolicyEngine:
         arguments: dict[str, Any],
         agent_id: str,
         caller_identity: str,
+        user_roles: list[str] | None = None,
     ) -> FirewallVerdict:
         tool_cfg = self.get_tool_policy(tool_name)
 
@@ -76,46 +77,41 @@ class FirewallPolicyEngine:
 
         violations: list[str] = []
 
-        # 2. Strict Schema Validation
+        # 2. Per-User Permissions (On-Behalf-Of / Delegated User RBAC)
+        required_user_roles = tool_cfg.get("required_user_roles")
+        if required_user_roles:
+            effective_roles = set(user_roles or ["default_user"])
+            if not effective_roles.intersection(set(required_user_roles)):
+                violations.append(
+                    f"Per-User Authorization Denied: Caller '{caller_identity}' with roles {list(effective_roles)} "
+                    f"lacks required roles {required_user_roles} to invoke tool '{tool_name}'."
+                )
+
+        # 3. Strict Schema Validation
         schema = tool_cfg.get("schema")
         if schema:
             is_valid, schema_violations = StrictSchemaValidator.validate(schema, arguments)
             if not is_valid:
                 violations.extend(schema_violations)
 
-        # If schema already violated, return early block
-        if violations:
-            logger.warning(
-                "Tool call blocked: schema validation failure",
-                tool=tool_name,
-                violations=violations,
-                agent_id=agent_id,
-            )
-            return FirewallVerdict(
-                decision="BLOCK",
-                reasons=violations,
-                tool_name=tool_name,
-                tool_type=tool_type,
-                upstream_url=upstream_url,
-                target_audience=target_audience,
-                iam_provider=iam_provider,
-                egress_dlp=egress_dlp,
-            )
-
-        # 3. AST Semantic Guardrails
-        if tool_type == "sql":
+        # 4. AST Semantic Guardrails (always run for deep defense reporting)
+        if tool_type == "sql" and "query" in arguments:
             query = arguments.get("query", "")
             allowed_statements = tool_cfg.get("allowed_statements", ["SELECT"])
             forbidden_clauses = tool_cfg.get("forbidden_clauses", [])
+            forbidden_columns = tool_cfg.get("forbidden_columns", [])
+            max_rows_limit = tool_cfg.get("max_rows_limit")
             passed, sql_violations = SQLASTGuardrail.evaluate(
                 query,
                 allowed_statements=allowed_statements,
                 forbidden_clauses=forbidden_clauses,
+                forbidden_columns=forbidden_columns,
+                max_rows_limit=max_rows_limit,
             )
             if not passed:
                 violations.extend(sql_violations)
 
-        elif tool_type == "shell":
+        elif tool_type == "shell" and "command" in arguments:
             command = arguments.get("command", "")
             allowed_binaries = tool_cfg.get("allowed_binaries", [])
             block_chaining = tool_cfg.get("block_chaining", True)
@@ -133,7 +129,7 @@ class FirewallPolicyEngine:
 
         if violations:
             logger.warning(
-                "Tool call blocked: AST guardrail violation",
+                "Tool call blocked: policy or guardrail violation",
                 tool=tool_name,
                 violations=violations,
                 agent_id=agent_id,

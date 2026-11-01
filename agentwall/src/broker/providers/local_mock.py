@@ -7,6 +7,7 @@ import hashlib
 import hmac
 import json
 import time
+from typing import Any
 from uuid import uuid4
 from .base import BaseSTSProvider, EphemeralToken
 
@@ -22,6 +23,9 @@ class LocalMockSTSProvider(BaseSTSProvider):
         tool_name: str,
         target_audience: str,
         ttl_seconds: int = 60,
+        user_id: str | None = None,
+        user_roles: list[str] | None = None,
+        **kwargs: Any,
     ) -> EphemeralToken:
         ttl = max(1, min(ttl_seconds, 60))  # strictly clamped <= 60s
         now = time.time()
@@ -33,6 +37,8 @@ class LocalMockSTSProvider(BaseSTSProvider):
             "sub": agent_id,
             "aud": target_audience,
             "tool": tool_name,
+            "user_id": user_id,
+            "roles": user_roles or [],
             "iat": int(now),
             "exp": int(exp),
             "jti": jti,
@@ -54,6 +60,8 @@ class LocalMockSTSProvider(BaseSTSProvider):
             bound_agent_id=agent_id,
             bound_tool_name=tool_name,
             provider_type="local_sts",
+            user_id=user_id,
+            user_roles=user_roles or [],
         )
 
     async def validate_token(self, token: EphemeralToken) -> bool:
@@ -69,4 +77,3 @@ class LocalMockSTSProvider(BaseSTSProvider):
             return hmac.compare_digest(parts[2], expected_sig)
         except Exception:
             return False
-

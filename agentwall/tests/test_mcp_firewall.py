@@ -1,6 +1,7 @@
 """
 End-to-End integration tests for MCP interception, schema validation, REST proxying,
-and Phase 5 threat verification.
+delegated user RBAC, SQL column/row limits, shell allowlists, multi-cloud tokens,
+and pre-install MCP vetting.
 """
 
 from typing import Any
@@ -31,12 +32,16 @@ async def test_mcp_benign_sql_tool_call_is_allowed() -> None:
             },
         }
 
-        # Test both /mcp and /mcp/rpc endpoints
+        # Test both /mcp and /mcp/rpc endpoints with authorized user role
         for endpoint in ["/mcp", "/mcp/rpc"]:
             response = await client.post(
                 endpoint,
                 json=mcp_payload,
-                headers={"X-Agent-ID": "test-finops-agent", "X-Caller-Identity": "alice@corp.internal"},
+                headers={
+                    "X-Agent-ID": "test-finops-agent",
+                    "X-Caller-Identity": "alice@corp.internal",
+                    "X-User-Roles": "finance_viewer",
+                },
             )
 
             assert response.status_code == 200
@@ -66,7 +71,11 @@ async def test_mcp_destructive_sql_tool_call_is_blocked() -> None:
         response = await client.post(
             "/mcp/rpc",
             json=mcp_payload,
-            headers={"X-Agent-ID": "compromised-agent", "X-Caller-Identity": "attacker"},
+            headers={
+                "X-Agent-ID": "compromised-agent",
+                "X-Caller-Identity": "attacker",
+                "X-User-Roles": "finance_viewer",
+            },
         )
 
         assert response.status_code == 200
@@ -96,7 +105,11 @@ async def test_mcp_shell_command_chaining_is_blocked() -> None:
             },
         }
 
-        response = await client.post("/mcp", json=mcp_payload)
+        response = await client.post(
+            "/mcp",
+            json=mcp_payload,
+            headers={"X-User-Roles": "sre"},
+        )
         assert response.status_code == 200
         data = response.json()
         assert "error" in data
@@ -106,18 +119,191 @@ async def test_mcp_shell_command_chaining_is_blocked() -> None:
 
 
 @pytest.mark.asyncio
-async def test_phase5_scenario1_select_query_approved_with_ephemeral_token() -> None:
-    """Scenario 1: SELECT * FROM users WHERE id = 1 -> APPROVED (200 OK with Ephemeral Token)."""
+async def test_per_user_rbac_delegated_permissions() -> None:
+    """Per-user RBAC: caller lacking required role is blocked; authorized caller passes."""
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         payload = {
             "tool": "execute_sql",
-            "arguments": {"query": "SELECT * FROM users WHERE id = 1;"},
+            "arguments": {"query": "SELECT id, name FROM users LIMIT 5;"},
+        }
+
+        # 1. Caller with unauthorized role (e.g., intern)
+        res_blocked = await client.post(
+            "/v1/tools/execute",
+            json=payload,
+            headers={
+                "X-Agent-ID": "support-agent",
+                "X-Caller-Identity": "bob@corp.internal",
+                "X-User-Roles": "intern,guest",
+            },
+        )
+        assert res_blocked.status_code == 403
+        data_blocked = res_blocked.json()
+        assert data_blocked["status"] == "blocked"
+        assert any("Per-User Authorization Denied" in v for v in data_blocked["violations"])
+
+        # 2. Caller with authorized role (finance_viewer)
+        res_allowed = await client.post(
+            "/v1/tools/execute",
+            json=payload,
+            headers={
+                "X-Agent-ID": "support-agent",
+                "X-Caller-Identity": "alice@corp.internal",
+                "X-User-Roles": "finance_viewer",
+            },
+        )
+        assert res_allowed.status_code == 200
+        assert res_allowed.json()["status"] == "success"
+
+
+@pytest.mark.asyncio
+async def test_sql_forbidden_columns_blocked() -> None:
+    """Read-only SQL: AST detects and blocks queries attempting to read sensitive columns."""
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        payload = {
+            "tool": "execute_sql",
+            "arguments": {"query": "SELECT id, username, password_hash, ssn FROM users LIMIT 5;"},
         }
         res = await client.post(
             "/v1/tools/execute",
             json=payload,
-            headers={"X-Agent-ID": "agent-sre", "X-Caller-Identity": "devops@corp.internal"},
+            headers={"X-User-Roles": "finance_viewer"},
+        )
+        assert res.status_code == 403
+        violations = res.json()["violations"]
+        assert any("password_hash" in str(v) for v in violations)
+
+
+@pytest.mark.asyncio
+async def test_sql_row_limits_prevent_table_dumps() -> None:
+    """Read-only SQL: AST enforces mandatory LIMIT clause and caps row extraction."""
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        # A. Missing LIMIT (Full table dump attempt)
+        res_no_limit = await client.post(
+            "/v1/tools/execute",
+            json={"tool": "execute_sql", "arguments": {"query": "SELECT * FROM users;"}},
+            headers={"X-User-Roles": "finance_viewer"},
+        )
+        assert res_no_limit.status_code == 403
+        assert any("mandatory LIMIT clause" in str(v) for v in res_no_limit.json()["violations"])
+
+        # B. Excessive LIMIT (Over max cap 50)
+        res_excessive = await client.post(
+            "/v1/tools/execute",
+            json={"tool": "execute_sql", "arguments": {"query": "SELECT * FROM users LIMIT 500;"}},
+            headers={"X-User-Roles": "finance_viewer"},
+        )
+        assert res_excessive.status_code == 403
+        assert any("exceeds maximum allowed row limit" in str(v) for v in res_excessive.json()["violations"])
+
+
+@pytest.mark.asyncio
+async def test_shell_positive_allowlist_and_evasion_blocked() -> None:
+    """Shell containment: positive binary allowlist and anti-evasion blocks obfuscated attacks."""
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        # Unapproved binary (not in allowlist)
+        res_unapproved = await client.post(
+            "/v1/tools/execute",
+            json={"tool": "run_shell_cmd", "arguments": {"command": "nmap -sV 10.0.0.1"}},
+            headers={"X-User-Roles": "sre"},
+        )
+        assert res_unapproved.status_code == 403
+        assert any("positive security allowlist" in str(v) for v in res_unapproved.json()["violations"])
+
+        # Hex evasion
+        res_hex = await client.post(
+            "/v1/tools/execute",
+            json={"tool": "run_shell_cmd", "arguments": {"command": "cat /\\x65\\x74\\x63/passwd"}},
+            headers={"X-User-Roles": "sre"},
+        )
+        assert res_hex.status_code == 403
+        assert any("obfuscation" in str(v).lower() for v in res_hex.json()["violations"])
+
+
+@pytest.mark.asyncio
+async def test_azure_and_saas_tools_integration() -> None:
+    """Verify tool execution with Azure Entra ID and SaaS (GitHub) ephemeral token providers."""
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        # 1. Azure Blob inspect
+        res_az = await client.post(
+            "/v1/tools/execute",
+            json={"tool": "azure_blob_inspect", "arguments": {"container_name": "prod-logs"}},
+            headers={"X-User-Roles": "cloud_operator"},
+        )
+        assert res_az.status_code == 200
+        assert res_az.json()["status"] == "success"
+
+        # 2. GitHub Issue read (SaaS token)
+        res_gh = await client.post(
+            "/v1/tools/execute",
+            json={"tool": "github_read_issue", "arguments": {"repo": "acme/agentic-repo", "issue_number": 42}},
+            headers={"X-User-Roles": "developer"},
+        )
+        assert res_gh.status_code == 200
+        assert res_gh.json()["status"] == "success"
+
+
+@pytest.mark.asyncio
+async def test_mcp_server_vetting_endpoint() -> None:
+    """Verify pre-install static security vetting of MCP server manifests."""
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        risky_manifest = {
+            "name": "untrusted-community-mcp",
+            "command": "bash",
+            "args": ["-c", "node index.js"],
+            "env": {
+                "SECRET_KEY": "sk-proj-1234567890abcdef1234567890",
+            },
+            "tools": [
+                {
+                    "name": "exec_raw_command",
+                    "description": "Executes arbitrary terminal commands",
+                    "inputSchema": {
+                        "type": "object",
+                        "properties": {"cmd": {"type": "string"}},
+                    },
+                },
+                {
+                    "name": "delete_all_files",
+                    "description": "Deletes directory tree",
+                },
+            ],
+        }
+
+        res = await client.post("/v1/mcp/vet", json=risky_manifest)
+        assert res.status_code == 200
+        report = res.json()
+        assert report["server_name"] == "untrusted-community-mcp"
+        assert report["verdict"] == "FAIL"
+        assert report["risk_score"] > 60
+        assert len(report["findings"]) >= 3
+        assert "recommended_policy" in report
+        assert "exec_raw_command" in report["recommended_policy"]["tools"]
+
+
+@pytest.mark.asyncio
+async def test_phase5_scenario1_select_query_approved_with_ephemeral_token() -> None:
+    """Scenario 1: SELECT query with explicit LIMIT -> APPROVED (200 OK with Ephemeral Token)."""
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        payload = {
+            "tool": "execute_sql",
+            "arguments": {"query": "SELECT * FROM users WHERE id = 1 LIMIT 1;"},
+        }
+        res = await client.post(
+            "/v1/tools/execute",
+            json=payload,
+            headers={
+                "X-Agent-ID": "agent-sre",
+                "X-Caller-Identity": "devops@corp.internal",
+                "X-User-Roles": "finance_viewer",
+            },
         )
         assert res.status_code == 200
         data = res.json()
@@ -127,7 +313,7 @@ async def test_phase5_scenario1_select_query_approved_with_ephemeral_token() -> 
 
 @pytest.mark.asyncio
 async def test_phase5_scenario2_destructive_drop_and_chained_multistatement_blocked() -> None:
-    """Scenario 2: DROP TABLE customers; or SELECT * FROM users; DROP TABLE logs; -> BLOCKED (403 Forbidden)."""
+    """Scenario 2: DROP TABLE or chained semicolon injection -> BLOCKED (403 Forbidden)."""
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         # Attack A: Direct DROP
@@ -135,7 +321,11 @@ async def test_phase5_scenario2_destructive_drop_and_chained_multistatement_bloc
             "tool": "execute_sql",
             "arguments": {"query": "DROP TABLE customers;"},
         }
-        res_drop = await client.post("/v1/tools/execute", json=payload_drop)
+        res_drop = await client.post(
+            "/v1/tools/execute",
+            json=payload_drop,
+            headers={"X-User-Roles": "finance_viewer"},
+        )
         assert res_drop.status_code == 403
         data_drop = res_drop.json()
         assert data_drop["status"] == "blocked"
@@ -146,7 +336,11 @@ async def test_phase5_scenario2_destructive_drop_and_chained_multistatement_bloc
             "tool": "execute_sql",
             "arguments": {"query": "SELECT * FROM users; DROP TABLE logs;"},
         }
-        res_chained = await client.post("/v1/tools/execute", json=payload_chained)
+        res_chained = await client.post(
+            "/v1/tools/execute",
+            json=payload_chained,
+            headers={"X-User-Roles": "finance_viewer"},
+        )
         assert res_chained.status_code == 403
         data_chained = res_chained.json()
         assert data_chained["status"] == "blocked"
@@ -178,7 +372,6 @@ async def test_phase5_scenario4_upstream_receives_ephemeral_token_not_master_key
         captured_tokens.append(ephemeral_token)
         return {"status": "executed", "upstream_seen_token": ephemeral_token[:10] + "..."}, 200
 
-    # Temporarily intercept forward_upstream to inspect injected header
     original_forward = dispatcher._forward_upstream
     dispatcher._forward_upstream = _mock_forward  # type: ignore
 
@@ -198,9 +391,7 @@ async def test_phase5_scenario4_upstream_receives_ephemeral_token_not_master_key
             assert len(captured_tokens) == 1
             minted_token = captured_tokens[0]
 
-            # Verify it is an ephemeral scoped token, NOT a static master key
             assert minted_token.startswith("ya29.c.agentwall_") or minted_token.startswith("aw_jit.")
-            # Verify the response delivered to the agent does not leak the full token
             assert "Authorization" not in res.headers
     finally:
         dispatcher._forward_upstream = original_forward

@@ -4,6 +4,7 @@ Base interface and data models for Ephemeral Token Providers.
 
 from abc import ABC, abstractmethod
 import time
+from typing import Any
 from pydantic import BaseModel, Field
 
 
@@ -18,6 +19,9 @@ class EphemeralToken(BaseModel):
     bound_agent_id: str
     bound_tool_name: str
     provider_type: str
+    user_id: str | None = None
+    user_roles: list[str] = Field(default_factory=list)
+    scopes: list[str] = Field(default_factory=list)
 
     def is_expired(self) -> bool:
         return time.time() >= self.expires_at
@@ -43,6 +47,9 @@ class BaseSTSProvider(ABC):
         tool_name: str,
         target_audience: str,
         ttl_seconds: int = 60,
+        user_id: str | None = None,
+        user_roles: list[str] | None = None,
+        **kwargs: Any,
     ) -> EphemeralToken:
         """Mints an ephemeral token strictly bound to caller, tool, and target audience."""
         pass
@@ -51,4 +58,3 @@ class BaseSTSProvider(ABC):
     async def validate_token(self, token: EphemeralToken) -> bool:
         """Validates the cryptographic integrity and expiration of a token."""
         pass
-

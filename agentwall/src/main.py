@@ -11,6 +11,7 @@ import structlog
 
 from ..config.settings import get_settings
 from .firewall.engine import FirewallPolicyEngine
+from .firewall.mcp_vetting import MCPServerAuditor, MCPVettingReport
 from .proxy.handler import ProxyDispatcher
 from .telemetry.audit_logger import get_audit_logger
 from .telemetry.tracer import setup_telemetry
@@ -82,22 +83,38 @@ async def verify_audit_chain() -> dict[str, Any]:
     }
 
 
+@app.post("/v1/mcp/vet", status_code=status.HTTP_200_OK, response_model=MCPVettingReport)
+async def vet_mcp_manifest(request: Request) -> MCPVettingReport:
+    """Pre-install static security vetting of MCP server manifest or tools list."""
+    try:
+        manifest = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid JSON manifest payload")
+    return MCPServerAuditor.audit_manifest(manifest)
+
+
 @app.post("/mcp", status_code=status.HTTP_200_OK)
 @app.post("/mcp/rpc", status_code=status.HTTP_200_OK)
 async def handle_mcp_endpoint(
     request: Request,
     x_agent_id: str = Header(default="agent-mcp-client", alias="X-Agent-ID"),
     x_caller_identity: str = Header(default="corp-ai-agent", alias="X-Caller-Identity"),
+    x_user_id: str | None = Header(default=None, alias="X-User-ID"),
+    x_user_roles: str | None = Header(default=None, alias="X-User-Roles"),
 ) -> dict[str, Any]:
     try:
         body = await request.json()
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid JSON payload")
 
+    parsed_roles = [r.strip() for r in x_user_roles.split(",") if r.strip()] if x_user_roles else None
+
     response = await dispatcher.handle_mcp_call(
         body=body,
         agent_id=x_agent_id,
         caller_identity=x_caller_identity,
+        user_id=x_user_id,
+        user_roles=parsed_roles,
     )
     return response
 
@@ -107,16 +124,22 @@ async def handle_rest_execute_endpoint(
     request: Request,
     x_agent_id: str = Header(default="agent-rest-client", alias="X-Agent-ID"),
     x_caller_identity: str = Header(default="corp-ai-agent", alias="X-Caller-Identity"),
+    x_user_id: str | None = Header(default=None, alias="X-User-ID"),
+    x_user_roles: str | None = Header(default=None, alias="X-User-Roles"),
 ) -> JSONResponse:
     try:
         body = await request.json()
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid JSON payload")
 
+    parsed_roles = [r.strip() for r in x_user_roles.split(",") if r.strip()] if x_user_roles else None
+
     response = await dispatcher.handle_rest_call(
         body=body,
         agent_id=x_agent_id,
         caller_identity=x_caller_identity,
+        user_id=x_user_id,
+        user_roles=parsed_roles,
     )
     
     # Return 403 Forbidden on policy violation

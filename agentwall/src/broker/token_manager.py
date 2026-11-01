@@ -1,30 +1,40 @@
 """
 Ephemeral Token Manager: Orchestrates Just-In-Time credential exchange across providers.
+Supports AWS STS, Azure Entra ID, GCP STS, SaaS tokens (GitHub, Slack, Google Workspace), and HashiCorp Vault.
 """
 
 from typing import Any
 import structlog
 from .providers.base import BaseSTSProvider, EphemeralToken
+from .providers.aws_sts import AWSSTSProvider
+from .providers.azure_sts import AzureSTSProvider
 from .providers.gcp_sts import GCPSTSProvider
 from .providers.local_mock import LocalMockSTSProvider
+from .providers.saas_token import SaaSTokenProvider
 from .providers.vault import VaultSTSProvider
 
 logger = structlog.get_logger(__name__)
 
 
 class EphemeralTokenBroker:
-    """Zero-Trust Just-In-Time Credential Broker."""
+    """Zero-Trust Just-In-Time Credential Broker across Multi-Cloud and SaaS Providers."""
 
     def __init__(self, default_provider: str = "local_sts") -> None:
         self.default_provider = default_provider
         self._providers: dict[str, BaseSTSProvider] = {
             "local_sts": LocalMockSTSProvider(),
+            "aws_sts": AWSSTSProvider(),
+            "azure_sts": AzureSTSProvider(),
             "gcp_sts": GCPSTSProvider(),
+            "saas": SaaSTokenProvider(),
             "vault": VaultSTSProvider(),
         }
 
     def register_provider(self, name: str, provider: BaseSTSProvider) -> None:
         self._providers[name] = provider
+
+    def get_provider(self, name: str) -> BaseSTSProvider | None:
+        return self._providers.get(name)
 
     async def mint_ephemeral_token(
         self,
@@ -34,6 +44,9 @@ class EphemeralTokenBroker:
         target_audience: str,
         provider_name: str | None = None,
         ttl_seconds: int = 60,
+        user_id: str | None = None,
+        user_roles: list[str] | None = None,
+        **kwargs: Any,
     ) -> EphemeralToken:
         p_name = provider_name or self.default_provider
         provider = self._providers.get(p_name)
@@ -49,6 +62,9 @@ class EphemeralTokenBroker:
             tool_name=tool_name,
             target_audience=target_audience,
             ttl_seconds=effective_ttl,
+            user_id=user_id,
+            user_roles=user_roles,
+            **kwargs,
         )
 
         logger.info(
@@ -59,6 +75,8 @@ class EphemeralTokenBroker:
             provider=p_name,
             jti=token.token_jti,
             ttl_seconds=effective_ttl,
+            user_id=user_id,
+            user_roles=user_roles,
         )
         return token
 
@@ -77,4 +95,3 @@ def get_token_broker() -> EphemeralTokenBroker:
     if _broker_instance is None:
         _broker_instance = EphemeralTokenBroker()
     return _broker_instance
-
