@@ -19,7 +19,7 @@ export interface AgentPostureItem {
   name: string;
   framework: "LangGraph" | "CrewAI" | "Vertex ADK" | "Custom MCP";
   environment: "production" | "staging" | "development";
-  status: "active" | "suspended" | "quarantined";
+  status: "active" | "frozen" | "revoked" | "expired";
   riskScore: number; // 0-100 for radial arc ring
   activeLeaseCount: number;
   blockedAttacksCount: number;

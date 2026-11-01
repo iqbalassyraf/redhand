@@ -29,6 +29,8 @@ import {
   INITIAL_HITL_INTERVENTIONS,
   INITIAL_TRACES,
 } from "@/lib/mock-telemetry";
+import { apiFetch, ApiError, CORE_API_BASE } from "@/lib/api";
+import { useAuth, useRequiredSession } from "@/lib/auth";
 import type {
   AgentPostureItem,
   AuthenticatedUser,
@@ -46,10 +48,48 @@ const FILTER_CHIPS = [
   "Delegated RBAC Intersections",
 ];
 
-const CORE_API_BASE =
-  process.env.NEXT_PUBLIC_REDHAND_CORE_URL || "http://localhost:8000";
+type SnapshotAgentRow = {
+  id: string;
+  external_agent_id?: string;
+  name?: string;
+  framework?: string;
+  environment?: string;
+  status?: string;
+  scopes?: Array<{ server: string; tool: string }>;
+};
+
+function toAgentPosture(row: SnapshotAgentRow): AgentPostureItem {
+  const known = ["LangGraph", "CrewAI", "Vertex ADK", "Custom MCP"] as const;
+  const framework = (known as readonly string[]).includes(row.framework ?? "")
+    ? (row.framework as AgentPostureItem["framework"])
+    : "Custom MCP";
+  const environment = (["production", "staging", "development"] as const).includes(
+    row.environment as AgentPostureItem["environment"]
+  )
+    ? (row.environment as AgentPostureItem["environment"])
+    : "production";
+  const status: AgentPostureItem["status"] = row.status === "active" ? "active" : "frozen";
+  return {
+    id: row.id,
+    external_agent_id: row.external_agent_id ?? row.id,
+    name: row.name ?? row.id,
+    framework,
+    environment,
+    status,
+    riskScore: status === "active" ? 30 : 95,
+    activeLeaseCount: 0,
+    blockedAttacksCount: 0,
+    hitlPendingCount: 0,
+    p99FirewallMs: 0,
+    serviceAccount: "",
+    allowedTools: (row.scopes ?? []).map((s) => `${s.server}/${s.tool}`),
+  };
+}
 
 export default function RedHandCommandCenterPage() {
+  const session = useRequiredSession();
+  const { signOut } = useAuth();
+  const token = session?.token ?? null;
   const [currentUser, setCurrentUser] = useState<AuthenticatedUser>(
     ENTERPRISE_USERS[0]
   );
@@ -79,16 +119,23 @@ export default function RedHandCommandCenterPage() {
     let isMounted = true;
 
     async function syncSnapshot() {
+      if (!token) return;
       try {
-        const res = await fetch(`${CORE_API_BASE}/v1/state/snapshot`);
-        if (!res.ok || !isMounted) return;
-        const data = await res.json();
+        const data = await apiFetch<{
+          agents?: SnapshotAgentRow[];
+          hitl_interventions?: Array<Record<string, unknown>>;
+        }>("/v1/state/snapshot", token);
+        if (!isMounted) return;
         setEngineConnected(true);
+        if (Array.isArray(data.agents)) {
+          setAgents(data.agents.map(toAgentPosture));
+        }
 
-        if (Array.isArray(data.hitl_interventions) && data.hitl_interventions.length > 0) {
+        const hitlRows = data.hitl_interventions;
+        if (Array.isArray(hitlRows) && hitlRows.length > 0) {
           setInterventions((prev) => {
             const map = new Map(prev.map((i) => [i.id, i]));
-            for (const r of data.hitl_interventions) {
+            for (const r of hitlRows) {
               const item: HITLInterventionItem = {
                 id: String(r.id),
                 trace_id: String(r.trace_id || ""),
@@ -125,15 +172,26 @@ export default function RedHandCommandCenterPage() {
             return Array.from(map.values());
           });
         }
-      } catch {
+      } catch (err) {
+        if (err instanceof ApiError && err.status === 401) {
+          signOut();
+          window.location.href = "/login";
+          return;
+        }
         if (isMounted) setEngineConnected(false);
       }
     }
 
-    syncSnapshot();
-
-    try {
-      eventSource = new EventSource(`${CORE_API_BASE}/v1/state/stream`);
+    async function openStream() {
+      if (!token) return;
+      // EventSource cannot send headers, so exchange the token for a one-time ticket.
+      const { ticket } = await apiFetch<{ ticket: string }>("/v1/state/stream-ticket", token, {
+        method: "POST",
+      });
+      if (!isMounted) return;
+      eventSource = new EventSource(
+        `${CORE_API_BASE}/v1/state/stream?ticket=${encodeURIComponent(ticket)}`
+      );
       eventSource.onopen = () => {
         if (isMounted) setEngineConnected(true);
       };
@@ -188,15 +246,18 @@ export default function RedHandCommandCenterPage() {
       eventSource.onerror = () => {
         if (isMounted) setEngineConnected(false);
       };
-    } catch {
-      // Standalone mode
     }
+
+    syncSnapshot();
+    openStream().catch(() => {
+      if (isMounted) setEngineConnected(false);
+    });
 
     return () => {
       isMounted = false;
       eventSource?.close();
     };
-  }, [currentUser]);
+  }, [currentUser, token, signOut]);
 
   const nodeTypes = useMemo(
     () => ({
@@ -442,34 +503,31 @@ export default function RedHandCommandCenterPage() {
       interventionId: string,
       action: "approve" | "deny",
       modifiedArgs: Record<string, unknown>,
-      comment: string,
-      reviewerUserId?: string
+      comment: string
     ) => {
-      const activeReviewer =
-        reviewerUserId || "00000000-0000-0000-0000-000000000001";
-      let resolvedStatus: "approved" | "partially_approved" | "denied" =
-        action === "approve" ? "approved" : "denied";
+      // The reviewer is whoever is signed in; core records the authenticated operator.
+      const activeReviewer = session?.email ?? "operator";
+      let resolvedStatus: "approved" | "partially_approved" | "denied";
 
       try {
-        const resp = await fetch(
-          `${CORE_API_BASE}/v1/hitl/${interventionId}/resolve`,
+        const body = await apiFetch<{ status: "approved" | "partially_approved" | "denied" }>(
+          `/v1/hitl/${interventionId}/resolve`,
+          token,
           {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
+            body: {
               action,
-              reviewer_user_id: activeReviewer,
               reviewer_comment: comment,
               modified_tool_arguments: modifiedArgs,
-            }),
+            },
           }
         );
-        if (resp.ok) {
-          const body = await resp.json();
-          resolvedStatus = body.status;
-        }
-      } catch {
-        // Fallback
+        resolvedStatus = body.status;
+      } catch (err) {
+        setStatusMessage(
+          `Resolution not recorded • ${err instanceof Error ? err.message : "redhand-core unreachable"}`
+        );
+        return;
       }
 
       setInterventions((prev) =>
@@ -516,19 +574,26 @@ export default function RedHandCommandCenterPage() {
         );
       }
     },
-    []
+    [session, token]
   );
 
   const handleToggleAgentQuarantine = useCallback(
-    async (agentId: string, nextStatus: "active" | "quarantined") => {
+    async (agentId: string, nextStatus: "active" | "frozen") => {
       try {
-        await fetch(`${CORE_API_BASE}/v1/state/agents/${agentId}/posture`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ status: nextStatus }),
-        });
-      } catch {
-        // Fallback
+        if (nextStatus === "frozen") {
+          await apiFetch(`/v1/passports/${agentId}/freeze`, token, { method: "POST", body: {} });
+        } else {
+          if (!window.confirm("Unfreeze this agent? It will be able to call its tools again.")) return;
+          await apiFetch(`/v1/passports/${agentId}/unfreeze`, token, {
+            method: "POST",
+            body: { confirm: true },
+          });
+        }
+      } catch (err) {
+        setStatusMessage(
+          `Agent status not changed • ${err instanceof Error ? err.message : "redhand-core unreachable"}`
+        );
+        return;
       }
 
       setAgents((prev) =>
@@ -537,16 +602,16 @@ export default function RedHandCommandCenterPage() {
             ? {
                 ...ag,
                 status: nextStatus,
-                riskScore: nextStatus === "quarantined" ? 95 : 42,
+                riskScore: nextStatus === "frozen" ? 95 : 42,
               }
             : ag
         )
       );
       setStatusMessage(
-        `Agent posture updated • Status set to ${nextStatus.toUpperCase()}`
+        `Agent passport updated • Status set to ${nextStatus.toUpperCase()}`
       );
     },
-    []
+    [token]
   );
 
   // 6 Scenarios matching the 6 security fixes
@@ -772,8 +837,19 @@ export default function RedHandCommandCenterPage() {
     [currentUser, agents]
   );
 
+  if (!session) return null;
+
   return (
     <div className="flex h-screen w-screen flex-col bg-[#FFFFFF] text-[#0F0F0F] select-none">
+      <div
+        role="status"
+        className="shrink-0 bg-[#FFF4E5] px-4 py-1.5 text-center text-[12px] font-medium text-[#8A4B00]"
+      >
+        {engineConnected
+          ? "Live: agents and the review queue come from redhand-core. Traces, the canvas and simulations are sample data."
+          : "Demo data: not connected to redhand-core. Everything on this page is sample data."}{" "}
+        Use the Passports page for real control actions.
+      </div>
       {/* 1. TOP NAVIGATION BAR */}
       <header className="flex h-[56px] shrink-0 items-center justify-between border-b border-[#E5E5E5] bg-[#FFFFFF] px-4">
         <div className="flex items-center gap-4">
@@ -795,6 +871,14 @@ export default function RedHandCommandCenterPage() {
               ASPM
             </span>
           </div>
+          <nav className="flex gap-1 text-[13px]">
+            <a href="/passports" className="whitespace-nowrap rounded-full px-3 py-1.5 font-medium text-[#606060] hover:bg-[#F2F2F2]">
+              Passports
+            </a>
+            <span className="whitespace-nowrap rounded-full bg-[#0F0F0F] px-3 py-1.5 font-semibold text-[#FFFFFF]">
+              Command center
+            </span>
+          </nav>
         </div>
 
         {/* Center Search Input */}
@@ -817,13 +901,16 @@ export default function RedHandCommandCenterPage() {
 
         {/* Right Metadata + Engine Sync Indicator */}
         <div className="flex items-center gap-3">
-          <div className="hidden lg:flex items-center gap-2 text-[12px] text-[#606060]">
-            <span className="font-semibold text-[#0F0F0F]">&lt;0.2ms p99</span>
-            <span>•</span>
-            <span>Zero Ambient IAM</span>
-            <span>•</span>
-            <span>Multi-Cloud STS (AWS/Azure/GCP/SaaS)</span>
-          </div>
+          <button
+            onClick={() => {
+              signOut();
+              window.location.href = "/login";
+            }}
+            className="whitespace-nowrap text-[12px] text-[#606060] hover:underline"
+            title={session.email}
+          >
+            Sign out
+          </button>
 
           <span className="inline-flex h-[34px] items-center gap-1.5 rounded-full bg-[#F2F2F2] px-3.5 text-[12px] font-medium text-[#0F0F0F]">
             {engineConnected ? (
@@ -861,7 +948,7 @@ export default function RedHandCommandCenterPage() {
                 if (found) setCurrentUser(found);
               }}
               className="absolute inset-0 opacity-0 cursor-pointer"
-              title="Switch Delegated Caller Identity"
+              title="Simulation persona (demo only; does not change who you are signed in as)"
             >
               {ENTERPRISE_USERS.map((u) => (
                 <option key={u.id} value={u.id}>

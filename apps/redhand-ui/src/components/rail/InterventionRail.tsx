@@ -28,6 +28,7 @@ import type {
   TraceTelemetryRow,
 } from "@/lib/types";
 import { SAMPLE_MCP_MANIFESTS } from "@/lib/mock-telemetry";
+import { GATEWAY_BASE } from "@/lib/api";
 
 interface InterventionRailProps {
   interventions: HITLInterventionItem[];
@@ -38,12 +39,11 @@ interface InterventionRailProps {
     interventionId: string,
     action: "approve" | "deny",
     modifiedArgs: Record<string, unknown>,
-    comment: string,
-    reviewerUserId?: string
+    comment: string
   ) => Promise<void>;
   onToggleAgentQuarantine: (
     agentId: string,
-    nextStatus: "active" | "quarantined"
+    nextStatus: "active" | "frozen"
   ) => Promise<void>;
 }
 
@@ -76,9 +76,6 @@ export function InterventionRail({
   );
   const activeIntervention = reviewQueue[0] ?? interventions[0] ?? null;
 
-  const [selectedReviewerId, setSelectedReviewerId] = useState<string>(
-    REVIEWER_PROFILES[0].id
-  );
   const [argsJsonText, setArgsJsonText] = useState<string>("");
   const [comment, setComment] = useState<string>(
     "Verified database replica snapshot; overriding target to staging replica."
@@ -104,13 +101,6 @@ export function InterventionRail({
         JSON.stringify(activeIntervention.proposed_tool_arguments, null, 2)
       );
       setJsonError(null);
-      const alreadySigned =
-        activeIntervention.approvals?.map((a) => a.reviewer_user_id) || [];
-      if (alreadySigned.includes(REVIEWER_PROFILES[0].id)) {
-        setSelectedReviewerId(REVIEWER_PROFILES[1].id);
-      } else {
-        setSelectedReviewerId(REVIEWER_PROFILES[0].id);
-      }
     }
   }, [activeIntervention]);
 
@@ -124,8 +114,7 @@ export function InterventionRail({
         activeIntervention.id,
         action,
         parsed,
-        comment,
-        selectedReviewerId
+        comment
       );
     } catch (err) {
       setJsonError(
@@ -183,7 +172,7 @@ export function InterventionRail({
     }
 
     try {
-      const res = await fetch("http://localhost:8080/v1/mcp/vet", {
+      const res = await fetch(`${GATEWAY_BASE}/v1/mcp/vet`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(manifestObj),
@@ -525,46 +514,13 @@ export function InterventionRail({
                 )}
               </div>
 
-              {/* Operator Identity Selection */}
+              {/* Four-eyes: the signer is always the signed-in operator (enforced by redhand-core). */}
               {(activeIntervention.status === "pending" ||
                 activeIntervention.status === "partially_approved") && (
-                <div>
-                  <label className="block text-[12px] font-medium text-[#0F0F0F] mb-1.5">
-                    Sign As Operator (Four-Eyes Identity)
-                  </label>
-                  <div className="grid grid-cols-2 gap-2">
-                    {REVIEWER_PROFILES.map((p) => {
-                      const hasSigned = Boolean(
-                        activeIntervention.approvals?.some((a) => a.reviewer_user_id === p.id)
-                      );
-                      const isSelected = selectedReviewerId === p.id;
-                      return (
-                        <button
-                          key={p.id}
-                          type="button"
-                          onClick={() => setSelectedReviewerId(p.id)}
-                          className={`rounded-[8px] border p-2 text-left transition-colors ${
-                            isSelected
-                              ? "border-[#0F0F0F] bg-[#FFFFFF] shadow-sm"
-                              : "border-[#E5E5E5] bg-[#F2F2F2] text-[#606060] hover:bg-[#E5E5E5]"
-                          }`}
-                        >
-                          <div className="flex items-center justify-between">
-                            <span className="text-[12px] font-semibold text-[#0F0F0F]">
-                              {p.name}
-                            </span>
-                            {hasSigned && (
-                              <span className="rounded bg-[#2BA640] px-1 py-0.2 text-[9px] font-bold text-[#FFFFFF]">
-                                SIGNED
-                              </span>
-                            )}
-                          </div>
-                          <span className="text-[10px] text-[#606060]">{p.role}</span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
+                <p className="text-[12px] text-[#606060]">
+                  You sign as the operator you are logged in as. A second approval must come from a
+                  different operator&apos;s own login.
+                </p>
               )}
 
               <div>
@@ -589,14 +545,7 @@ export function InterventionRail({
                   <div className="flex items-center gap-2">
                     <button
                       onClick={() => handleDecision("approve")}
-                      disabled={
-                        isSubmitting ||
-                        Boolean(
-                          activeIntervention.approvals?.some(
-                            (a) => a.reviewer_user_id === selectedReviewerId
-                          )
-                        )
-                      }
+                      disabled={isSubmitting}
                       className="flex h-[36px] flex-1 items-center justify-center gap-1.5 rounded-full bg-[#0F0F0F] hover:bg-[#272727] px-4 text-[14px] font-medium text-[#FFFFFF] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                     >
                       <CheckCircle2 className="h-4 w-4" />
@@ -904,11 +853,11 @@ export function InterventionRail({
       {activeTab === "posture" && (
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
           <div className="text-[12px] text-[#606060]">
-            Quarantining an agent causes AgentWall to reject all incoming tool invocations with HTTP 403.
+            Freezing an agent makes the RedHand gateway reject its tool calls (HTTP 403) within seconds.
           </div>
 
           {agents.map((ag) => {
-            const isQuarantined = ag.status === "quarantined";
+            const isQuarantined = ag.status !== "active";
             return (
               <div
                 key={ag.id}
@@ -940,7 +889,7 @@ export function InterventionRail({
                   onClick={() =>
                     onToggleAgentQuarantine(
                       ag.id,
-                      isQuarantined ? "active" : "quarantined"
+                      isQuarantined ? "active" : "frozen"
                     )
                   }
                   className={`flex h-[36px] w-full items-center justify-center gap-1.5 rounded-full px-4 text-[14px] font-medium transition-colors ${
@@ -951,8 +900,8 @@ export function InterventionRail({
                 >
                   <ShieldOff className="h-4 w-4" />
                   {isQuarantined
-                    ? "Lift Quarantine & Restore Agent"
-                    : "Quarantine Agent Immediately"}
+                    ? "Unfreeze Agent"
+                    : "Freeze Agent Immediately"}
                 </button>
               </div>
             );
