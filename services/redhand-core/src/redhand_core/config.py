@@ -87,6 +87,22 @@ class Settings(BaseModelConfig := BaseSettings):
         description="Default expiration window for pending HITL circuit breaker checkpoints.",
     )
 
+    # -------------------------------------------------------------------------
+    # Slack Interactivity
+    # -------------------------------------------------------------------------
+    SLACK_SIGNING_SECRET: SecretStr | None = Field(
+        default=None,
+        description=(
+            "Slack app signing secret. When unset, the Slack interactivity endpoint "
+            "rejects every request (fail closed)."
+        ),
+    )
+
+    @property
+    def uses_local_store(self) -> bool:
+        """True when no real Supabase project is configured."""
+        return "placeholder-project.supabase.co" in self.SUPABASE_URL
+
     @field_validator("SUPABASE_URL")
     @classmethod
     def normalize_supabase_url(cls, v: str) -> str:

@@ -409,3 +409,90 @@ async def test_audit_logs_and_verification_endpoints() -> None:
         verify_res = await client.get("/v1/audit/verify")
         assert verify_res.status_code == 200
         assert verify_res.json()["tamper_evident_chain_intact"] is True
+
+
+# =============================================================================
+# Fail-closed upstream handling (no simulated success)
+# =============================================================================
+
+import httpx  # noqa: E402
+
+from agentwall.src.proxy.handler import UPSTREAM_UNAVAILABLE_JSONRPC_CODE  # noqa: E402
+
+_ALLOWED_SQL_CALL = {
+    "jsonrpc": "2.0",
+    "id": "req-up",
+    "method": "tools/call",
+    "params": {
+        "name": "execute_sql",
+        "arguments": {"query": "SELECT id FROM users LIMIT 5;", "max_rows": 5},
+    },
+}
+_FINANCE_HEADERS = {"X-Agent-ID": "agent-x", "X-User-Roles": "finance_viewer"}
+
+
+def _swap_http_client(handler: Any) -> httpx.AsyncClient:
+    original = dispatcher._http_client
+    dispatcher._http_client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    return original
+
+
+@pytest.mark.real_upstream
+@pytest.mark.asyncio
+async def test_unreachable_upstream_returns_error_not_simulated_success() -> None:
+    def _refuse(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("connection refused", request=request)
+
+    original = _swap_http_client(_refuse)
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            resp = await client.post("/mcp", json=_ALLOWED_SQL_CALL, headers=_FINANCE_HEADERS)
+        body = resp.json()
+        assert "result" not in body
+        assert body["error"]["code"] == UPSTREAM_UNAVAILABLE_JSONRPC_CODE
+        assert "simulated" not in resp.text
+    finally:
+        dispatcher._http_client = original
+
+
+@pytest.mark.real_upstream
+@pytest.mark.asyncio
+async def test_upstream_http_error_is_propagated_as_error() -> None:
+    original = _swap_http_client(lambda request: httpx.Response(500, json={"oops": True}))
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            resp = await client.post("/mcp", json=_ALLOWED_SQL_CALL, headers=_FINANCE_HEADERS)
+        assert resp.json()["error"]["code"] == UPSTREAM_UNAVAILABLE_JSONRPC_CODE
+    finally:
+        dispatcher._http_client = original
+
+
+@pytest.mark.real_upstream
+@pytest.mark.asyncio
+async def test_rest_unreachable_upstream_returns_502() -> None:
+    def _refuse(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("connection refused", request=request)
+
+    original = _swap_http_client(_refuse)
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            resp = await client.post(
+                "/v1/tools/execute",
+                json={"tool": "execute_sql", "arguments": _ALLOWED_SQL_CALL["params"]["arguments"]},
+                headers=_FINANCE_HEADERS,
+            )
+        assert resp.status_code == 502
+        assert resp.json()["status"] == "error"
+    finally:
+        dispatcher._http_client = original
+
+
+@pytest.mark.asyncio
+async def test_audit_log_does_not_store_raw_arguments() -> None:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        await client.post("/mcp", json=_ALLOWED_SQL_CALL, headers=_FINANCE_HEADERS)
+        logs = (await client.get("/v1/audit/logs", params={"limit": 1})).json()
+    record = logs[-1]
+    assert "SELECT id FROM users" not in str(record)
+    assert record["argument_keys"] == ["max_rows", "query"]
+    assert len(record["arguments_sha256"]) == 64

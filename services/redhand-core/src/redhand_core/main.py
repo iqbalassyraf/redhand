@@ -46,10 +46,16 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         format="%(asctime)s | %(levelname)-8s | %(name)s | %(message)s",
     )
 
-    is_placeholder_supabase = "placeholder-project.supabase.co" in settings.SUPABASE_URL
     supabase_client: Any
 
-    if is_placeholder_supabase:
+    if settings.uses_local_store:
+        # The local store is seeded with a well-known dev API key and demo data. It must
+        # never back a staging or production deployment (CLAUDE.md §5.2).
+        if settings.ENVIRONMENT not in ("development", "test"):
+            raise RuntimeError(
+                "SUPABASE_URL is not configured; the in-memory local store is only allowed "
+                "when ENVIRONMENT is 'development' or 'test'."
+            )
         logger.info(
             "Starting %s v%s in Zero-Config Local Store + SSE Mode",
             settings.APP_NAME,

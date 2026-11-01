@@ -30,7 +30,6 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         "Starting AgentWall Zero-Trust Proxy",
         env=settings.ENVIRONMENT,
         port=settings.PORT,
-        fail_mode=settings.FAIL_MODE,
     )
     setup_telemetry(settings.OTEL_SERVICE_NAME)
     firewall_engine.load_policies()
@@ -45,12 +44,14 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+# Browsers only need to reach the gateway from the dashboard origin. Wildcard origins
+# combined with credentials would let any website drive the gateway from a victim's browser.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=settings.CORS_ALLOWED_ORIGINS,
+    allow_credentials=False,
+    allow_methods=["GET", "POST"],
+    allow_headers=["Authorization", "Content-Type", "Mcp-Session-Id", "Mcp-Protocol-Version"],
 )
 
 
@@ -145,6 +146,8 @@ async def handle_rest_execute_endpoint(
     # Return 403 Forbidden on policy violation
     if response.get("status") == "blocked":
         return JSONResponse(status_code=status.HTTP_403_FORBIDDEN, content=response)
+    if response.get("status") == "error":
+        return JSONResponse(status_code=status.HTTP_502_BAD_GATEWAY, content=response)
 
     return JSONResponse(status_code=status.HTTP_200_OK, content=response)
 

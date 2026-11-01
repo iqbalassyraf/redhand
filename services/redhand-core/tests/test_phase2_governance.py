@@ -12,6 +12,9 @@ from uuid import uuid4
 from fastapi.testclient import TestClient
 import pytest
 
+from pydantic import SecretStr
+
+from redhand_core.config import Settings, get_settings
 from redhand_core.main import create_app
 from redhand_core.services.notifications.slack import (
     build_slack_hitl_blocks,
@@ -121,6 +124,9 @@ def test_four_eyes_approval_lifecycle_and_slack_webhook(monkeypatch: pytest.Monk
     monkeypatch.setattr("redhand_core.routers.hitl.trigger_agent_resume_webhook", mock_webhook)
 
     app = create_app()
+    app.dependency_overrides[get_settings] = lambda: Settings(
+        SLACK_SIGNING_SECRET=SecretStr(TEST_SLACK_SECRET)
+    )
     client = TestClient(app)
 
     # 1. Fetch the default seeded intervention (which requires 2 approvals)
@@ -178,7 +184,10 @@ def test_four_eyes_approval_lifecycle_and_slack_webhook(monkeypatch: pytest.Monk
     slack_resp = client.post(
         "/v1/hitl/slack/interactivity",
         content=encoded_form,
-        headers={"Content-Type": "application/x-www-form-urlencoded"},
+        headers={
+            "Content-Type": "application/x-www-form-urlencoded",
+            **_slack_signature_headers(TEST_SLACK_SECRET, encoded_form.encode("utf-8")),
+        },
     )
     assert slack_resp.status_code == 200, slack_resp.text
     assert "APPROVED" in slack_resp.json()["text"]
@@ -195,3 +204,78 @@ def test_four_eyes_approval_lifecycle_and_slack_webhook(monkeypatch: pytest.Monk
 
     # 6. Verify webhook was dispatched
     mock_webhook.assert_called_once()
+
+
+# =============================================================================
+# Slack request signature verification (fail closed)
+# =============================================================================
+
+TEST_SLACK_SECRET = "test-slack-signing-secret"
+
+
+def _slack_signature_headers(secret: str, body: bytes, timestamp: int | None = None) -> dict[str, str]:
+    import hashlib
+    import hmac
+    import time
+
+    ts = str(timestamp if timestamp is not None else int(time.time()))
+    digest = hmac.new(secret.encode(), b"v0:" + ts.encode() + b":" + body, hashlib.sha256).hexdigest()
+    return {"X-Slack-Request-Timestamp": ts, "X-Slack-Signature": f"v0={digest}"}
+
+
+def _slack_client(secret: str | None) -> TestClient:
+    app = create_app()
+    app.dependency_overrides[get_settings] = lambda: Settings(
+        SLACK_SIGNING_SECRET=SecretStr(secret) if secret else None
+    )
+    return TestClient(app)
+
+
+_SLACK_FORM = urlencode(
+    {
+        "payload": json.dumps(
+            {
+                "user": {"id": "U123", "username": "mallory"},
+                "actions": [{"action_id": "redhand_hitl_approve", "value": str(uuid4())}],
+            }
+        )
+    }
+)
+
+
+def test_slack_interactivity_rejected_when_signing_secret_not_configured() -> None:
+    resp = _slack_client(None).post(
+        "/v1/hitl/slack/interactivity",
+        content=_SLACK_FORM,
+        headers={"Content-Type": "application/x-www-form-urlencoded"},
+    )
+    assert resp.status_code == 503
+
+
+@pytest.mark.parametrize(
+    "headers",
+    [
+        {},
+        {"X-Slack-Request-Timestamp": "not-a-number", "X-Slack-Signature": "v0=abc"},
+        _slack_signature_headers("wrong-secret", _SLACK_FORM.encode()),
+        _slack_signature_headers(TEST_SLACK_SECRET, _SLACK_FORM.encode(), timestamp=1_000_000_000),
+    ],
+    ids=["missing", "malformed", "wrong-secret", "stale-replay"],
+)
+def test_slack_interactivity_rejects_bad_signatures(headers: dict[str, str]) -> None:
+    resp = _slack_client(TEST_SLACK_SECRET).post(
+        "/v1/hitl/slack/interactivity",
+        content=_SLACK_FORM,
+        headers={"Content-Type": "application/x-www-form-urlencoded", **headers},
+    )
+    assert resp.status_code == 401
+
+
+def test_slack_signature_tampered_body_rejected() -> None:
+    headers = _slack_signature_headers(TEST_SLACK_SECRET, _SLACK_FORM.encode())
+    resp = _slack_client(TEST_SLACK_SECRET).post(
+        "/v1/hitl/slack/interactivity",
+        content=_SLACK_FORM + "&extra=1",
+        headers={"Content-Type": "application/x-www-form-urlencoded", **headers},
+    )
+    assert resp.status_code == 401

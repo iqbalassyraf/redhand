@@ -264,3 +264,15 @@ async def test_aws_sts_downscoper_and_router() -> None:
             target_resource_arn="arn:aws:s3:::mybucket/*",
             actions=["iam:CreateUser"],
         )
+
+
+def test_local_store_refused_outside_development(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The seeded dev key and demo data must never back a production deployment."""
+    from redhand_core.config import Settings
+
+    monkeypatch.setattr(
+        "redhand_core.main.get_settings", lambda: Settings(ENVIRONMENT="production")
+    )
+    with pytest.raises(RuntimeError, match="only allowed"):
+        with TestClient(create_app()):
+            pass

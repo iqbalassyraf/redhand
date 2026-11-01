@@ -147,7 +147,7 @@ def test_tamper_evident_audit_logger_hash_chain() -> None:
         agent_id="agent-secops",
         caller_identity="alice@corp.internal",
         tool_name="execute_sql",
-        sanitized_arguments={"query": "SELECT 1;"},
+        arguments={"query": "SELECT 1;"},
         firewall_decision="ALLOW",
         execution_latency_ms=1.2,
     )
@@ -158,7 +158,7 @@ def test_tamper_evident_audit_logger_hash_chain() -> None:
         agent_id="agent-secops",
         caller_identity="alice@corp.internal",
         tool_name="execute_sql",
-        sanitized_arguments={"query": "DROP TABLE users;"},
+        arguments={"query": "DROP TABLE users;"},
         firewall_decision="BLOCK",
         policy_violation_reasons=["Prohibited destructive AST node: Drop"],
         execution_latency_ms=0.4,
@@ -171,8 +171,26 @@ def test_tamper_evident_audit_logger_hash_chain() -> None:
     assert reason is None
 
     # Simulate unauthorized record tampering
-    logger._records[0].sanitized_arguments["query"] = "TAMPERED_CONTENT"
+    logger._records[0].argument_keys.append("TAMPERED_KEY")
     is_valid_after_tamper, tamper_reason = logger.verify_chain_integrity()
     assert is_valid_after_tamper is False
     assert "Tampered hash" in str(tamper_reason)
 
+
+
+@pytest.mark.asyncio
+async def test_local_sts_has_no_shared_default_secret() -> None:
+    """Two providers without an explicit secret must not accept each other's tokens."""
+    minting = LocalMockSTSProvider()
+    verifying = LocalMockSTSProvider()
+    token = await minting.mint_token(agent_id="a", tool_name="t", target_audience="aud")
+    assert await minting.validate_token(token) is True
+    assert await verifying.validate_token(token) is False
+
+
+@pytest.mark.asyncio
+async def test_local_sts_explicit_secret_verifies_across_instances() -> None:
+    token = await LocalMockSTSProvider(signing_secret=b"s" * 32).mint_token(
+        agent_id="a", tool_name="t", target_audience="aud"
+    )
+    assert await LocalMockSTSProvider(signing_secret=b"s" * 32).validate_token(token) is True

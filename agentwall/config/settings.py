@@ -3,7 +3,7 @@ Environment configuration for AgentWall Zero-Trust Proxy.
 """
 
 from pathlib import Path
-from pydantic import Field
+from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -43,11 +43,20 @@ class Settings(BaseSettings):
         description="Hard upper bound for JIT ephemeral token lifetimes",
     )
     
-    FAIL_MODE: str = Field(
-        default="fail_closed",
-        description="Fallback mode on unhandled error: 'fail_closed' or 'fail_open'",
+    CORS_ALLOWED_ORIGINS: list[str] = Field(
+        default=["http://localhost:3000", "http://127.0.0.1:3000"],
+        description="Browser origins allowed to call the gateway (the dashboard).",
     )
-    
+
+    LOCAL_STS_SIGNING_SECRET: SecretStr | None = Field(
+        default=None,
+        description=(
+            "HMAC secret for the local development token provider. When unset, a random "
+            "per-process secret is generated, so tokens never verify across restarts."
+        ),
+    )
+
+
     LOG_LEVEL: str = Field(default="INFO", description="Structured logging level")
     OTEL_SERVICE_NAME: str = Field(default="agentwall-proxy", description="OpenTelemetry service name")
     AUDIT_LOG_FILE: str | None = Field(default=None, description="Optional path to append WORM audit records")

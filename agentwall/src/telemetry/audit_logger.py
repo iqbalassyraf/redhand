@@ -13,6 +13,12 @@ import structlog
 logger = structlog.get_logger(__name__)
 
 
+def digest_arguments(arguments: dict[str, Any]) -> str:
+    """SHA-256 of the canonical JSON form of the arguments (non-JSON values via str())."""
+    canonical = json.dumps(arguments, sort_keys=True, separators=(",", ":"), default=str)
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
 class AuditRecord(BaseModel):
     timestamp: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
     trace_id: str
@@ -20,8 +26,12 @@ class AuditRecord(BaseModel):
     agent_id: str
     caller_identity: str
     tool_name: str
-    sanitized_arguments: dict[str, Any]
-    firewall_decision: Literal["ALLOW", "BLOCK", "REDACT"]
+    # Raw tool arguments are never stored: they can contain customer data or secrets
+    # (CLAUDE.md §10). We keep only the argument names and a digest, which is enough
+    # to correlate a record with a payload the customer holds, without retaining it.
+    argument_keys: list[str] = Field(default_factory=list)
+    arguments_sha256: str = ""
+    firewall_decision: Literal["ALLOW", "BLOCK", "REDACT", "ERROR"]
     policy_violation_reasons: list[str] = Field(default_factory=list)
     downstream_status: int | None = None
     execution_latency_ms: float = 0.0
@@ -37,7 +47,8 @@ class AuditRecord(BaseModel):
             "agent_id": self.agent_id,
             "caller_identity": self.caller_identity,
             "tool_name": self.tool_name,
-            "sanitized_arguments": self.sanitized_arguments,
+            "argument_keys": self.argument_keys,
+            "arguments_sha256": self.arguments_sha256,
             "firewall_decision": self.firewall_decision,
             "policy_violation_reasons": self.policy_violation_reasons,
             "downstream_status": self.downstream_status,
@@ -66,8 +77,8 @@ class TamperEvidentAuditLogger:
         agent_id: str,
         caller_identity: str,
         tool_name: str,
-        sanitized_arguments: dict[str, Any],
-        firewall_decision: Literal["ALLOW", "BLOCK", "REDACT"],
+        arguments: dict[str, Any],
+        firewall_decision: Literal["ALLOW", "BLOCK", "REDACT", "ERROR"],
         policy_violation_reasons: list[str] | None = None,
         downstream_status: int | None = None,
         execution_latency_ms: float = 0.0,
@@ -80,7 +91,8 @@ class TamperEvidentAuditLogger:
                 agent_id=agent_id,
                 caller_identity=caller_identity,
                 tool_name=tool_name,
-                sanitized_arguments=sanitized_arguments,
+                argument_keys=sorted(str(k) for k in arguments),
+                arguments_sha256=digest_arguments(arguments),
                 firewall_decision=firewall_decision,
                 policy_violation_reasons=policy_violation_reasons or [],
                 downstream_status=downstream_status,

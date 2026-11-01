@@ -13,6 +13,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import time
 from datetime import datetime, timezone
 from enum import Enum
 from typing import Annotated, Any
@@ -25,7 +26,10 @@ from supabase import AsyncClient
 
 from redhand_core.config import Settings, get_settings
 from redhand_core.routers.telemetry import get_supabase_service_client
-from redhand_core.services.notifications.slack import parse_slack_interactive_payload
+from redhand_core.services.notifications.slack import (
+    parse_slack_interactive_payload,
+    verify_slack_signature,
+)
 
 logger = logging.getLogger("redhand.core.hitl")
 
@@ -392,7 +396,25 @@ async def handle_slack_interactivity(
     Receives interactive payload from Slack when an operator clicks
     [Approve & Resume] or [Deny Execution] buttons in a Slack channel.
     """
+    if settings.SLACK_SIGNING_SECRET is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Slack interactivity is not configured.",
+        )
+
     body_bytes = await request.body()
+    if not verify_slack_signature(
+        signing_secret=settings.SLACK_SIGNING_SECRET.get_secret_value(),
+        timestamp_header=request.headers.get("X-Slack-Request-Timestamp"),
+        signature_header=request.headers.get("X-Slack-Signature"),
+        body=body_bytes,
+        now=time.time(),
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid Slack request signature.",
+        )
+
     body_str = body_bytes.decode("utf-8")
     parsed = parse_slack_interactive_payload(body_str)
     if not parsed:

@@ -19,6 +19,12 @@ from .rest_parser import RESTParser, RESTToolCall
 
 logger = structlog.get_logger(__name__)
 
+UPSTREAM_UNAVAILABLE_JSONRPC_CODE = -32002
+
+
+class UpstreamUnavailableError(Exception):
+    """The upstream tool server could not be reached or returned an error."""
+
 
 class ProxyDispatcher:
     """Reverse proxy dispatcher handling inline security, IAM injection, and upstream routing."""
@@ -75,7 +81,7 @@ class ProxyDispatcher:
                     agent_id=agent_id,
                     caller_identity=caller_identity,
                     tool_name=parsed.tool_name,
-                    sanitized_arguments=parsed.arguments,
+                    arguments=parsed.arguments,
                     firewall_decision="BLOCK",
                     policy_violation_reasons=verdict.reasons,
                     downstream_status=403,
@@ -99,11 +105,29 @@ class ProxyDispatcher:
                 user_roles=user_roles,
             )
 
-            upstream_res, status_code = await self._forward_upstream(
-                upstream_url=verdict.upstream_url,
-                payload={"method": "tools/call", "params": {"name": parsed.tool_name, "arguments": parsed.arguments}},
-                ephemeral_token=ephemeral_token.access_token,
-            )
+            try:
+                upstream_res, status_code = await self._forward_upstream(
+                    upstream_url=verdict.upstream_url,
+                    payload={"method": "tools/call", "params": {"name": parsed.tool_name, "arguments": parsed.arguments}},
+                    ephemeral_token=ephemeral_token.access_token,
+                )
+            except UpstreamUnavailableError as exc:
+                self.audit_logger.record(
+                    trace_id=trace_id,
+                    span_id=span_id,
+                    agent_id=agent_id,
+                    caller_identity=caller_identity,
+                    tool_name=parsed.tool_name,
+                    arguments=parsed.arguments,
+                    firewall_decision="ERROR",
+                    policy_violation_reasons=[str(exc)],
+                    downstream_status=502,
+                    execution_latency_ms=round((time.perf_counter() - start_time) * 1000, 2),
+                    credential_jti=ephemeral_token.token_jti,
+                )
+                return MCPParser.create_jsonrpc_error(
+                    parsed.request_id, UPSTREAM_UNAVAILABLE_JSONRPC_CODE, str(exc)
+                )
 
             # Egress inspection & DLP
             if verdict.egress_dlp:
@@ -120,7 +144,7 @@ class ProxyDispatcher:
                 agent_id=agent_id,
                 caller_identity=caller_identity,
                 tool_name=parsed.tool_name,
-                sanitized_arguments=parsed.arguments,
+                arguments=parsed.arguments,
                 firewall_decision="ALLOW",
                 downstream_status=status_code,
                 execution_latency_ms=latency_ms,
@@ -168,7 +192,7 @@ class ProxyDispatcher:
                     agent_id=agent_id,
                     caller_identity=caller_identity,
                     tool_name=call.tool_name,
-                    sanitized_arguments=call.arguments,
+                    arguments=call.arguments,
                     firewall_decision="BLOCK",
                     policy_violation_reasons=verdict.reasons,
                     downstream_status=403,
@@ -191,11 +215,27 @@ class ProxyDispatcher:
                 user_roles=user_roles,
             )
 
-            upstream_res, status_code = await self._forward_upstream(
-                upstream_url=verdict.upstream_url,
-                payload={"tool": call.tool_name, "arguments": call.arguments},
-                ephemeral_token=ephemeral_token.access_token,
-            )
+            try:
+                upstream_res, status_code = await self._forward_upstream(
+                    upstream_url=verdict.upstream_url,
+                    payload={"tool": call.tool_name, "arguments": call.arguments},
+                    ephemeral_token=ephemeral_token.access_token,
+                )
+            except UpstreamUnavailableError as exc:
+                self.audit_logger.record(
+                    trace_id=trace_id,
+                    span_id=span_id,
+                    agent_id=agent_id,
+                    caller_identity=caller_identity,
+                    tool_name=call.tool_name,
+                    arguments=call.arguments,
+                    firewall_decision="ERROR",
+                    policy_violation_reasons=[str(exc)],
+                    downstream_status=502,
+                    execution_latency_ms=round((time.perf_counter() - start_time) * 1000, 2),
+                    credential_jti=ephemeral_token.token_jti,
+                )
+                return {"call_id": call.call_id, "status": "error", "tool": call.tool_name, "error": str(exc)}
 
             if verdict.egress_dlp:
                 sanitized_body, _ = self.firewall.inspect_egress(upstream_res)
@@ -209,7 +249,7 @@ class ProxyDispatcher:
                 agent_id=agent_id,
                 caller_identity=caller_identity,
                 tool_name=call.tool_name,
-                sanitized_arguments=call.arguments,
+                arguments=call.arguments,
                 firewall_decision="ALLOW",
                 downstream_status=status_code,
                 execution_latency_ms=latency_ms,
@@ -229,7 +269,12 @@ class ProxyDispatcher:
         payload: dict[str, Any],
         ephemeral_token: str,
     ) -> tuple[Any, int]:
-        """Dispatches outbound call with JIT credential and strips auth headers upon return."""
+        """Dispatches outbound call with JIT credential.
+
+        Raises `UpstreamUnavailableError` on any transport failure or non-2xx status.
+        There is deliberately no fallback result: an agent must never be told a tool
+        ran when it did not (fail closed, CLAUDE.md §4.3).
+        """
         headers = {
             "Authorization": f"Bearer {ephemeral_token}",
             "Content-Type": "application/json",
@@ -238,18 +283,17 @@ class ProxyDispatcher:
 
         try:
             resp = await self._http_client.post(upstream_url, json=payload, headers=headers)
-            status_code = resp.status_code
-            try:
-                res_data = resp.json()
-            except Exception:
-                res_data = {"raw_text": resp.text}
-            return res_data, status_code
-        except Exception as exc:
-            logger.info("Upstream tool server unreachable, utilizing simulated mock response", url=upstream_url, exc=str(exc))
-            # Return simulated success response for local containment mode
-            mock_resp = {
-                "content": [{"type": "text", "text": f"Successfully simulated execution of {payload.get('tool') or payload.get('params', {}).get('name')}"}],
-                "simulated": True,
-            }
-            return mock_resp, 200
+        except httpx.HTTPError as exc:
+            # Log the exception type only; messages can embed URLs with credentials.
+            logger.warning("Upstream tool server unreachable", error_type=type(exc).__name__)
+            raise UpstreamUnavailableError("Upstream tool server unreachable.") from exc
 
+        if resp.status_code >= 400:
+            logger.warning("Upstream tool server returned an error", status=resp.status_code)
+            raise UpstreamUnavailableError(f"Upstream tool server returned HTTP {resp.status_code}.")
+
+        try:
+            res_data: Any = resp.json()
+        except ValueError:
+            res_data = {"raw_text": resp.text}
+        return res_data, resp.status_code
