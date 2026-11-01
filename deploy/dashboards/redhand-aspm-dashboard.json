@@ -1,0 +1,119 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "liveNow": true,
+  "panels": [
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 },
+      "id": 100,
+      "title": "RedHand Zero-Trust ASPM: Live Runtime Protection",
+      "type": "row"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": { "fillOpacity": 80, "lineWidth": 1 },
+          "unit": "short"
+        }
+      },
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 1 },
+      "id": 1,
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" } },
+      "title": "Firewall Evaluations & Attacks Blocked",
+      "type": "timeseries",
+      "targets": [
+        {
+          "expr": "sum by (verdict) (rate(redhand_firewall_evaluations_total[1m]))",
+          "legendFormat": "{{verdict}}"
+        }
+      ]
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 0.025 },
+              { "color": "red", "value": 0.050 }
+            ]
+          },
+          "unit": "s"
+        }
+      },
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 1 },
+      "id": 2,
+      "title": "Firewall p99 Latency SLA (<50ms)",
+      "type": "gauge",
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.99, sum(rate(redhand_firewall_latency_seconds_bucket[5m])) by (le))",
+          "legendFormat": "p99 Latency"
+        }
+      ]
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "unit": "short"
+        }
+      },
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 1 },
+      "id": 3,
+      "title": "Ephemeral Multi-Cloud STS Tokens Minted",
+      "type": "timeseries",
+      "targets": [
+        {
+          "expr": "sum by (cloud) (rate(redhand_iam_tokens_minted_total[5m]))",
+          "legendFormat": "{{cloud}}"
+        }
+      ]
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "blue", "value": null },
+              { "color": "orange", "value": 1 },
+              { "color": "red", "value": 5 }
+            ]
+          },
+          "unit": "short"
+        }
+      },
+      "gridPos": { "h": 6, "w": 12, "x": 0, "y": 9 },
+      "id": 4,
+      "title": "Active HITL Interventions (Pending Operator Quorum)",
+      "type": "stat",
+      "targets": [
+        {
+          "expr": "redhand_hitl_interventions_active",
+          "legendFormat": "Pending Interventions"
+        }
+      ]
+    }
+  ],
+  "schemaVersion": 38,
+  "style": "dark",
+  "tags": ["security", "aspm", "ai-agents", "redhand"],
+  "time": { "from": "now-1h", "to": "now" },
+  "title": "RedHand - ASPM & Runtime Security Overview",
+  "uid": "redhand-aspm-overview"
+}
+

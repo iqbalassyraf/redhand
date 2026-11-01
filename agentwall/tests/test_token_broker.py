@@ -1,0 +1,113 @@
+"""
+Unit tests for the Ephemeral IAM Token Broker, STS providers, and WORM audit logger.
+"""
+
+import time
+import pytest
+from agentwall.src.broker.providers.gcp_sts import GCPSTSProvider
+from agentwall.src.broker.providers.local_mock import LocalMockSTSProvider
+from agentwall.src.broker.providers.vault import VaultSTSProvider
+from agentwall.src.broker.token_manager import EphemeralTokenBroker
+from agentwall.src.telemetry.audit_logger import TamperEvidentAuditLogger
+
+
+@pytest.mark.asyncio
+async def test_local_sts_token_minting_and_validation() -> None:
+    provider = LocalMockSTSProvider()
+    token = await provider.mint_token(
+        agent_id="agent-finops-01",
+        tool_name="execute_sql",
+        target_audience="https://warehouse.data.internal",
+        ttl_seconds=30,
+    )
+
+    assert token.bound_agent_id == "agent-finops-01"
+    assert token.bound_tool_name == "execute_sql"
+    assert token.target_audience == "https://warehouse.data.internal"
+    assert token.ttl_seconds == 30
+    assert token.is_expired() is False
+    assert token.is_valid_for("https://warehouse.data.internal", "execute_sql") is True
+    assert token.is_valid_for("https://other.data.internal", "execute_sql") is False
+
+    is_valid = await provider.validate_token(token)
+    assert is_valid is True
+
+
+@pytest.mark.asyncio
+async def test_token_broker_enforces_60_second_max_ttl() -> None:
+    broker = EphemeralTokenBroker()
+    # Attempt to request an overprivileged 1-hour token
+    token = await broker.mint_ephemeral_token(
+        agent_id="agent-sre",
+        tool_name="run_shell_cmd",
+        target_audience="https://node-diagnostics.internal",
+        ttl_seconds=3600,
+    )
+
+    # Must be strictly clamped to <= 60 seconds
+    assert token.ttl_seconds <= 60
+    assert token.expires_at <= time.time() + 61
+
+
+@pytest.mark.asyncio
+async def test_gcp_and_vault_providers() -> None:
+    gcp_provider = GCPSTSProvider()
+    vault_provider = VaultSTSProvider()
+
+    gcp_token = await gcp_provider.mint_token(
+        agent_id="agent-gcp",
+        tool_name="fetch_customer_record",
+        target_audience="//crm.googleapis.com/customers",
+        ttl_seconds=45,
+    )
+    assert gcp_token.access_token.startswith("ya29.c.agentwall_")
+    assert await gcp_provider.validate_token(gcp_token) is True
+
+    vault_token = await vault_provider.mint_token(
+        agent_id="agent-vault",
+        tool_name="run_shell_cmd",
+        target_audience="https://vault.internal",
+        ttl_seconds=15,
+    )
+    assert vault_token.access_token.startswith("hvs.CAES")
+    assert await vault_provider.validate_token(vault_token) is True
+
+
+def test_tamper_evident_audit_logger_hash_chain() -> None:
+    logger = TamperEvidentAuditLogger()
+
+    rec1 = logger.record(
+        trace_id="trace-001",
+        span_id="span-001",
+        agent_id="agent-secops",
+        caller_identity="alice@corp.internal",
+        tool_name="execute_sql",
+        sanitized_arguments={"query": "SELECT 1;"},
+        firewall_decision="ALLOW",
+        execution_latency_ms=1.2,
+    )
+
+    rec2 = logger.record(
+        trace_id="trace-002",
+        span_id="span-002",
+        agent_id="agent-secops",
+        caller_identity="alice@corp.internal",
+        tool_name="execute_sql",
+        sanitized_arguments={"query": "DROP TABLE users;"},
+        firewall_decision="BLOCK",
+        policy_violation_reasons=["Prohibited destructive AST node: Drop"],
+        execution_latency_ms=0.4,
+    )
+
+    assert rec2.prev_record_hash == rec1.record_hash
+
+    is_valid, reason = logger.verify_chain_integrity()
+    assert is_valid is True
+    assert reason is None
+
+    # Simulate unauthorized record tampering
+    logger._records[0].sanitized_arguments["query"] = "TAMPERED_CONTENT"
+    is_valid_after_tamper, tamper_reason = logger.verify_chain_integrity()
+    assert is_valid_after_tamper is False
+    assert "Tampered hash" in str(tamper_reason)
+

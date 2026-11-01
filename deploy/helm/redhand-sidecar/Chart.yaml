@@ -1,0 +1,16 @@
+apiVersion: v2
+name: redhand-sidecar
+description: Enterprise In-VPC Sidecar Proxy & ASPM Runtime Protection for Multi-Agent Systems
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+maintainers:
+  - name: RedHand Security Platform Team
+    email: security@redhand.security
+keywords:
+  - security
+  - aspm
+  - ai-agents
+  - zero-trust
+  - mcp
+

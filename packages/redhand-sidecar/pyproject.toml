@@ -1,0 +1,21 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "redhand-sidecar"
+version = "0.1.0"
+description = "RedHand In-VPC Sidecar Proxy for Zero-Trust Agent Protection"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "redhand-sdk",
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.32.0",
+    "httpx>=0.28.0",
+    "pydantic>=2.10.0",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/redhand_sidecar"]
+

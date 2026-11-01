@@ -1,0 +1,140 @@
+"""
+RedHand Core - FastAPI Application Factory & Lifespan Management
+File: services/redhand-core/src/redhand_core/main.py
+
+Initializes the Supabase `AsyncClient` (or the zero-config `LocalSupabaseAdapter`
+in local dev mode) during startup, overrides `get_supabase_service_client` across
+routers, and registers the Telemetry, HITL, Ephemeral IAM, and State/SSE routers.
+"""
+
+from __future__ import annotations
+
+from contextlib import asynccontextmanager
+import logging
+from typing import Any, AsyncIterator
+
+from fastapi import FastAPI, Request, Response
+from fastapi.middleware.cors import CORSMiddleware
+from supabase import acreate_client
+
+from redhand_core.config import Settings, get_settings
+from redhand_core.routers.hitl import router as hitl_router
+from redhand_core.routers.iam_broker import get_sts_downscoper, router as iam_broker_router
+from redhand_core.routers.scim import router as scim_router
+from redhand_core.routers.state import router as state_router
+from redhand_core.routers.telemetry import (
+    get_supabase_service_client,
+    router as telemetry_router,
+)
+from redhand_core.services.local_store import get_local_store
+from redhand_core.services.metrics import get_metrics
+
+logger = logging.getLogger("redhand.core.main")
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    """
+    Manages the startup and shutdown lifecycle of `redhand-core`:
+    1. If a real `SUPABASE_URL` is configured, initializes `acreate_client`.
+       Otherwise, binds the zero-config `LocalSupabaseAdapter` with SSE pub/sub.
+    2. Cleanly closes outbound HTTPX connection pools on shutdown.
+    """
+    settings = get_settings()
+    logging.basicConfig(
+        level=getattr(logging, settings.LOG_LEVEL, logging.INFO),
+        format="%(asctime)s | %(levelname)-8s | %(name)s | %(message)s",
+    )
+
+    is_placeholder_supabase = "placeholder-project.supabase.co" in settings.SUPABASE_URL
+    supabase_client: Any
+
+    if is_placeholder_supabase:
+        logger.info(
+            "Starting %s v%s in Zero-Config Local Store + SSE Mode",
+            settings.APP_NAME,
+            settings.APP_VERSION,
+        )
+        supabase_client = get_local_store()
+    else:
+        logger.info(
+            "Starting %s v%s connected to Supabase (%s)",
+            settings.APP_NAME,
+            settings.APP_VERSION,
+            settings.SUPABASE_URL,
+        )
+        supabase_client = await acreate_client(
+            settings.SUPABASE_URL,
+            settings.SUPABASE_SERVICE_ROLE_KEY.get_secret_value(),
+        )
+
+    app.state.supabase_client = supabase_client
+
+    try:
+        yield
+    finally:
+        logger.info("Shutting down %s and closing connection pools...", settings.APP_NAME)
+        if hasattr(supabase_client, "postgrest") and hasattr(
+            supabase_client.postgrest, "aclose"
+        ):
+            await supabase_client.postgrest.aclose()
+        downscoper = get_sts_downscoper()
+        await downscoper.aclose()
+
+
+def create_app(settings: Settings | None = None) -> FastAPI:
+    """
+    Constructs and configures the production FastAPI instance for `redhand-core`.
+    """
+    active_settings = settings or get_settings()
+
+    app = FastAPI(
+        title=active_settings.APP_NAME,
+        description="Agentic Security Posture Management (ASPM) & Runtime Protection Engine",
+        version=active_settings.APP_VERSION,
+        lifespan=lifespan,
+    )
+
+    async def _provide_supabase_service_client(request: Request) -> Any:
+        client = getattr(request.app.state, "supabase_client", None)
+        if client is None:
+            return get_local_store()
+        return client
+
+    app.dependency_overrides[get_supabase_service_client] = _provide_supabase_service_client
+
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=active_settings.CORS_ALLOWED_ORIGINS,
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+
+    app.include_router(telemetry_router)
+    app.include_router(hitl_router)
+    app.include_router(iam_broker_router)
+    app.include_router(state_router)
+    app.include_router(scim_router)
+
+    @app.get("/healthz", tags=["System"])
+    async def healthcheck() -> dict[str, str]:
+        return {
+            "status": "healthy",
+            "service": "redhand-core",
+            "version": active_settings.APP_VERSION,
+            "environment": active_settings.ENVIRONMENT,
+        }
+
+    @app.get("/metrics", tags=["Observability"])
+    async def get_prometheus_metrics() -> Response:
+        metrics_data = get_metrics().render_prometheus()
+        return Response(
+            content=metrics_data,
+            media_type="text/plain; version=0.0.4; charset=utf-8",
+        )
+
+    return app
+
+
+app = create_app()

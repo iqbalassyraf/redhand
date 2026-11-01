@@ -1,0 +1,124 @@
+"""
+RedHand CLI - Command Line Interface for Agentic Security Posture Management
+File: packages/redhand-sdk/src/redhand_sdk/cli.py
+
+Usage:
+  redhand scan [path] [--sarif <path>] [--strict]
+  redhand fuzz
+  redhand version
+"""
+
+from __future__ import annotations
+
+import argparse
+import sys
+from pathlib import Path
+
+from redhand_sdk.scanner.ast_checker import scan_directory, scan_python_file
+from redhand_sdk.scanner.fuzzer import run_adversarial_fuzz_suite
+from redhand_sdk.scanner.sarif import export_sarif_v2
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(
+        prog="redhand",
+        description="RedHand: Zero-Trust Agentic Security Posture Management (ASPM) CLI",
+    )
+    subparsers = parser.add_subparsers(dest="command", required=True)
+
+    # 1. 'scan' subcommand
+    scan_parser = subparsers.add_parser("scan", help="Scan Python agent code for security anti-patterns")
+    scan_parser.add_argument("path", nargs="?", default=".", help="Path to Python file or repository root")
+    scan_parser.add_argument("--sarif", help="Export findings to SARIF 2.1.0 JSON file")
+    scan_parser.add_argument(
+        "--strict",
+        action="store_true",
+        help="Exit with non-zero code if any security findings are detected (CI gate)",
+    )
+
+    # 2. 'fuzz' subcommand
+    subparsers.add_parser("fuzz", help="Benchmark <50ms Semantic Firewall with synthetic adversarial injections")
+
+    # 3. 'demo' subcommand
+    subparsers.add_parser("demo", help="Run live multi-agent enterprise workload simulator")
+
+    # 4. 'version' subcommand
+    subparsers.add_parser("version", help="Print RedHand SDK version")
+
+    args = parser.parse_args(argv)
+
+    if args.command == "version":
+        print("RedHand ASPM Platform v0.1.0")
+        return 0
+
+    if args.command == "fuzz":
+        print("🛡️  Running RedHand Synthetic Adversarial Injection Suite...\n")
+        summary = run_adversarial_fuzz_suite()
+        for res in summary.results:
+            icon = "✓" if res.passed else "✗"
+            status = "BLOCKED (PASS)" if res.verdict == "blocked" else "ALLOWED"
+            print(f"  [{icon}] {res.attack_id:<15} {res.category:<30} {status:<15} ({res.latency_ms:.2f}ms)")
+
+        print("\n" + "=" * 65)
+        print(f"Total Tests:        {summary.total_tests}")
+        print(f"Attack Block Rate:  {summary.attack_block_rate:.1f}%")
+        print(f"Benign Pass Rate:   {summary.benign_pass_rate:.1f}%")
+        print(f"p99 Latency SLA:    {summary.p99_latency_ms:.2f}ms (<50ms target)")
+        print("=" * 65)
+        return 0 if summary.failed_tests == 0 else 1
+
+    if args.command == "demo":
+        import asyncio
+        import importlib.util
+
+        demo_path = Path("examples/simulate_enterprise_workloads.py")
+        if not demo_path.is_file():
+            print("Error: examples/simulate_enterprise_workloads.py not found.")
+            return 1
+
+        spec = importlib.util.spec_from_file_location("simulate_workloads", demo_path)
+        if spec and spec.loader:
+            mod = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(mod)
+            asyncio.run(mod.main())
+            return 0
+        return 1
+
+    if args.command == "scan":
+        target = Path(args.path)
+        print(f"🔍 RedHand ASPM Static Guard Scanning: {target.resolve()}\n")
+
+        findings = scan_directory(target) if target.is_dir() else scan_python_file(target)
+
+        if not findings:
+            print("✨ Zero vulnerabilities found! All agent tools guarded with downscoped IAM scopes.")
+            if args.sarif:
+                export_sarif_v2([], args.sarif)
+                print(f"📄 Exported clean SARIF report: {args.sarif}")
+            return 0
+
+        print(f"Found {len(findings)} security finding(s):\n")
+        for f in findings:
+            badge = "ERROR" if f.severity == "error" else "WARN"
+            print(f"  [{badge}] {f.rule_id}: {f.rule_name}")
+            print(f"         Location: {f.file_path}:{f.line_number}")
+            print(f"         Tool:     {f.tool_name}()")
+            print(f"         Details:  {f.message}\n")
+
+        if args.sarif:
+            export_sarif_v2(findings, args.sarif)
+            print(f"📄 Exported SARIF 2.1.0 report: {args.sarif}")
+
+        if args.strict:
+            has_errors = any(f.severity == "error" for f in findings)
+            if has_errors:
+                print("❌ CI Gate Failed: High-severity agent security vulnerabilities detected.")
+                return 1
+
+        return 0
+
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

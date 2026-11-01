@@ -1,0 +1,54 @@
+replicaCount: 2
+
+image:
+  repository: ghcr.io/redhand-security/redhand-sidecar
+  pullPolicy: IfNotPresent
+  tag: "0.1.0"
+
+serviceAccount:
+  create: true
+  name: "redhand-sidecar-sa"
+  annotations:
+    # EKS IRSA Annotation:
+    # eks.amazonaws.com/role-arn: arn:aws:iam::123456789012:role/RedHandSidecarRole
+    # GKE Workload Identity Annotation:
+    # iam.gke.io/gcp-service-account: sa-redhand-broker@enterprise-prod.iam.gserviceaccount.com
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 10001
+  runAsGroup: 10001
+  fsGroup: 10001
+
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+      - ALL
+
+service:
+  type: ClusterIP
+  port: 8080
+
+resources:
+  limits:
+    cpu: 1000m
+    memory: 1Gi
+  requests:
+    cpu: 250m
+    memory: 512Mi
+
+env:
+  ENVIRONMENT: "production"
+  LOG_LEVEL: "INFO"
+  REDHAND_FAIL_SAFE_MODE: "FAIL_OPEN"
+  CMEK_KEY_ARN: ""
+  WORM_BUCKET_NAME: "corp-redhand-compliance-vault"
+
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 70
+

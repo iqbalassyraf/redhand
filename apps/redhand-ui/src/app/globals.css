@@ -1,0 +1,44 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+}
+
+body {
+  background-color: #ffffff;
+  color: #0f0f0f;
+  font-family: var(--font-roboto), system-ui, -apple-system, sans-serif;
+  overflow: hidden;
+}
+
+code,
+pre,
+.font-mono {
+  font-family: var(--font-roboto-mono), monospace;
+}
+
+/* React Flow Clean Broadcast Overrides (Level 0 / Flat 1px #E5E5E5 borders) */
+.react-flow__attribution {
+  display: none !important;
+}
+
+.react-flow__controls {
+  background: #ffffff !important;
+  border: 1px solid #e5e5e5 !important;
+  border-radius: 8px !important;
+  overflow: hidden;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1) !important;
+}
+
+.react-flow__controls-button {
+  background: #ffffff !important;
+  border-bottom: 1px solid #e5e5e5 !important;
+  fill: #606060 !important;
+}
+
+.react-flow__controls-button:hover {
+  background: #f2f2f2 !important;
+  fill: #0f0f0f !important;
+}

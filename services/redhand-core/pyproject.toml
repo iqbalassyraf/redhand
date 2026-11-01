@@ -1,0 +1,22 @@
+[project]
+name = "redhand-core"
+version = "0.1.0"
+description = "RedHand Core: FastAPI Control Plane, GCP STS Downscoper & Telemetry Engine"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.31.0",
+    "pydantic>=2.9.0",
+    "pydantic-settings>=2.5.2",
+    "supabase>=2.9.0",
+    "google-auth>=2.35.0",
+    "requests>=2.32.3",
+    "httpx>=0.27.2",
+    "boto3>=1.35.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
