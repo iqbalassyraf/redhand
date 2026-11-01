@@ -1,7 +1,0 @@
-{
-  "$schema": "https://openapi.vercel.sh/vercel.json",
-  "framework": "nextjs",
-  "installCommand": "cd apps/redhand-ui && npm install",
-  "buildCommand": "cd apps/redhand-ui && npm run build",
-  "outputDirectory": "apps/redhand-ui/.next"
-}
