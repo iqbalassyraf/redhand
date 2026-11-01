@@ -57,3 +57,4 @@ class AWSSTSProvider(BaseSTSProvider):
 
     async def validate_token(self, token: EphemeralToken) -> bool:
         return not token.is_expired() and token.access_token.startswith("ASIA")
+

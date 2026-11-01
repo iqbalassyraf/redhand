@@ -85,3 +85,4 @@ class SaaSTokenProvider(BaseSTSProvider):
         if token.is_expired():
             return False
         return any(token.access_token.startswith(p) for p in self.SAAS_PREFIXES.values())
+

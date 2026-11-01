@@ -218,11 +218,18 @@ npm run dev
 ```
 
 Open **`http://localhost:3000`** in your browser:
-- **Interactive Flow Canvas:** Visual real-time tracking of agent-to-tool connections.
-- **Review Queue:** Four-Eyes dual-signature approval workflow.
-- **Flight Recorder Dock:** Deep forensic inspection of intercepted malicious intents.
-- **WORM Ledger:** Live cryptographic block verification and hash chain integrity.
-- **Prometheus Metrics:** Scraped at `http://localhost:8000/metrics`.
+- **Interactive Flow Canvas:** Visual real-time tracking of agent-to-tool connections with dynamic multi-cloud destination badges (AWS S3, Azure Blob, GCP Cloud SQL, GitHub SaaS).
+- **Pre-Install MCP Server Vetting Panel:** Live manifest auditor in the right rail with test presets (Dangerous Community MCP, Overprivileged SQL MCP, Hardened GitHub SaaS), risk scores, CVE-style findings, and auto-generated AgentWall YAML policies.
+- **Flight Recorder Dock (6 Interactive Simulations):** 1-click test controls demonstrating:
+  1. *Benign Read (`LIMIT 10`)*
+  2. *SQL Exfiltration Blocked (Column & Row caps)*
+  3. *Shell Evasion Blocked (Hex/Base64 positive allowlist)*
+  4. *Delegated RBAC Denied (Caller lacks role)*
+  5. *Multi-Cloud STS Leases (AWS, Azure, GCP, SaaS)*
+  6. *Four-Eyes Circuit Breaker (Dual-signature quorum)*
+- **Multi-Cloud STS Leases Monitor:** Live inspection of ephemeral credentials across AWS STS AssumeRole, Azure Entra ID OBO, GCP CAB, and SaaS (GitHub/Slack).
+- **Enterprise SSO & Delegated Identity:** Switch caller identities on the fly (Alice Chen `secops_admin`, Dave Miller `developer`, Charlie Kent `intern`) to observe real-time RBAC boundary enforcement.
+- **WORM Ledger & OCSF X-Ray:** Live cryptographic Merkle hash chain verification and OCSF v1.1 telemetry exports.
 
 ---
 

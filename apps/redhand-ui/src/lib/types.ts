@@ -60,15 +60,17 @@ export interface HITLInterventionItem {
 export type EnterpriseRole =
   | "secops_admin"
   | "security_auditor"
-  | "agent_developer";
+  | "agent_developer"
+  | "contractor_intern";
 
 export interface AuthenticatedUser {
   id: string;
   name: string;
   email: string;
   role: EnterpriseRole;
-  idpProvider: "okta" | "entra_id" | "google_workspace";
+  idpProvider: "okta" | "entra_id" | "google_workspace" | "github";
   avatarInitials: string;
+  delegatedRoles: string[];
 }
 
 export interface WORMAuditBlockItem {
@@ -84,7 +86,8 @@ export interface WORMAuditBlockItem {
   tamper_status: "verified" | "compromised";
 }
 
-export interface TraceTelemetryRow {  id: string;
+export interface TraceTelemetryRow {
+  id: string;
   trace_id: string;
   span_id: string;
   agent_name: string;
@@ -102,6 +105,32 @@ export interface TraceTelemetryRow {  id: string;
   ephemeral_token_jti: string | null;
   target_resource: string;
   cab_policy: Record<string, unknown> | null;
+  cloud_provider?: "aws" | "azure" | "gcp" | "saas" | "vault" | "local";
+  delegated_user?: string;
+  delegated_roles?: string[];
   occurred_at: string;
 }
 
+export interface MCPFindingItem {
+  id: string;
+  severity: "CRITICAL" | "HIGH" | "MEDIUM" | "LOW" | "INFO";
+  category:
+    | "EXECUTION_RISK"
+    | "CREDENTIAL_EXPOSURE"
+    | "FILESYSTEM_RISK"
+    | "SCHEMA_RISK"
+    | "NETWORK_RISK";
+  tool_name?: string | null;
+  title: string;
+  description: string;
+  remediation: string;
+}
+
+export interface MCPVettingReportItem {
+  server_name: string;
+  risk_score: number;
+  verdict: "PASS" | "WARN" | "FAIL";
+  total_tools_scanned: number;
+  findings: MCPFindingItem[];
+  recommended_policy: Record<string, unknown>;
+}
