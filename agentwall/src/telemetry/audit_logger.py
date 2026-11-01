@@ -25,6 +25,8 @@ class AuditRecord(BaseModel):
     span_id: str
     agent_id: str
     caller_identity: str
+    organization_id: str | None = None
+    server: str | None = None
     tool_name: str
     # Raw tool arguments are never stored: they can contain customer data or secrets
     # (CLAUDE.md §10). We keep only the argument names and a digest, which is enough
@@ -46,6 +48,8 @@ class AuditRecord(BaseModel):
             "span_id": self.span_id,
             "agent_id": self.agent_id,
             "caller_identity": self.caller_identity,
+            "organization_id": self.organization_id,
+            "server": self.server,
             "tool_name": self.tool_name,
             "argument_keys": self.argument_keys,
             "arguments_sha256": self.arguments_sha256,
@@ -78,6 +82,8 @@ class TamperEvidentAuditLogger:
         caller_identity: str,
         tool_name: str,
         arguments: dict[str, Any],
+        organization_id: str | None = None,
+        server: str | None = None,
         firewall_decision: Literal["ALLOW", "BLOCK", "REDACT", "ERROR"],
         policy_violation_reasons: list[str] | None = None,
         downstream_status: int | None = None,
@@ -90,6 +96,8 @@ class TamperEvidentAuditLogger:
                 span_id=span_id,
                 agent_id=agent_id,
                 caller_identity=caller_identity,
+                organization_id=organization_id,
+                server=server,
                 tool_name=tool_name,
                 argument_keys=sorted(str(k) for k in arguments),
                 arguments_sha256=digest_arguments(arguments),

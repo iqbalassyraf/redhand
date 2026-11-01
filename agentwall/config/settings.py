@@ -57,6 +57,39 @@ class Settings(BaseSettings):
     )
 
 
+    # ------------------------------------------------------------------
+    # Passport enforcement (Phase 1)
+    # ------------------------------------------------------------------
+    CORE_URL: str = Field(
+        default="http://localhost:8000", description="Base URL of redhand-core (internal network)."
+    )
+    CORE_SERVICE_TOKEN: SecretStr | None = Field(
+        default=None,
+        description=(
+            "Must equal redhand-core's INTERNAL_SERVICE_TOKEN. Without it every agent call is "
+            "denied because passports cannot be checked."
+        ),
+    )
+    AGENT_TOKEN_PUBLIC_KEY: str | None = Field(
+        default=None,
+        description=(
+            "Ed25519 public key (PEM) for agent access tokens. When unset, keys are fetched "
+            "from core's /v1/agent-auth/jwks."
+        ),
+    )
+    CONTEXT_CACHE_TTL_SECONDS: float = Field(
+        default=2.0, ge=0.0, le=4.0,
+        description="How long a passport lookup is reused. Bounded to keep revocation within 5 s.",
+    )
+    ALLOW_INSECURE_UPSTREAMS: bool = Field(
+        default=False,
+        description="Development only: allow http:// and private-network MCP server URLs.",
+    )
+    UPSTREAM_CONNECT_TIMEOUT_SECONDS: float = Field(default=5.0, gt=0, le=30)
+    UPSTREAM_TIMEOUT_SECONDS: float = Field(default=30.0, gt=0, le=120)
+    MAX_UPSTREAM_RESPONSE_BYTES: int = Field(default=5 * 1024 * 1024, ge=1024, le=50 * 1024 * 1024)
+    MAX_REQUEST_BYTES: int = Field(default=1024 * 1024, ge=1024, le=10 * 1024 * 1024)
+
     LOG_LEVEL: str = Field(default="INFO", description="Structured logging level")
     OTEL_SERVICE_NAME: str = Field(default="agentwall-proxy", description="OpenTelemetry service name")
     AUDIT_LOG_FILE: str | None = Field(default=None, description="Optional path to append WORM audit records")
