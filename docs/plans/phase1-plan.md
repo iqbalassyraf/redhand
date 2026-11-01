@@ -1,6 +1,6 @@
 # Phase 1 implementation plan
 
-**Status:** Draft, awaiting approval
+**Status:** Approved 2026-11-01 and implemented (M1–M6). Deviations and follow-ups in §9.
 **Based on:** `docs/review/phase1-baseline.md`
 **Goal:** RedHand can identify every agent, control what it touches and stop it instantly. That means passing the four Phase 1 "done" tests in `CLAUDE.md` §19 and closing critical findings C1–C5 from the baseline review.
 
@@ -132,3 +132,41 @@ For each milestone: allowed and denied cases (wrong tenant, wrong scope, frozen,
 - **Untested against real Supabase:** the migration and operator auth are tested against the local store and unit tests only. A real Supabase project is needed to verify them for real.
 - **Local servers out of scope:** MCP servers that run locally over stdio stay out of scope for Phase 1, and the product copy will say so.
 - **Delegated per-user roles are disabled** in the gateway until they can be cryptographically bound. Tools that relied on `required_user_roles` will be governed by passport scopes instead.
+
+---
+
+## 9. Outcome
+
+All four "done" tests pass end to end (`tests/e2e/test_phase1_done.py`). Measured gateway overhead
+and revocation delay are in the README (§4).
+
+### Deviations from this plan
+- **Legacy REST endpoint removed instead of put behind auth (M4).** `/v1/tools/execute`, `/mcp` and
+  `/mcp/rpc` trusted identity headers and had no tenant or upstream model; v1 is MCP-only. Their
+  guardrail scenarios are now tested against the engine directly.
+- **Gateway audit file is opt-in, not on by default (M4).** The gateway logs a warning outside
+  development when `AGENTWALL_AUDIT_LOG_FILE` is unset, rather than writing to an implicit path.
+- **Upstream credentials:** agents may pass the MCP server's own credential in
+  `X-RedHand-Upstream-Authorization`. This was implied by "customers keep their own keys in v1"
+  but not spelled out.
+
+### Follow-ups (not done in Phase 1)
+1. Make each control action and its audit row a single SQL transaction (today: two statements; a
+   failed audit write returns 500 after the action applied).
+2. Pin the upstream connection to the address that passed the destination check (DNS rebinding).
+3. Supabase asymmetric JWT signing keys (JWKS) for operator tokens.
+4. Signing-key rotation with overlapping keys in the JWKS.
+5. Idempotency-Key support for `POST /v1/passports` (other control actions are naturally
+   idempotent).
+6. Shared stores for the in-process pieces when core runs more than one instance: SSE stream
+   tickets, token-exchange rate limiter, and the live event stream (which today reads only the
+   local store, so it is empty in Supabase mode).
+7. Move the gateway ledger into the database (Phase 3, Black Box Recorder).
+8. Dashboard session in httpOnly cookies instead of sessionStorage.
+9. Step-up authentication for unfreeze, scope expansion and freeze-all.
+10. core `/metrics` is unauthenticated (pre-existing); restrict at the network or add a token.
+11. Explicit ruff rule set and a type-checker (mypy/pyright) in the repo and CI, so "zero new
+    warnings" has a baseline. ESLint is not configured for the dashboard.
+12. Add a `LICENSE` file (README previously claimed Apache 2.0).
+13. Drop the superseded `agents.allowed_tools` column in a later contract migration.
+14. Local stdio MCP servers (needs a local shim) and resources/prompts scopes.
