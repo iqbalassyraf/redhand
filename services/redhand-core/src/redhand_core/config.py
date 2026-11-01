@@ -119,6 +119,30 @@ class Settings(BaseModelConfig := BaseSettings):
         description="Bearer token required on /scim/v2 endpoints. Unset disables SCIM.",
     )
 
+    # -------------------------------------------------------------------------
+    # Agent Passports, Agent Tokens & Gateway Integration
+    # -------------------------------------------------------------------------
+    AGENT_TOKEN_SIGNING_KEY: SecretStr | None = Field(
+        default=None,
+        description=(
+            "Ed25519 private key (PEM) that signs agent access tokens. Required outside "
+            "development/test; a random per-process key is used there when unset."
+        ),
+    )
+    AGENT_TOKEN_TTL_SECONDS: int = Field(default=600, ge=60, le=900)
+    AGENT_TOKEN_EXCHANGES_PER_MINUTE: int = Field(default=30, ge=1, le=600)
+    INTERNAL_SERVICE_TOKEN: SecretStr | None = Field(
+        default=None,
+        description=(
+            "Shared secret the gateway (AgentWall) presents on /internal endpoints. When "
+            "unset, those endpoints reject every call, so the gateway denies all traffic."
+        ),
+    )
+    ALLOW_INSECURE_MCP_URLS: bool = Field(
+        default=False,
+        description="Development only: allow http:// and localhost MCP server URLs.",
+    )
+
     @model_validator(mode="after")
     def _development_operator_secret(self) -> Settings:
         if self.OPERATOR_JWT_SECRET is None and self.ENVIRONMENT in ("development", "test"):

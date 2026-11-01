@@ -22,6 +22,7 @@ from uuid import UUID
 from fastapi import Depends, Header, HTTPException, status
 import jwt
 
+from redhand_core.auth import bearer_token
 from redhand_core.config import Settings, get_settings
 from redhand_core.routers.telemetry import get_supabase_service_client
 
@@ -141,9 +142,10 @@ async def get_operator(
     supabase: Any = Depends(get_supabase_service_client),
 ) -> OperatorContext:
     """FastAPI dependency: authenticated operator scoped to exactly one tenant."""
-    if not authorization or not authorization.startswith("Bearer "):
+    token = bearer_token(authorization)
+    if token is None:
         raise _unauthorized()
-    claims = decode_operator_token(authorization.removeprefix("Bearer ").strip(), settings)
+    claims = decode_operator_token(token, settings)
 
     try:
         user_id = UUID(str(claims["sub"]))

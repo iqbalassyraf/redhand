@@ -154,21 +154,14 @@ def test_authenticated_non_member_is_forbidden() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_viewer_cannot_change_agent_posture_but_operator_can() -> None:
+def test_viewer_cannot_freeze_agent_but_operator_can() -> None:
     store = LocalSupabaseAdapter()
     client, settings = make_client(store)
     agent_id = store.tables["agents"][0]["id"]
-    body = {"status": "quarantined"}
+    url = f"/v1/passports/{agent_id}/freeze"
 
-    viewer = client.patch(
-        f"/v1/state/agents/{agent_id}/posture", json=body, headers=operator_headers("viewer", settings)
-    )
-    assert viewer.status_code == 403
-
-    operator = client.patch(
-        f"/v1/state/agents/{agent_id}/posture", json=body, headers=operator_headers("operator", settings)
-    )
-    assert operator.status_code == 200
+    assert client.post(url, json={}, headers=operator_headers("viewer", settings)).status_code == 403
+    assert client.post(url, json={}, headers=operator_headers("operator", settings)).status_code == 200
 
 
 def test_viewer_cannot_resolve_hitl() -> None:
@@ -196,13 +189,11 @@ def test_snapshot_only_returns_own_tenant_data() -> None:
         assert {row["organization_id"] for row in snapshot[key]} == {DEFAULT_ORG_ID}
 
 
-def test_cannot_change_posture_of_another_tenants_agent() -> None:
+def test_cannot_freeze_another_tenants_agent() -> None:
     store = _store_with_second_tenant()
     client, settings = make_client(store)
-    resp = client.patch(
-        f"/v1/state/agents/{OTHER_AGENT_ID}/posture",
-        json={"status": "quarantined"},
-        headers=operator_headers("owner", settings),
+    resp = client.post(
+        f"/v1/passports/{OTHER_AGENT_ID}/freeze", json={}, headers=operator_headers("owner", settings)
     )
     assert resp.status_code == 404
     other = next(a for a in store.tables["agents"] if a["id"] == OTHER_AGENT_ID)

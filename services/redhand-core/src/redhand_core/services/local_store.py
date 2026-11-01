@@ -57,6 +57,8 @@ class LocalTableQueryBuilder:
         self._on_conflict: str | None = None
         self._filters: list[tuple[str, Any]] = []
         self._maybe_single: bool = False
+        self._order: tuple[str, bool] | None = None
+        self._limit: int | None = None
 
     def select(self, _columns: str = "*") -> LocalTableQueryBuilder:
         self._operation = "select"
@@ -90,6 +92,14 @@ class LocalTableQueryBuilder:
         self._maybe_single = True
         return self
 
+    def order(self, column: str, *, desc: bool = False) -> LocalTableQueryBuilder:
+        self._order = (column, desc)
+        return self
+
+    def limit(self, size: int) -> LocalTableQueryBuilder:
+        self._limit = size
+        return self
+
     async def execute(self) -> QueryResult:
         rows = self._store.tables.setdefault(self._table_name, [])
 
@@ -99,6 +109,11 @@ class LocalTableQueryBuilder:
                 for r in rows
                 if all(str(r.get(col)) == str(val) for col, val in self._filters)
             ]
+            if self._order is not None:
+                column, desc = self._order
+                matched.sort(key=lambda r: str(r.get(column) or ""), reverse=desc)
+            if self._limit is not None:
+                matched = matched[: self._limit]
             if self._maybe_single:
                 return QueryResult(data=matched[0] if matched else None)
             return QueryResult(data=matched)
@@ -109,8 +124,9 @@ class LocalTableQueryBuilder:
                 row = dict(item)
                 row.setdefault("id", str(uuid4()))
                 row.setdefault("created_at", datetime.now(timezone.utc).isoformat())
+                apply_insert_defaults(self._table_name, row)
                 rows.insert(0, row)
-                inserted.append(row)
+                inserted.append(dict(row))
             self._store.publish_event(
                 event_type=f"{self._table_name}.inserted",
                 payload=inserted,
@@ -145,6 +161,7 @@ class LocalTableQueryBuilder:
                     row.setdefault("id", str(uuid4()))
                     row.setdefault("status", "active")
                     row.setdefault("created_at", datetime.now(timezone.utc).isoformat())
+                    apply_insert_defaults(self._table_name, row)
                     rows.insert(0, row)
                     upserted.append(dict(row))
 
@@ -155,12 +172,22 @@ class LocalTableQueryBuilder:
             return QueryResult(data=upserted)
 
         if self._operation == "update":
+            if self._table_name in APPEND_ONLY_TABLES:
+                raise LocalStoreConstraintError(f"{self._table_name} is append-only")
+            targets = [
+                r for r in rows if all(str(r.get(col)) == str(val) for col, val in self._filters)
+            ]
+            # Validate every row first so a rejected update changes nothing, like a
+            # single SQL statement would.
+            for r in targets:
+                _check_update_rules(self._table_name, r, self._payload)
             updated: list[dict[str, Any]] = []
-            for r in rows:
-                if all(str(r.get(col)) == str(val) for col, val in self._filters):
-                    r.update(self._payload)
-                    r["updated_at"] = datetime.now(timezone.utc).isoformat()
-                    updated.append(dict(r))
+            for r in targets:
+                before = dict(r)
+                r.update(self._payload)
+                _apply_update_triggers(self._table_name, before, r)
+                r["updated_at"] = datetime.now(timezone.utc).isoformat()
+                updated.append(dict(r))
             self._store.publish_event(
                 event_type=f"{self._table_name}.updated",
                 payload=updated,
@@ -168,6 +195,47 @@ class LocalTableQueryBuilder:
             return QueryResult(data=updated)
 
         return QueryResult(data=[])
+
+
+# -----------------------------------------------------------------------------
+# Database rules mirrored from supabase/migrations/20261101000000_phase1_passport.sql
+# so the local store behaves like Postgres for the rules redhand-core relies on.
+# -----------------------------------------------------------------------------
+
+APPEND_ONLY_TABLES = frozenset({"control_audit_log"})
+
+
+class LocalStoreConstraintError(Exception):
+    """Raised where the real database would reject a write."""
+
+
+def _check_update_rules(table: str, row: dict[str, Any], changes: dict[str, Any]) -> None:
+    if table == "agents" and row.get("status") == "revoked":
+        if "status" in changes and changes["status"] != "revoked":
+            raise LocalStoreConstraintError(
+                f"Agent passport {row.get('id')} is revoked and cannot be reactivated"
+            )
+
+
+def apply_insert_defaults(table: str, row: dict[str, Any]) -> None:
+    """Column defaults the migration declares for new rows."""
+    if table == "agents":
+        row.setdefault("status", "active")
+        row.setdefault("scopes", [])
+        row.setdefault("version", 1)
+        row.setdefault(
+            "expires_at", (datetime.now(timezone.utc) + timedelta(days=90)).isoformat()
+        )
+        row.setdefault("allowed_tools", [])
+
+
+def _apply_update_triggers(table: str, before: dict[str, Any], after: dict[str, Any]) -> None:
+    if table != "agents":
+        return
+    if any(before.get(k) != after.get(k) for k in ("status", "scopes", "expires_at")):
+        after["version"] = int(before.get("version") or 1) + 1
+    if before.get("status") != after.get("status"):
+        after["status_changed_at"] = datetime.now(timezone.utc).isoformat()
 
 
 class LocalSupabaseAdapter:
@@ -343,6 +411,16 @@ class LocalSupabaseAdapter:
 
         self.tables["execution_traces"] = []
         self.tables["security_events"] = []
+
+        # Passport fields for the seeded demo agents (owned by the dev owner).
+        owner_id = DEV_OPERATORS["owner"]["id"]
+        for agent in self.tables["agents"]:
+            agent.setdefault("owner_id", owner_id)
+            agent.setdefault("backup_owner_id", DEV_OPERATORS["admin"]["id"])
+            apply_insert_defaults("agents", agent)
+        self.tables["agent_keys"] = []
+        self.tables["mcp_servers"] = []
+        self.tables["control_audit_log"] = []
 
 
 _local_store_singleton: LocalSupabaseAdapter | None = None

@@ -19,6 +19,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, 
 from pydantic import BaseModel, ConfigDict, Field, HttpUrl, field_validator, model_validator
 from supabase import AsyncClient
 
+from redhand_core.passports.models import effective_status
 from redhand_core.services.dlp_scrubber import get_dlp_scrubber
 from redhand_core.services.metrics import get_metrics
 from redhand_core.services.notifications.slack import dispatch_slack_hitl_notification
@@ -408,9 +409,11 @@ async def ingest_telemetry_batch(
 
     agent_record = agent_upsert_res.data[0]
     agent_id = UUID(agent_record["id"])
-    agent_status = agent_record.get("status", "active")
+    agent_status = effective_status(
+        str(agent_record.get("status")), agent_record.get("expires_at"), datetime.now(timezone.utc)
+    )
 
-    if agent_status in ("quarantined", "decommissioned"):
+    if agent_status != "active":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail=f"Agent '{payload.external_agent_id}' is currently {agent_status} by RedHand policy.",

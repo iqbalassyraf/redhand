@@ -148,15 +148,11 @@ def test_local_store_telemetry_ingest_with_dlp_redaction_and_quarantine() -> Non
     assert "ya29." not in stored_trace["thought_content"]
     assert stored_trace["firewall_verdict"] == "redacted"
 
-    # 2. Quarantine the agent via PATCH /v1/state/agents/{id}/posture and verify 403 block
+    # 2. Freeze the agent's passport and verify further telemetry is refused (403)
     agent_id = data["agent_id"]
-    q_resp = client.patch(
-        f"/v1/state/agents/{agent_id}/posture",
-        json={"status": "quarantined"},
-        headers=auth,
-    )
+    q_resp = client.post(f"/v1/passports/{agent_id}/freeze", json={}, headers=auth)
     assert q_resp.status_code == 200
-    assert q_resp.json()["agent"]["status"] == "quarantined"
+    assert q_resp.json()["passport"]["status"] == "frozen"
 
     blocked_ingest = client.post(
         "/v1/telemetry/ingest",

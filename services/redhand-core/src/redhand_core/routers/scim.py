@@ -18,6 +18,7 @@ from fastapi import APIRouter, Depends, HTTPException, Header, Path, Query, stat
 from pydantic import BaseModel, ConfigDict, Field
 from supabase import AsyncClient
 
+from redhand_core.auth import bearer_token
 from redhand_core.config import Settings, get_settings
 from redhand_core.routers.telemetry import get_supabase_service_client
 
@@ -36,7 +37,7 @@ async def require_scim_token(
     expected = settings.SCIM_BEARER_TOKEN
     if expected is None:
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="SCIM is not enabled.")
-    presented = (authorization or "").removeprefix("Bearer ").strip()
+    presented = bearer_token(authorization)
     if not presented or not hmac.compare_digest(presented, expected.get_secret_value()):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

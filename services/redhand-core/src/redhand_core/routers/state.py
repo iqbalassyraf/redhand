@@ -5,7 +5,7 @@ File: services/redhand-core/src/redhand_core/routers/state.py
 Bridges `redhand-ui` directly to `redhand-core` via:
 - `GET /v1/state/snapshot`: Full dashboard state hydration.
 - `GET /v1/state/stream`: Server-Sent Events (SSE) push stream for real-time canvas updates.
-- `PATCH /v1/state/agents/{agent_id}/posture`: Live agent quarantine / un-quarantine & tool allowlist updates.
+- Agent control actions (freeze, revoke, scopes) live in routers/passports.py.
 """
 
 from __future__ import annotations
@@ -15,13 +15,12 @@ from datetime import datetime, timedelta, timezone
 import json
 import secrets
 from typing import Annotated, Any
-from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel
 
-from redhand_core.auth.operator import SecurityOperatorDep, ViewerDep
+from redhand_core.auth.operator import ViewerDep
 from redhand_core.routers.telemetry import get_supabase_service_client
 from redhand_core.services.local_store import get_local_store
 
@@ -29,16 +28,6 @@ router = APIRouter(
     prefix="/v1/state",
     tags=["Real-Time State & Posture Control"],
 )
-
-
-class AgentPostureUpdateRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    status: str | None = Field(
-        default=None,
-        pattern="^(active|suspended|quarantined|decommissioned)$",
-    )
-    allowed_tools: list[str] | None = None
 
 
 @router.get(
@@ -68,46 +57,6 @@ async def get_state_snapshot(
         "security_events": (events_res.data or [])[:100],
         "hitl_interventions": hitl_res.data or [],
     }
-
-
-@router.patch(
-    "/agents/{agent_id}/posture",
-    summary="Quarantine, Suspend, Activate, or Update Allowed Tools for an Agent",
-)
-async def update_agent_posture(
-    agent_id: UUID,
-    payload: AgentPostureUpdateRequest,
-    operator: SecurityOperatorDep,
-    supabase: Annotated[Any, Depends(get_supabase_service_client)],
-) -> dict[str, Any]:
-    update_fields: dict[str, Any] = {}
-    if payload.status is not None:
-        update_fields["status"] = payload.status
-    if payload.allowed_tools is not None:
-        update_fields["allowed_tools"] = payload.allowed_tools
-
-    if not update_fields:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="At least one of 'status' or 'allowed_tools' must be provided.",
-        )
-
-    # Scoping the update by organization makes another tenant's agent indistinguishable
-    # from a missing one (404), so IDs can't be probed across tenants.
-    res = await (
-        supabase.table("agents")
-        .update(update_fields)
-        .eq("id", str(agent_id))
-        .eq("organization_id", str(operator.organization_id))
-        .execute()
-    )
-    if not res.data:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Agent '{agent_id}' not found.",
-        )
-
-    return {"status": "updated", "agent": res.data[0]}
 
 
 # =============================================================================
