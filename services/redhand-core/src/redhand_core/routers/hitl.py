@@ -24,6 +24,7 @@ import httpx
 from pydantic import BaseModel, ConfigDict, Field
 from supabase import AsyncClient
 
+from redhand_core.auth.operator import SecurityOperatorDep
 from redhand_core.config import Settings, get_settings
 from redhand_core.routers.telemetry import get_supabase_service_client
 from redhand_core.services.notifications.slack import (
@@ -60,10 +61,6 @@ class HITLResolveRequest(BaseModel):
     action: HITLResolutionAction = Field(
         ...,
         description="Operator decision: 'approve' to resume execution or 'deny' to abort.",
-    )
-    reviewer_user_id: UUID = Field(
-        ...,
-        description="Supabase Auth user UUID of the security operator resolving the pause.",
     )
     reviewer_comment: str | None = Field(
         default=None,
@@ -182,9 +179,32 @@ async def trigger_agent_resume_webhook(
 async def resolve_hitl_intervention(
     intervention_id: Annotated[UUID, Path(description="UUID of the pending HITL intervention.")],
     payload: HITLResolveRequest,
+    operator: SecurityOperatorDep,
     background_tasks: BackgroundTasks,
     supabase: Annotated[AsyncClient, Depends(get_supabase_service_client)],
     settings: Annotated[Settings, Depends(get_settings)],
+) -> HITLResolveResponse:
+    """The reviewer is always the authenticated operator; the body cannot name one."""
+    return await _resolve_intervention(
+        intervention_id=intervention_id,
+        payload=payload,
+        reviewer_id=str(operator.user_id),
+        organization_id=operator.organization_id,
+        background_tasks=background_tasks,
+        supabase=supabase,
+        settings=settings,
+    )
+
+
+async def _resolve_intervention(
+    *,
+    intervention_id: UUID,
+    payload: HITLResolveRequest,
+    reviewer_id: str,
+    organization_id: UUID,
+    background_tasks: BackgroundTasks,
+    supabase: Any,
+    settings: Settings,
 ) -> HITLResolveResponse:
     """
     Resolves a paused Human-in-the-Loop intervention:
@@ -202,6 +222,7 @@ async def resolve_hitl_intervention(
         supabase.table("hitl_interventions")
         .select("*")
         .eq("id", str(intervention_id))
+        .eq("organization_id", str(organization_id))
         .maybe_single()
         .execute()
     )
@@ -232,6 +253,7 @@ async def resolve_hitl_intervention(
                 supabase.table("hitl_interventions")
                 .update({"status": "expired"})
                 .eq("id", str(intervention_id))
+        .eq("organization_id", str(organization_id))
                 .execute()
             )
             raise HTTPException(
@@ -255,6 +277,7 @@ async def resolve_hitl_intervention(
             supabase.table("hitl_interventions")
             .update({"status": "failed"})
             .eq("id", str(intervention_id))
+        .eq("organization_id", str(organization_id))
             .execute()
         )
         raise HTTPException(
@@ -274,7 +297,7 @@ async def resolve_hitl_intervention(
 
     required_approvals = int(record.get("required_approvals") or 1)
     existing_approvals = list(record.get("approvals") or [])
-    current_reviewer_str = str(payload.reviewer_user_id)
+    current_reviewer_str = reviewer_id
     now_iso = now_utc.isoformat()
 
     if payload.action == HITLResolutionAction.APPROVE:
@@ -327,6 +350,7 @@ async def resolve_hitl_intervention(
         supabase.table("hitl_interventions")
         .update(update_fields)
         .eq("id", str(intervention_id))
+        .eq("organization_id", str(organization_id))
         .execute()
     )
 
@@ -396,11 +420,12 @@ async def handle_slack_interactivity(
     Receives interactive payload from Slack when an operator clicks
     [Approve & Resume] or [Deny Execution] buttons in a Slack channel.
     """
-    if settings.SLACK_SIGNING_SECRET is None:
+    if settings.SLACK_SIGNING_SECRET is None or not settings.SLACK_ORGANIZATION_ID:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Slack interactivity is not configured.",
         )
+    slack_org_id = UUID(settings.SLACK_ORGANIZATION_ID)
 
     body_bytes = await request.body()
     if not verify_slack_signature(
@@ -440,13 +465,17 @@ async def handle_slack_interactivity(
 
     resolve_req = HITLResolveRequest(
         action=action,
-        reviewer_user_id=reviewer_user_id,
         reviewer_comment=parsed.get("reviewer_comment"),
     )
 
-    res = await resolve_hitl_intervention(
+    # The Slack app is linked to exactly one organization (SLACK_ORGANIZATION_ID), so a
+    # signed Slack click can only resolve that tenant's interventions. The reviewer is
+    # the Slack user, derived deterministically from the signed payload.
+    res = await _resolve_intervention(
         intervention_id=intervention_id,
         payload=resolve_req,
+        reviewer_id=str(reviewer_user_id),
+        organization_id=slack_org_id,
         background_tasks=background_tasks,
         supabase=supabase,
         settings=settings,

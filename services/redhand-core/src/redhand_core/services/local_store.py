@@ -27,6 +27,16 @@ logger = logging.getLogger("redhand.core.local_store")
 DEFAULT_ORG_ID = "00000000-0000-0000-0000-000000000010"
 DEFAULT_DEV_API_KEY = "rh_dev_local_key"
 
+# Development operators for the local store. They exist only in the in-memory store,
+# which redhand-core refuses to use outside development/test.
+DEV_OPERATORS: dict[str, dict[str, str]] = {
+    "owner": {"id": "00000000-0000-0000-0000-0000000000a1", "email": "owner@dev.local", "role": "owner"},
+    "admin": {"id": "00000000-0000-0000-0000-0000000000a2", "email": "admin@dev.local", "role": "admin"},
+    "operator": {"id": "00000000-0000-0000-0000-0000000000a3", "email": "operator@dev.local", "role": "security_operator"},
+    "operator2": {"id": "00000000-0000-0000-0000-0000000000a4", "email": "operator2@dev.local", "role": "security_operator"},
+    "viewer": {"id": "00000000-0000-0000-0000-0000000000a5", "email": "viewer@dev.local", "role": "viewer"},
+}
+
 
 @dataclass(slots=True)
 class QueryResult:
@@ -207,6 +217,16 @@ class LocalSupabaseAdapter:
                 "siem_webhook_url": None,
                 "default_hitl_timeout_seconds": 3600,
             }
+        ]
+
+        self.tables["organization_members"] = [
+            {
+                "id": f"00000000-0000-0000-0000-0000000000b{idx}",
+                "organization_id": DEFAULT_ORG_ID,
+                "user_id": op["id"],
+                "role": op["role"],
+            }
+            for idx, op in enumerate(DEV_OPERATORS.values(), start=1)
         ]
 
         self.tables["sdk_api_keys"] = [

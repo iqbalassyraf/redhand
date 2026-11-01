@@ -11,7 +11,9 @@ Bridges `redhand-ui` directly to `redhand-core` via:
 from __future__ import annotations
 
 import asyncio
+from datetime import datetime, timedelta, timezone
 import json
+import secrets
 from typing import Annotated, Any
 from uuid import UUID
 
@@ -19,6 +21,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field
 
+from redhand_core.auth.operator import SecurityOperatorDep, ViewerDep
 from redhand_core.routers.telemetry import get_supabase_service_client
 from redhand_core.services.local_store import get_local_store
 
@@ -43,14 +46,23 @@ class AgentPostureUpdateRequest(BaseModel):
     summary="Fetch Live Topology State Snapshot (Agents, Traces, Security Events, HITL Queue)",
 )
 async def get_state_snapshot(
+    operator: ViewerDep,
     supabase: Annotated[Any, Depends(get_supabase_service_client)],
 ) -> dict[str, Any]:
-    agents_res = await supabase.table("agents").select("*").execute()
-    traces_res = await supabase.table("execution_traces").select("*").execute()
-    events_res = await supabase.table("security_events").select("*").execute()
-    hitl_res = await supabase.table("hitl_interventions").select("*").execute()
+    org = str(operator.organization_id)
+    agents_res = await supabase.table("agents").select("*").eq("organization_id", org).execute()
+    traces_res = await (
+        supabase.table("execution_traces").select("*").eq("organization_id", org).execute()
+    )
+    events_res = await (
+        supabase.table("security_events").select("*").eq("organization_id", org).execute()
+    )
+    hitl_res = await (
+        supabase.table("hitl_interventions").select("*").eq("organization_id", org).execute()
+    )
 
     return {
+        "organization_id": org,
         "agents": agents_res.data or [],
         "execution_traces": (traces_res.data or [])[:100],
         "security_events": (events_res.data or [])[:100],
@@ -65,6 +77,7 @@ async def get_state_snapshot(
 async def update_agent_posture(
     agent_id: UUID,
     payload: AgentPostureUpdateRequest,
+    operator: SecurityOperatorDep,
     supabase: Annotated[Any, Depends(get_supabase_service_client)],
 ) -> dict[str, Any]:
     update_fields: dict[str, Any] = {}
@@ -79,10 +92,13 @@ async def update_agent_posture(
             detail="At least one of 'status' or 'allowed_tools' must be provided.",
         )
 
+    # Scoping the update by organization makes another tenant's agent indistinguishable
+    # from a missing one (404), so IDs can't be probed across tenants.
     res = await (
         supabase.table("agents")
         .update(update_fields)
         .eq("id", str(agent_id))
+        .eq("organization_id", str(operator.organization_id))
         .execute()
     )
     if not res.data:
@@ -94,11 +110,59 @@ async def update_agent_posture(
     return {"status": "updated", "agent": res.data[0]}
 
 
+# =============================================================================
+# Real-time stream. Browsers' EventSource cannot send an Authorization header, so the
+# dashboard first exchanges its operator token for a single-use ticket (60 s) and
+# opens the stream with it. Tickets are bound to one organization; events for other
+# tenants are never sent. Tickets are held in process memory, which is sufficient for
+# a single core instance (multi-instance deployments need a shared store).
+# =============================================================================
+
+STREAM_TICKET_TTL = timedelta(seconds=60)
+_stream_tickets: dict[str, tuple[str, datetime]] = {}
+
+
+class StreamTicketResponse(BaseModel):
+    ticket: str
+    expires_in_seconds: int
+
+
+@router.post("/stream-ticket", response_model=StreamTicketResponse, summary="Issue SSE ticket")
+async def issue_stream_ticket(operator: ViewerDep) -> StreamTicketResponse:
+    now = datetime.now(timezone.utc)
+    for key, (_, expiry) in list(_stream_tickets.items()):
+        if expiry < now:
+            _stream_tickets.pop(key, None)
+    ticket = secrets.token_urlsafe(32)
+    _stream_tickets[ticket] = (str(operator.organization_id), now + STREAM_TICKET_TTL)
+    return StreamTicketResponse(
+        ticket=ticket, expires_in_seconds=int(STREAM_TICKET_TTL.total_seconds())
+    )
+
+
+def _redeem_stream_ticket(ticket: str) -> str:
+    entry = _stream_tickets.pop(ticket, None)
+    if entry is None or entry[1] < datetime.now(timezone.utc):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid stream ticket.")
+    return entry[0]
+
+
+def filter_event_for_org(message: dict[str, Any], org_id: str) -> dict[str, Any] | None:
+    """Keeps only rows belonging to `org_id`; drops the message if none remain."""
+    data = message.get("data")
+    rows = data if isinstance(data, list) else [data]
+    kept = [r for r in rows if isinstance(r, dict) and str(r.get("organization_id")) == org_id]
+    if not kept:
+        return None
+    return {**message, "data": kept if isinstance(data, list) else kept[0]}
+
+
 @router.get(
     "/stream",
     summary="Server-Sent Events (SSE) Real-Time Telemetry & HITL Stream",
 )
-async def stream_realtime_events(request: Request) -> StreamingResponse:
+async def stream_realtime_events(request: Request, ticket: str) -> StreamingResponse:
+    org_id = _redeem_stream_ticket(ticket)
     store = get_local_store()
     queue = store.subscribe()
 
@@ -110,9 +174,12 @@ async def stream_realtime_events(request: Request) -> StreamingResponse:
                     break
                 try:
                     msg = await asyncio.wait_for(queue.get(), timeout=15.0)
-                    yield f"data: {json.dumps(msg)}\n\n"
                 except asyncio.TimeoutError:
                     yield ": heartbeat\n\n"
+                    continue
+                scoped = filter_event_for_org(msg, org_id)
+                if scoped is not None:
+                    yield f"data: {json.dumps(scoped)}\n\n"
         finally:
             store.unsubscribe(queue)
 
@@ -125,4 +192,3 @@ async def stream_realtime_events(request: Request) -> StreamingResponse:
             "X-Accel-Buffering": "no",
         },
     )
-

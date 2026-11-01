@@ -11,7 +11,10 @@ from uuid import uuid4
 from fastapi.testclient import TestClient
 import pytest
 
-from redhand_core.main import create_app
+from pydantic import SecretStr
+
+
+from core_helpers import make_client
 from redhand_core.services.worm_audit_logger import (
     WORMProvider,
     compute_merkle_root,
@@ -55,8 +58,8 @@ def test_worm_merkle_tree_and_cryptographic_chain_integrity() -> None:
 
 
 def test_enterprise_scim_directory_sync() -> None:
-    app = create_app()
-    client = TestClient(app)
+    client, _ = make_client(SCIM_BEARER_TOKEN=SecretStr("scim-test-token"))
+    client.headers.update({"Authorization": "Bearer scim-test-token"})
 
     # 1. SCIM Service Provider Configuration Discovery
     sp_config = client.get("/scim/v2/ServiceProviderConfig")
@@ -135,3 +138,13 @@ def test_in_vpc_sidecar_local_proxy() -> None:
     assert attack_resp.json()["allowed"] is False
     assert attack_resp.json()["verdict"] == "blocked"
 
+
+
+
+def test_scim_disabled_without_token_and_rejects_wrong_token() -> None:
+    disabled, _ = make_client()
+    assert disabled.get("/scim/v2/Users").status_code == 503
+
+    enabled, _ = make_client(SCIM_BEARER_TOKEN=SecretStr("scim-test-token"))
+    assert enabled.get("/scim/v2/Users").status_code == 401
+    assert enabled.get("/scim/v2/Users", headers={"Authorization": "Bearer nope"}).status_code == 401

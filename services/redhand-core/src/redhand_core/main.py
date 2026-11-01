@@ -18,6 +18,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from supabase import acreate_client
 
 from redhand_core.config import Settings, get_settings
+from redhand_core.routers.dev import router as dev_router
 from redhand_core.routers.hitl import router as hitl_router
 from redhand_core.routers.iam_broker import get_sts_downscoper, router as iam_broker_router
 from redhand_core.routers.scim import router as scim_router
@@ -122,6 +123,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(iam_broker_router)
     app.include_router(state_router)
     app.include_router(scim_router)
+    if active_settings.ENVIRONMENT == "development" and active_settings.uses_local_store:
+        app.include_router(dev_router)
 
     @app.get("/healthz", tags=["System"])
     async def healthcheck() -> dict[str, str]:

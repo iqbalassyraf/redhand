@@ -14,8 +14,9 @@ import pytest
 
 from pydantic import SecretStr
 
-from redhand_core.config import Settings, get_settings
-from redhand_core.main import create_app
+from redhand_core.services.local_store import DEV_OPERATORS
+
+from core_helpers import make_client, operator_headers
 from redhand_core.services.notifications.slack import (
     build_slack_hitl_blocks,
     parse_slack_interactive_payload,
@@ -123,14 +124,17 @@ def test_four_eyes_approval_lifecycle_and_slack_webhook(monkeypatch: pytest.Monk
     mock_webhook = AsyncMock()
     monkeypatch.setattr("redhand_core.routers.hitl.trigger_agent_resume_webhook", mock_webhook)
 
-    app = create_app()
-    app.dependency_overrides[get_settings] = lambda: Settings(
-        SLACK_SIGNING_SECRET=SecretStr(TEST_SLACK_SECRET)
+    from redhand_core.services.local_store import DEFAULT_ORG_ID
+
+    client, settings = make_client(
+        SLACK_SIGNING_SECRET=SecretStr(TEST_SLACK_SECRET),
+        SLACK_ORGANIZATION_ID=DEFAULT_ORG_ID,
     )
-    client = TestClient(app)
+    op1_headers = operator_headers("operator", settings)
+    op1_id = DEV_OPERATORS["operator"]["id"]
 
     # 1. Fetch the default seeded intervention (which requires 2 approvals)
-    snapshot = client.get("/v1/state/snapshot").json()
+    snapshot = client.get("/v1/state/snapshot", headers=op1_headers).json()
     interventions = snapshot.get("hitl_interventions", [])
     assert len(interventions) >= 1
     target_intervention = interventions[0]
@@ -138,17 +142,17 @@ def test_four_eyes_approval_lifecycle_and_slack_webhook(monkeypatch: pytest.Monk
     assert target_intervention["required_approvals"] == 2
     assert target_intervention["status"] == "pending"
 
-    operator_1_id = str(uuid4())
-    operator_2_id = str(uuid4())
+    operator_1_id = op1_id
+    operator_2_id = str(uuid4())  # Slack user (deterministic UUID from the signed payload)
 
     # 2. First operator signs -> status becomes "partially_approved"
     resp1 = client.post(
         f"/v1/hitl/{intervention_id}/resolve",
         json={
             "action": "approve",
-            "reviewer_user_id": operator_1_id,
             "reviewer_comment": "Operator 1: Code verified against Jira ticket RH-402.",
         },
+        headers=op1_headers,
     )
     assert resp1.status_code == 200, resp1.text
     body1 = resp1.json()
@@ -162,9 +166,9 @@ def test_four_eyes_approval_lifecycle_and_slack_webhook(monkeypatch: pytest.Monk
         f"/v1/hitl/{intervention_id}/resolve",
         json={
             "action": "approve",
-            "reviewer_user_id": operator_1_id,
             "reviewer_comment": "Operator 1 signing again.",
         },
+        headers=op1_headers,
     )
     assert resp_duplicate.status_code == 400
     assert "Four-Eyes Principle violation" in resp_duplicate.json()["detail"]
@@ -193,7 +197,7 @@ def test_four_eyes_approval_lifecycle_and_slack_webhook(monkeypatch: pytest.Monk
     assert "APPROVED" in slack_resp.json()["text"]
 
     # 5. Verify in state snapshot that intervention is now "approved"
-    snapshot_after = client.get("/v1/state/snapshot").json()
+    snapshot_after = client.get("/v1/state/snapshot", headers=op1_headers).json()
     resolved = next(
         i for i in snapshot_after["hitl_interventions"] if i["id"] == intervention_id
     )
@@ -224,11 +228,13 @@ def _slack_signature_headers(secret: str, body: bytes, timestamp: int | None = N
 
 
 def _slack_client(secret: str | None) -> TestClient:
-    app = create_app()
-    app.dependency_overrides[get_settings] = lambda: Settings(
-        SLACK_SIGNING_SECRET=SecretStr(secret) if secret else None
+    from redhand_core.services.local_store import DEFAULT_ORG_ID
+
+    client, _ = make_client(
+        SLACK_SIGNING_SECRET=SecretStr(secret) if secret else None,
+        SLACK_ORGANIZATION_ID=DEFAULT_ORG_ID,
     )
-    return TestClient(app)
+    return client
 
 
 _SLACK_FORM = urlencode(

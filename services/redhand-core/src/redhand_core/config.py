@@ -9,10 +9,11 @@ using Pydantic `BaseSettings`.
 from __future__ import annotations
 
 from functools import lru_cache
+import secrets
 from pathlib import Path
 from typing import Literal
 
-from pydantic import Field, SecretStr, field_validator
+from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -97,6 +98,32 @@ class Settings(BaseModelConfig := BaseSettings):
             "rejects every request (fail closed)."
         ),
     )
+
+    # -------------------------------------------------------------------------
+    # Operator Authentication & Tenant-Scoped Integrations
+    # -------------------------------------------------------------------------
+    OPERATOR_JWT_SECRET: SecretStr | None = Field(
+        default=None,
+        description=(
+            "HS256 secret that signs operator access tokens (the Supabase project JWT "
+            "secret in production). Unset outside development means no operator can log in. "
+            "In development/test a random per-process secret is generated when unset."
+        ),
+    )
+    SLACK_ORGANIZATION_ID: str | None = Field(
+        default=None,
+        description="Organization whose HITL interventions the configured Slack app may resolve.",
+    )
+    SCIM_BEARER_TOKEN: SecretStr | None = Field(
+        default=None,
+        description="Bearer token required on /scim/v2 endpoints. Unset disables SCIM.",
+    )
+
+    @model_validator(mode="after")
+    def _development_operator_secret(self) -> Settings:
+        if self.OPERATOR_JWT_SECRET is None and self.ENVIRONMENT in ("development", "test"):
+            self.OPERATOR_JWT_SECRET = SecretStr(secrets.token_urlsafe(32))
+        return self
 
     @property
     def uses_local_store(self) -> bool:
