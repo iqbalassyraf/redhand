@@ -8,6 +8,8 @@ circuit breaker interventions and parses interactive button clicks.
 
 from __future__ import annotations
 
+import hashlib
+import hmac
 import json
 import logging
 from typing import Any
@@ -114,6 +116,35 @@ async def dispatch_slack_hitl_notification(
     except httpx.HTTPError as exc:
         logger.warning("Failed to dispatch Slack notification to %s: %s", webhook_url, exc)
         return False
+
+
+SLACK_SIGNATURE_MAX_AGE_SECONDS = 300
+
+
+def verify_slack_signature(
+    *,
+    signing_secret: str,
+    timestamp_header: str | None,
+    signature_header: str | None,
+    body: bytes,
+    now: float,
+) -> bool:
+    """
+    Verifies a Slack request signature (v0 scheme, HMAC-SHA256 over
+    `v0:{timestamp}:{body}`) and rejects requests older than five minutes to
+    prevent replay. Returns False on any missing or malformed input.
+    """
+    if not timestamp_header or not signature_header:
+        return False
+    try:
+        timestamp = int(timestamp_header)
+    except ValueError:
+        return False
+    if abs(now - timestamp) > SLACK_SIGNATURE_MAX_AGE_SECONDS:
+        return False
+    base = b"v0:" + timestamp_header.encode("utf-8") + b":" + body
+    expected = "v0=" + hmac.new(signing_secret.encode("utf-8"), base, hashlib.sha256).hexdigest()
+    return hmac.compare_digest(expected, signature_header)
 
 
 def parse_slack_interactive_payload(form_body: str) -> dict[str, Any] | None:

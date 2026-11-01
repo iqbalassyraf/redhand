@@ -18,7 +18,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from supabase import acreate_client
 
 from redhand_core.config import Settings, get_settings
+from redhand_core.routers.agent_auth import router as agent_auth_router
+from redhand_core.routers.dev import router as dev_router
 from redhand_core.routers.hitl import router as hitl_router
+from redhand_core.routers.passports import router as passports_router
 from redhand_core.routers.iam_broker import get_sts_downscoper, router as iam_broker_router
 from redhand_core.routers.scim import router as scim_router
 from redhand_core.routers.state import router as state_router
@@ -46,10 +49,16 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         format="%(asctime)s | %(levelname)-8s | %(name)s | %(message)s",
     )
 
-    is_placeholder_supabase = "placeholder-project.supabase.co" in settings.SUPABASE_URL
     supabase_client: Any
 
-    if is_placeholder_supabase:
+    if settings.uses_local_store:
+        # The local store is seeded with a well-known dev API key and demo data. It must
+        # never back a staging or production deployment (CLAUDE.md §5.2).
+        if settings.ENVIRONMENT not in ("development", "test"):
+            raise RuntimeError(
+                "SUPABASE_URL is not configured; the in-memory local store is only allowed "
+                "when ENVIRONMENT is 'development' or 'test'."
+            )
         logger.info(
             "Starting %s v%s in Zero-Config Local Store + SSE Mode",
             settings.APP_NAME,
@@ -116,6 +125,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(iam_broker_router)
     app.include_router(state_router)
     app.include_router(scim_router)
+    app.include_router(passports_router)
+    app.include_router(agent_auth_router)
+    if active_settings.ENVIRONMENT == "development" and active_settings.uses_local_store:
+        app.include_router(dev_router)
 
     @app.get("/healthz", tags=["System"])
     async def healthcheck() -> dict[str, str]:

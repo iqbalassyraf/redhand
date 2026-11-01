@@ -9,6 +9,7 @@ Okta, Microsoft Entra ID (Azure AD), PingFederate, and Google Workspace.
 from __future__ import annotations
 
 from datetime import datetime, timezone
+import hmac
 import logging
 from typing import Annotated, Any
 from uuid import UUID, uuid4
@@ -17,13 +18,38 @@ from fastapi import APIRouter, Depends, HTTPException, Header, Path, Query, stat
 from pydantic import BaseModel, ConfigDict, Field
 from supabase import AsyncClient
 
+from redhand_core.auth import bearer_token
+from redhand_core.config import Settings, get_settings
 from redhand_core.routers.telemetry import get_supabase_service_client
 
 logger = logging.getLogger("redhand.core.scim")
 
+async def require_scim_token(
+    authorization: Annotated[str | None, Header(alias="Authorization")] = None,
+    settings: Settings = Depends(get_settings),
+) -> None:
+    """
+    SCIM is an enterprise-tier feature. Every endpoint requires the configured bearer
+    token; when none is configured the whole API is disabled (fail closed).
+    NOTE: user/group storage below is an in-process, non-tenant-scoped demo store and
+    must not be used for real directories until it is backed by the database.
+    """
+    expected = settings.SCIM_BEARER_TOKEN
+    if expected is None:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="SCIM is not enabled.")
+    presented = bearer_token(authorization)
+    if not presented or not hmac.compare_digest(presented, expected.get_secret_value()):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid SCIM bearer token.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+
 router = APIRouter(
     prefix="/scim/v2",
     tags=["Enterprise SCIM 2.0 Directory Sync (RFC 7643/7644)"],
+    dependencies=[Depends(require_scim_token)],
 )
 
 SCIM_USER_SCHEMA = "urn:ietf:params:scim:schemas:core:2.0:User"

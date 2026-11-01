@@ -9,10 +9,11 @@ using Pydantic `BaseSettings`.
 from __future__ import annotations
 
 from functools import lru_cache
+import secrets
 from pathlib import Path
 from typing import Literal
 
-from pydantic import Field, SecretStr, field_validator
+from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -86,6 +87,72 @@ class Settings(BaseModelConfig := BaseSettings):
         le=604800,
         description="Default expiration window for pending HITL circuit breaker checkpoints.",
     )
+
+    # -------------------------------------------------------------------------
+    # Slack Interactivity
+    # -------------------------------------------------------------------------
+    SLACK_SIGNING_SECRET: SecretStr | None = Field(
+        default=None,
+        description=(
+            "Slack app signing secret. When unset, the Slack interactivity endpoint "
+            "rejects every request (fail closed)."
+        ),
+    )
+
+    # -------------------------------------------------------------------------
+    # Operator Authentication & Tenant-Scoped Integrations
+    # -------------------------------------------------------------------------
+    OPERATOR_JWT_SECRET: SecretStr | None = Field(
+        default=None,
+        description=(
+            "HS256 secret that signs operator access tokens (the Supabase project JWT "
+            "secret in production). Unset outside development means no operator can log in. "
+            "In development/test a random per-process secret is generated when unset."
+        ),
+    )
+    SLACK_ORGANIZATION_ID: str | None = Field(
+        default=None,
+        description="Organization whose HITL interventions the configured Slack app may resolve.",
+    )
+    SCIM_BEARER_TOKEN: SecretStr | None = Field(
+        default=None,
+        description="Bearer token required on /scim/v2 endpoints. Unset disables SCIM.",
+    )
+
+    # -------------------------------------------------------------------------
+    # Agent Passports, Agent Tokens & Gateway Integration
+    # -------------------------------------------------------------------------
+    AGENT_TOKEN_SIGNING_KEY: SecretStr | None = Field(
+        default=None,
+        description=(
+            "Ed25519 private key (PEM) that signs agent access tokens. Required outside "
+            "development/test; a random per-process key is used there when unset."
+        ),
+    )
+    AGENT_TOKEN_TTL_SECONDS: int = Field(default=600, ge=60, le=900)
+    AGENT_TOKEN_EXCHANGES_PER_MINUTE: int = Field(default=30, ge=1, le=600)
+    INTERNAL_SERVICE_TOKEN: SecretStr | None = Field(
+        default=None,
+        description=(
+            "Shared secret the gateway (AgentWall) presents on /internal endpoints. When "
+            "unset, those endpoints reject every call, so the gateway denies all traffic."
+        ),
+    )
+    ALLOW_INSECURE_MCP_URLS: bool = Field(
+        default=False,
+        description="Development only: allow http:// and localhost MCP server URLs.",
+    )
+
+    @model_validator(mode="after")
+    def _development_operator_secret(self) -> Settings:
+        if self.OPERATOR_JWT_SECRET is None and self.ENVIRONMENT in ("development", "test"):
+            self.OPERATOR_JWT_SECRET = SecretStr(secrets.token_urlsafe(32))
+        return self
+
+    @property
+    def uses_local_store(self) -> bool:
+        """True when no real Supabase project is configured."""
+        return "placeholder-project.supabase.co" in self.SUPABASE_URL
 
     @field_validator("SUPABASE_URL")
     @classmethod

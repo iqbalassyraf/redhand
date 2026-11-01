@@ -1,0 +1,3880 @@
+{
+  "components": {
+    "schemas": {
+      "AWSDownscopedTokenRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "actions": {
+            "description": "Fine-grained AWS actions (e.g. ['s3:GetObject']).",
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 20,
+            "minItems": 1,
+            "title": "Actions",
+            "type": "array"
+          },
+          "duration_seconds": {
+            "default": 900,
+            "maximum": 43200.0,
+            "minimum": 900.0,
+            "title": "Duration Seconds",
+            "type": "integer"
+          },
+          "external_agent_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "External Agent Id",
+            "type": "string"
+          },
+          "role_arn": {
+            "description": "Target AWS IAM Role ARN to assume.",
+            "pattern": "^arn:aws[a-zA-Z-]*:iam::\\d{12}:role\\/[\\w+=,.@\\/-]+$",
+            "title": "Role Arn",
+            "type": "string"
+          },
+          "span_id": {
+            "maxLength": 32,
+            "minLength": 8,
+            "title": "Span Id",
+            "type": "string"
+          },
+          "target_resource_arn": {
+            "description": "Target AWS Resource ARN (wildcard '*' by itself is strictly prohibited).",
+            "maxLength": 512,
+            "minLength": 10,
+            "title": "Target Resource Arn",
+            "type": "string"
+          },
+          "tool_name": {
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Tool Name",
+            "type": "string"
+          },
+          "trace_id": {
+            "maxLength": 64,
+            "minLength": 16,
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "trace_id",
+          "span_id",
+          "external_agent_id",
+          "tool_name",
+          "role_arn",
+          "target_resource_arn",
+          "actions"
+        ],
+        "title": "AWSDownscopedTokenRequest",
+        "type": "object"
+      },
+      "AWSDownscopedTokenResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "access_key_id": {
+            "title": "Access Key Id",
+            "type": "string"
+          },
+          "applied_session_policy": {
+            "additionalProperties": true,
+            "title": "Applied Session Policy",
+            "type": "object"
+          },
+          "expiration": {
+            "format": "date-time",
+            "title": "Expiration",
+            "type": "string"
+          },
+          "mint_latency_ms": {
+            "title": "Mint Latency Ms",
+            "type": "number"
+          },
+          "secret_access_key": {
+            "title": "Secret Access Key",
+            "type": "string"
+          },
+          "session_token": {
+            "title": "Session Token",
+            "type": "string"
+          },
+          "token_jti": {
+            "title": "Token Jti",
+            "type": "string"
+          }
+        },
+        "required": [
+          "access_key_id",
+          "secret_access_key",
+          "session_token",
+          "expiration",
+          "token_jti",
+          "applied_session_policy",
+          "mint_latency_ms"
+        ],
+        "title": "AWSDownscopedTokenResponse",
+        "type": "object"
+      },
+      "AccessBoundaryCondition": {
+        "additionalProperties": false,
+        "properties": {
+          "description": {
+            "anyOf": [
+              {
+                "maxLength": 256,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "expression": {
+            "description": "CEL expression evaluated by GCP IAM at request time.",
+            "maxLength": 1024,
+            "minLength": 3,
+            "title": "Expression",
+            "type": "string"
+          },
+          "title": {
+            "maxLength": 128,
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "title",
+          "expression"
+        ],
+        "title": "AccessBoundaryCondition",
+        "type": "object"
+      },
+      "AgentTokenResponse": {
+        "properties": {
+          "access_token": {
+            "title": "Access Token",
+            "type": "string"
+          },
+          "agent_id": {
+            "format": "uuid",
+            "title": "Agent Id",
+            "type": "string"
+          },
+          "expires_at": {
+            "format": "date-time",
+            "title": "Expires At",
+            "type": "string"
+          },
+          "expires_in": {
+            "title": "Expires In",
+            "type": "integer"
+          },
+          "organization_id": {
+            "format": "uuid",
+            "title": "Organization Id",
+            "type": "string"
+          },
+          "passport_version": {
+            "title": "Passport Version",
+            "type": "integer"
+          },
+          "token_type": {
+            "default": "bearer",
+            "title": "Token Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "access_token",
+          "expires_in",
+          "expires_at",
+          "agent_id",
+          "organization_id",
+          "passport_version"
+        ],
+        "title": "AgentTokenResponse",
+        "type": "object"
+      },
+      "ConfirmedControlActionRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "confirm": {
+            "default": false,
+            "description": "Must be true. Guards against accidental unfreeze/revoke.",
+            "title": "Confirm",
+            "type": "boolean"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          }
+        },
+        "title": "ConfirmedControlActionRequest",
+        "type": "object"
+      },
+      "ControlActionRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "reason": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          }
+        },
+        "title": "ControlActionRequest",
+        "type": "object"
+      },
+      "ControlActionResponse": {
+        "properties": {
+          "changed": {
+            "title": "Changed",
+            "type": "boolean"
+          },
+          "passport": {
+            "$ref": "#/components/schemas/PassportView"
+          }
+        },
+        "required": [
+          "passport",
+          "changed"
+        ],
+        "title": "ControlActionResponse",
+        "type": "object"
+      },
+      "ControlAuditEntry": {
+        "properties": {
+          "action": {
+            "title": "Action",
+            "type": "string"
+          },
+          "actor_user_id": {
+            "format": "uuid",
+            "title": "Actor User Id",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "details": {
+            "additionalProperties": true,
+            "title": "Details",
+            "type": "object"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "organization_id": {
+            "format": "uuid",
+            "title": "Organization Id",
+            "type": "string"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "target_id": {
+            "format": "uuid",
+            "title": "Target Id",
+            "type": "string"
+          },
+          "target_type": {
+            "title": "Target Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "organization_id",
+          "actor_user_id",
+          "action",
+          "target_type",
+          "target_id",
+          "reason",
+          "details",
+          "created_at"
+        ],
+        "title": "ControlAuditEntry",
+        "type": "object"
+      },
+      "DownscopedTokenRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "condition": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AccessBoundaryCondition"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "external_agent_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "External Agent Id",
+            "type": "string"
+          },
+          "permissions": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 20,
+            "minItems": 1,
+            "title": "Permissions",
+            "type": "array"
+          },
+          "span_id": {
+            "maxLength": 32,
+            "minLength": 8,
+            "title": "Span Id",
+            "type": "string"
+          },
+          "target_resource": {
+            "description": "Full GCP resource name in IAM format (e.g., '//storage.googleapis.com/projects/_/buckets/my-bucket').",
+            "maxLength": 512,
+            "minLength": 10,
+            "title": "Target Resource",
+            "type": "string"
+          },
+          "tool_name": {
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Tool Name",
+            "type": "string"
+          },
+          "trace_id": {
+            "maxLength": 64,
+            "minLength": 16,
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "trace_id",
+          "span_id",
+          "external_agent_id",
+          "tool_name",
+          "target_resource",
+          "permissions"
+        ],
+        "title": "DownscopedTokenRequest",
+        "type": "object"
+      },
+      "DownscopedTokenResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "access_token": {
+            "description": "Short-lived downscoped GCP OAuth2 bearer token.",
+            "title": "Access Token",
+            "type": "string"
+          },
+          "applied_access_boundary": {
+            "additionalProperties": true,
+            "title": "Applied Access Boundary",
+            "type": "object"
+          },
+          "expires_at": {
+            "format": "date-time",
+            "title": "Expires At",
+            "type": "string"
+          },
+          "issued_token_type": {
+            "default": "urn:ietf:params:oauth:token-type:access_token",
+            "title": "Issued Token Type",
+            "type": "string"
+          },
+          "mint_latency_ms": {
+            "title": "Mint Latency Ms",
+            "type": "number"
+          },
+          "token_jti": {
+            "description": "SHA-256 fingerprint of the token for non-repudiation & audit trail correlation.",
+            "title": "Token Jti",
+            "type": "string"
+          },
+          "token_type": {
+            "default": "Bearer",
+            "title": "Token Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "access_token",
+          "token_jti",
+          "expires_at",
+          "applied_access_boundary",
+          "mint_latency_ms"
+        ],
+        "title": "DownscopedTokenResponse",
+        "type": "object"
+      },
+      "FirewallVerdict": {
+        "enum": [
+          "allow",
+          "redacted",
+          "flagged",
+          "blocked",
+          "hitl_paused"
+        ],
+        "title": "FirewallVerdict",
+        "type": "string"
+      },
+      "FreezeAllRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "confirm": {
+            "default": false,
+            "title": "Confirm",
+            "type": "boolean"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          }
+        },
+        "title": "FreezeAllRequest",
+        "type": "object"
+      },
+      "FreezeAllResponse": {
+        "properties": {
+          "frozen_agent_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "title": "Frozen Agent Ids",
+            "type": "array"
+          },
+          "frozen_count": {
+            "title": "Frozen Count",
+            "type": "integer"
+          },
+          "organization_id": {
+            "format": "uuid",
+            "title": "Organization Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "organization_id",
+          "frozen_count",
+          "frozen_agent_ids"
+        ],
+        "title": "FreezeAllResponse",
+        "type": "object"
+      },
+      "HITLCheckpointPayload": {
+        "additionalProperties": false,
+        "properties": {
+          "agent_justification": {
+            "anyOf": [
+              {
+                "maxLength": 4096,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The agent's preceding Thought explaining why it needs to run this tool.",
+            "title": "Agent Justification"
+          },
+          "notification_webhook_url": {
+            "anyOf": [
+              {
+                "format": "uri",
+                "maxLength": 2083,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Optional Slack/PagerDuty webhook override for this specific intervention.",
+            "title": "Notification Webhook Url"
+          },
+          "proposed_tool_arguments": {
+            "additionalProperties": true,
+            "title": "Proposed Tool Arguments",
+            "type": "object"
+          },
+          "proposed_tool_name": {
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Proposed Tool Name",
+            "type": "string"
+          },
+          "requested_iam_permissions": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Requested Iam Permissions",
+            "type": "array"
+          },
+          "resume_webhook_url": {
+            "description": "Callback endpoint to wake up the agent worker upon human approval.",
+            "format": "uri",
+            "maxLength": 2083,
+            "minLength": 1,
+            "title": "Resume Webhook Url",
+            "type": "string"
+          },
+          "serialized_agent_state": {
+            "additionalProperties": true,
+            "description": "Checkpointer dictionary (e.g., LangGraph state) required to rehydrate the run.",
+            "title": "Serialized Agent State",
+            "type": "object"
+          },
+          "state_checksum": {
+            "description": "Hex-encoded SHA-256 hash of the canonical JSON serialized_agent_state.",
+            "maxLength": 64,
+            "minLength": 64,
+            "title": "State Checksum",
+            "type": "string"
+          },
+          "target_cloud_resource": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Full resource URI (e.g., '//storage.googleapis.com/projects/_/buckets/prod').",
+            "title": "Target Cloud Resource"
+          },
+          "ttl_seconds": {
+            "default": 3600,
+            "description": "Seconds before the paused intervention automatically expires.",
+            "maximum": 604800.0,
+            "minimum": 60.0,
+            "title": "Ttl Seconds",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "proposed_tool_name",
+          "serialized_agent_state",
+          "state_checksum",
+          "resume_webhook_url"
+        ],
+        "title": "HITLCheckpointPayload",
+        "type": "object"
+      },
+      "HITLCheckpointReceipt": {
+        "properties": {
+          "expires_at": {
+            "format": "date-time",
+            "title": "Expires At",
+            "type": "string"
+          },
+          "intervention_id": {
+            "format": "uuid",
+            "title": "Intervention Id",
+            "type": "string"
+          },
+          "span_id": {
+            "title": "Span Id",
+            "type": "string"
+          },
+          "status": {
+            "default": "pending",
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "span_id",
+          "intervention_id",
+          "expires_at"
+        ],
+        "title": "HITLCheckpointReceipt",
+        "type": "object"
+      },
+      "HITLResolutionAction": {
+        "enum": [
+          "approve",
+          "deny"
+        ],
+        "title": "HITLResolutionAction",
+        "type": "string"
+      },
+      "HITLResolveRequest": {
+        "additionalProperties": false,
+        "description": "Payload sent by a human security operator from `redhand-ui` (or Slack webhook)\nto approve or deny a paused agent tool invocation.",
+        "properties": {
+          "action": {
+            "$ref": "#/components/schemas/HITLResolutionAction",
+            "description": "Operator decision: 'approve' to resume execution or 'deny' to abort."
+          },
+          "modified_tool_arguments": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Optional sanitized/modified tool arguments injected by the human reviewer prior to resuming execution.",
+            "title": "Modified Tool Arguments"
+          },
+          "reviewer_comment": {
+            "anyOf": [
+              {
+                "maxLength": 2048,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Optional audit rationale for approving or denying the action.",
+            "title": "Reviewer Comment"
+          }
+        },
+        "required": [
+          "action"
+        ],
+        "title": "HITLResolveRequest",
+        "type": "object"
+      },
+      "HITLResolveResponse": {
+        "additionalProperties": false,
+        "description": "Receipt returned after resolving a pending HITL circuit-breaker intervention.",
+        "properties": {
+          "agent_id": {
+            "format": "uuid",
+            "title": "Agent Id",
+            "type": "string"
+          },
+          "current_signatures": {
+            "default": 1,
+            "title": "Current Signatures",
+            "type": "integer"
+          },
+          "effective_tool_arguments": {
+            "additionalProperties": true,
+            "title": "Effective Tool Arguments",
+            "type": "object"
+          },
+          "intervention_id": {
+            "format": "uuid",
+            "title": "Intervention Id",
+            "type": "string"
+          },
+          "required_approvals": {
+            "default": 1,
+            "title": "Required Approvals",
+            "type": "integer"
+          },
+          "resolved_at": {
+            "format": "date-time",
+            "title": "Resolved At",
+            "type": "string"
+          },
+          "resume_webhook_dispatched": {
+            "default": false,
+            "title": "Resume Webhook Dispatched",
+            "type": "boolean"
+          },
+          "span_id": {
+            "title": "Span Id",
+            "type": "string"
+          },
+          "state_integrity_verified": {
+            "default": true,
+            "title": "State Integrity Verified",
+            "type": "boolean"
+          },
+          "status": {
+            "examples": [
+              "approved",
+              "denied",
+              "partially_approved"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "trace_id": {
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "intervention_id",
+          "trace_id",
+          "span_id",
+          "agent_id",
+          "status",
+          "resolved_at",
+          "effective_tool_arguments"
+        ],
+        "title": "HITLResolveResponse",
+        "type": "object"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "title": "Detail",
+            "type": "array"
+          }
+        },
+        "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "KeyRotationResponse": {
+        "properties": {
+          "agent_key": {
+            "description": "Shown once. The previous key stops working immediately.",
+            "title": "Agent Key",
+            "type": "string"
+          },
+          "passport": {
+            "$ref": "#/components/schemas/PassportView"
+          }
+        },
+        "required": [
+          "passport",
+          "agent_key"
+        ],
+        "title": "KeyRotationResponse",
+        "type": "object"
+      },
+      "McpServerCreateRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "slug": {
+            "pattern": "^[a-z0-9][a-z0-9-]{0,62}$",
+            "title": "Slug",
+            "type": "string"
+          },
+          "url": {
+            "maxLength": 2048,
+            "minLength": 1,
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "slug",
+          "name",
+          "url"
+        ],
+        "title": "McpServerCreateRequest",
+        "type": "object"
+      },
+      "McpServerView": {
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "is_active": {
+            "title": "Is Active",
+            "type": "boolean"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "organization_id": {
+            "format": "uuid",
+            "title": "Organization Id",
+            "type": "string"
+          },
+          "slug": {
+            "title": "Slug",
+            "type": "string"
+          },
+          "url": {
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "organization_id",
+          "slug",
+          "name",
+          "url",
+          "is_active"
+        ],
+        "title": "McpServerView",
+        "type": "object"
+      },
+      "PassportCreateRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "backup_owner_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Backup Owner Id"
+          },
+          "environment": {
+            "default": "production",
+            "enum": [
+              "development",
+              "staging",
+              "production"
+            ],
+            "title": "Environment",
+            "type": "string"
+          },
+          "expires_in_days": {
+            "default": 90,
+            "maximum": 365.0,
+            "minimum": 1.0,
+            "title": "Expires In Days",
+            "type": "integer"
+          },
+          "external_agent_id": {
+            "anyOf": [
+              {
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "External Agent Id"
+          },
+          "framework": {
+            "default": "custom",
+            "maxLength": 40,
+            "minLength": 1,
+            "title": "Framework",
+            "type": "string"
+          },
+          "name": {
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "owner_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Owner Id"
+          },
+          "scopes": {
+            "items": {
+              "$ref": "#/components/schemas/Scope"
+            },
+            "maxItems": 200,
+            "title": "Scopes",
+            "type": "array"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "PassportCreateRequest",
+        "type": "object"
+      },
+      "PassportCreateResponse": {
+        "properties": {
+          "agent_key": {
+            "description": "Shown once. Store it in the agent's secret store.",
+            "title": "Agent Key",
+            "type": "string"
+          },
+          "passport": {
+            "$ref": "#/components/schemas/PassportView"
+          }
+        },
+        "required": [
+          "passport",
+          "agent_key"
+        ],
+        "title": "PassportCreateResponse",
+        "type": "object"
+      },
+      "PassportView": {
+        "properties": {
+          "backup_owner_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Backup Owner Id"
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "environment": {
+            "title": "Environment",
+            "type": "string"
+          },
+          "expires_at": {
+            "format": "date-time",
+            "title": "Expires At",
+            "type": "string"
+          },
+          "external_agent_id": {
+            "title": "External Agent Id",
+            "type": "string"
+          },
+          "framework": {
+            "title": "Framework",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "last_seen_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Seen At"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "organization_id": {
+            "format": "uuid",
+            "title": "Organization Id",
+            "type": "string"
+          },
+          "owner_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Owner Id"
+          },
+          "scopes": {
+            "items": {
+              "$ref": "#/components/schemas/Scope"
+            },
+            "title": "Scopes",
+            "type": "array"
+          },
+          "status": {
+            "enum": [
+              "active",
+              "frozen",
+              "revoked",
+              "expired"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "status_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status Reason"
+          },
+          "stored_status": {
+            "title": "Stored Status",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "organization_id",
+          "name",
+          "external_agent_id",
+          "framework",
+          "environment",
+          "owner_id",
+          "backup_owner_id",
+          "scopes",
+          "status",
+          "stored_status",
+          "status_reason",
+          "expires_at",
+          "version",
+          "created_at",
+          "last_seen_at"
+        ],
+        "title": "PassportView",
+        "type": "object"
+      },
+      "RenewRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "expires_in_days": {
+            "default": 90,
+            "maximum": 365.0,
+            "minimum": 1.0,
+            "title": "Expires In Days",
+            "type": "integer"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          }
+        },
+        "title": "RenewRequest",
+        "type": "object"
+      },
+      "RiskTier": {
+        "enum": [
+          "read_only",
+          "state_mutation",
+          "destructive",
+          "critical"
+        ],
+        "title": "RiskTier",
+        "type": "string"
+      },
+      "SCIMEmail": {
+        "properties": {
+          "primary": {
+            "default": true,
+            "title": "Primary",
+            "type": "boolean"
+          },
+          "type": {
+            "default": "work",
+            "title": "Type",
+            "type": "string"
+          },
+          "value": {
+            "title": "Value",
+            "type": "string"
+          }
+        },
+        "required": [
+          "value"
+        ],
+        "title": "SCIMEmail",
+        "type": "object"
+      },
+      "SCIMName": {
+        "properties": {
+          "familyName": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Familyname"
+          },
+          "formatted": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Formatted"
+          },
+          "givenName": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Givenname"
+          }
+        },
+        "title": "SCIMName",
+        "type": "object"
+      },
+      "SCIMUserCreateRequest": {
+        "properties": {
+          "active": {
+            "default": true,
+            "title": "Active",
+            "type": "boolean"
+          },
+          "displayName": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Displayname"
+          },
+          "emails": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/SCIMEmail"
+            },
+            "title": "Emails",
+            "type": "array"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SCIMName"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "schemas": {
+            "default": [
+              "urn:ietf:params:scim:schemas:core:2.0:User"
+            ],
+            "items": {
+              "type": "string"
+            },
+            "title": "Schemas",
+            "type": "array"
+          },
+          "userName": {
+            "title": "Username",
+            "type": "string"
+          }
+        },
+        "required": [
+          "userName"
+        ],
+        "title": "SCIMUserCreateRequest",
+        "type": "object"
+      },
+      "Scope": {
+        "additionalProperties": false,
+        "description": "One allowlisted permission. `tool=\"*\"` allows every tool on the server.\n`access` is recorded and displayed but NOT enforced in Phase 1: MCP servers'\nown read/write hints are self-declared and untrusted. Enforcement arrives with\nSafe Mode (Phase 2) together with a trusted tool classification.",
+        "properties": {
+          "access": {
+            "default": "read",
+            "enum": [
+              "read",
+              "write"
+            ],
+            "title": "Access",
+            "type": "string"
+          },
+          "server": {
+            "pattern": "^[a-z0-9][a-z0-9-]{0,62}$",
+            "title": "Server",
+            "type": "string"
+          },
+          "tool": {
+            "pattern": "^(\\*|[A-Za-z0-9_.:/-]{1,128})$",
+            "title": "Tool",
+            "type": "string"
+          }
+        },
+        "required": [
+          "server",
+          "tool"
+        ],
+        "title": "Scope",
+        "type": "object"
+      },
+      "ScopesUpdateRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "confirm": {
+            "default": false,
+            "description": "Required when the change grants new access.",
+            "title": "Confirm",
+            "type": "boolean"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "scopes": {
+            "items": {
+              "$ref": "#/components/schemas/Scope"
+            },
+            "maxItems": 200,
+            "title": "Scopes",
+            "type": "array"
+          }
+        },
+        "required": [
+          "scopes"
+        ],
+        "title": "ScopesUpdateRequest",
+        "type": "object"
+      },
+      "SecurityEventType": {
+        "enum": [
+          "prompt_injection_direct",
+          "prompt_injection_indirect",
+          "iam_scope_violation",
+          "unregistered_tool_invocation",
+          "dlp_secret_leak_prevented",
+          "anomalous_token_velocity",
+          "hitl_circuit_tripped"
+        ],
+        "title": "SecurityEventType",
+        "type": "string"
+      },
+      "SecurityFindingPayload": {
+        "additionalProperties": false,
+        "properties": {
+          "confidence_score": {
+            "description": "Classifier probability or heuristic confidence score [0.0 - 1.0].",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Confidence Score",
+            "type": "number"
+          },
+          "detector_tier": {
+            "description": "Identifier of the defense layer (e.g., 'tier0_ast', 'tier1_onnx_deberta').",
+            "maxLength": 64,
+            "minLength": 2,
+            "title": "Detector Tier",
+            "type": "string"
+          },
+          "event_type": {
+            "$ref": "#/components/schemas/SecurityEventType"
+          },
+          "firewall_latency_ms": {
+            "description": "Execution time of the local security evaluation in milliseconds.",
+            "minimum": 0.0,
+            "title": "Firewall Latency Ms",
+            "type": "number"
+          },
+          "matched_rule_id": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Policy rule ID or signature identifier.",
+            "title": "Matched Rule Id"
+          },
+          "mitigation_action": {
+            "description": "Human-readable description of the enforcement action taken.",
+            "maxLength": 512,
+            "title": "Mitigation Action",
+            "type": "string"
+          },
+          "severity": {
+            "$ref": "#/components/schemas/SeverityLevel"
+          },
+          "trigger_snippet": {
+            "anyOf": [
+              {
+                "maxLength": 2048,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Sanitized snippet of the input/output that triggered the finding.",
+            "title": "Trigger Snippet"
+          },
+          "verdict": {
+            "$ref": "#/components/schemas/FirewallVerdict"
+          }
+        },
+        "required": [
+          "event_type",
+          "severity",
+          "verdict",
+          "detector_tier",
+          "confidence_score",
+          "firewall_latency_ms",
+          "mitigation_action"
+        ],
+        "title": "SecurityFindingPayload",
+        "type": "object"
+      },
+      "SeverityLevel": {
+        "enum": [
+          "low",
+          "medium",
+          "high",
+          "critical"
+        ],
+        "title": "SeverityLevel",
+        "type": "string"
+      },
+      "StepType": {
+        "enum": [
+          "observation",
+          "thought",
+          "action",
+          "tool_result",
+          "system_halt"
+        ],
+        "title": "StepType",
+        "type": "string"
+      },
+      "StreamTicketResponse": {
+        "properties": {
+          "expires_in_seconds": {
+            "title": "Expires In Seconds",
+            "type": "integer"
+          },
+          "ticket": {
+            "title": "Ticket",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ticket",
+          "expires_in_seconds"
+        ],
+        "title": "StreamTicketResponse",
+        "type": "object"
+      },
+      "TelemetryBatchIngestRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "agent_name": {
+            "default": "Unnamed Agent",
+            "maxLength": 256,
+            "title": "Agent Name",
+            "type": "string"
+          },
+          "environment": {
+            "default": "development",
+            "pattern": "^(development|staging|production)$",
+            "title": "Environment",
+            "type": "string"
+          },
+          "external_agent_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "External Agent Id",
+            "type": "string"
+          },
+          "framework": {
+            "default": "custom",
+            "maxLength": 64,
+            "title": "Framework",
+            "type": "string"
+          },
+          "sdk_version": {
+            "examples": [
+              "0.1.0"
+            ],
+            "title": "Sdk Version",
+            "type": "string"
+          },
+          "spans": {
+            "items": {
+              "$ref": "#/components/schemas/TraceSpanItem"
+            },
+            "maxItems": 250,
+            "minItems": 1,
+            "title": "Spans",
+            "type": "array"
+          }
+        },
+        "required": [
+          "sdk_version",
+          "external_agent_id",
+          "spans"
+        ],
+        "title": "TelemetryBatchIngestRequest",
+        "type": "object"
+      },
+      "TelemetryIngestResponse": {
+        "properties": {
+          "agent_id": {
+            "format": "uuid",
+            "title": "Agent Id",
+            "type": "string"
+          },
+          "hitl_checkpoints": {
+            "items": {
+              "$ref": "#/components/schemas/HITLCheckpointReceipt"
+            },
+            "title": "Hitl Checkpoints",
+            "type": "array"
+          },
+          "ingested_spans_count": {
+            "title": "Ingested Spans Count",
+            "type": "integer"
+          },
+          "organization_id": {
+            "format": "uuid",
+            "title": "Organization Id",
+            "type": "string"
+          },
+          "recorded_security_events_count": {
+            "title": "Recorded Security Events Count",
+            "type": "integer"
+          },
+          "server_timestamp": {
+            "format": "date-time",
+            "title": "Server Timestamp",
+            "type": "string"
+          },
+          "status": {
+            "default": "accepted",
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "organization_id",
+          "agent_id",
+          "ingested_spans_count",
+          "recorded_security_events_count"
+        ],
+        "title": "TelemetryIngestResponse",
+        "type": "object"
+      },
+      "TraceSpanItem": {
+        "additionalProperties": false,
+        "properties": {
+          "completion_tokens": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Completion Tokens",
+            "type": "integer"
+          },
+          "ephemeral_token_jti": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ephemeral Token Jti"
+          },
+          "execution_latency_ms": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Execution Latency Ms"
+          },
+          "firewall_latency_ms": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Firewall Latency Ms"
+          },
+          "firewall_verdict": {
+            "$ref": "#/components/schemas/FirewallVerdict",
+            "default": "allow"
+          },
+          "hitl_checkpoint": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/HITLCheckpointPayload"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "model_name": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Name"
+          },
+          "model_provider": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Provider"
+          },
+          "observation_payload": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Observation Payload"
+          },
+          "occurred_at": {
+            "format": "date-time",
+            "title": "Occurred At",
+            "type": "string"
+          },
+          "parent_span_id": {
+            "anyOf": [
+              {
+                "maxLength": 32,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Span Id"
+          },
+          "prompt_tokens": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Prompt Tokens",
+            "type": "integer"
+          },
+          "security_finding": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SecurityFindingPayload"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "session_id": {
+            "description": "Logical conversation or workflow run UUID.",
+            "format": "uuid",
+            "title": "Session Id",
+            "type": "string"
+          },
+          "span_id": {
+            "maxLength": 32,
+            "minLength": 8,
+            "title": "Span Id",
+            "type": "string"
+          },
+          "step_sequence": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Step Sequence",
+            "type": "integer"
+          },
+          "step_type": {
+            "$ref": "#/components/schemas/StepType"
+          },
+          "thought_content": {
+            "anyOf": [
+              {
+                "maxLength": 32768,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Thought Content"
+          },
+          "tool_arguments": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tool Arguments"
+          },
+          "tool_name": {
+            "anyOf": [
+              {
+                "maxLength": 256,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tool Name"
+          },
+          "tool_risk_tier": {
+            "$ref": "#/components/schemas/RiskTier",
+            "default": "read_only"
+          },
+          "trace_id": {
+            "maxLength": 64,
+            "minLength": 16,
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "session_id",
+          "trace_id",
+          "span_id",
+          "step_type"
+        ],
+        "title": "TraceSpanItem",
+        "type": "object"
+      },
+      "ValidationError": {
+        "properties": {
+          "ctx": {
+            "title": "Context",
+            "type": "object"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "title": "Location",
+            "type": "array"
+          },
+          "msg": {
+            "title": "Message",
+            "type": "string"
+          },
+          "type": {
+            "title": "Error Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError",
+        "type": "object"
+      }
+    }
+  },
+  "info": {
+    "description": "Agentic Security Posture Management (ASPM) & Runtime Protection Engine",
+    "title": "RedHand Core Control Plane",
+    "version": "0.1.0"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/healthz": {
+      "get": {
+        "operationId": "healthcheck_healthz_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Healthcheck Healthz Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Healthcheck",
+        "tags": [
+          "System"
+        ]
+      }
+    },
+    "/metrics": {
+      "get": {
+        "operationId": "get_prometheus_metrics_metrics_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Get Prometheus Metrics",
+        "tags": [
+          "Observability"
+        ]
+      }
+    },
+    "/scim/v2/Groups": {
+      "get": {
+        "operationId": "list_scim_groups_scim_v2_Groups_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response List Scim Groups Scim V2 Groups Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Query Enterprise RBAC Groups (RFC 7644)",
+        "tags": [
+          "Enterprise SCIM 2.0 Directory Sync (RFC 7643/7644)"
+        ]
+      }
+    },
+    "/scim/v2/ServiceProviderConfig": {
+      "get": {
+        "operationId": "get_service_provider_config_scim_v2_ServiceProviderConfig_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Get Service Provider Config Scim V2 Serviceproviderconfig Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "SCIM 2.0 Service Provider Configuration",
+        "tags": [
+          "Enterprise SCIM 2.0 Directory Sync (RFC 7643/7644)"
+        ]
+      }
+    },
+    "/scim/v2/Users": {
+      "get": {
+        "operationId": "list_scim_users_scim_v2_Users_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "startIndex",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Startindex",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "count",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Count",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "filter",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Filter"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response List Scim Users Scim V2 Users Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Query Provisioned Users (RFC 7644)",
+        "tags": [
+          "Enterprise SCIM 2.0 Directory Sync (RFC 7643/7644)"
+        ]
+      },
+      "post": {
+        "operationId": "create_scim_user_scim_v2_Users_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SCIMUserCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Create Scim User Scim V2 Users Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Provision a New Enterprise User via SCIM 2.0",
+        "tags": [
+          "Enterprise SCIM 2.0 Directory Sync (RFC 7643/7644)"
+        ]
+      }
+    },
+    "/scim/v2/Users/{user_id}": {
+      "delete": {
+        "operationId": "delete_scim_user_scim_v2_Users__user_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "user_id",
+            "required": true,
+            "schema": {
+              "title": "User Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Deprovision User",
+        "tags": [
+          "Enterprise SCIM 2.0 Directory Sync (RFC 7643/7644)"
+        ]
+      },
+      "get": {
+        "operationId": "get_scim_user_scim_v2_Users__user_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "user_id",
+            "required": true,
+            "schema": {
+              "title": "User Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Get Scim User Scim V2 Users  User Id  Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Provisioned User by ID",
+        "tags": [
+          "Enterprise SCIM 2.0 Directory Sync (RFC 7643/7644)"
+        ]
+      }
+    },
+    "/v1/agent-auth/jwks": {
+      "get": {
+        "operationId": "agent_token_jwks_v1_agent_auth_jwks_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "items": {
+                      "additionalProperties": {
+                        "type": "string"
+                      },
+                      "type": "object"
+                    },
+                    "type": "array"
+                  },
+                  "title": "Response Agent Token Jwks V1 Agent Auth Jwks Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Agent Token Jwks",
+        "tags": [
+          "Agent Authentication"
+        ]
+      }
+    },
+    "/v1/agent-auth/token": {
+      "post": {
+        "operationId": "exchange_agent_key_v1_agent_auth_token_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentTokenResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Exchange Agent Key",
+        "tags": [
+          "Agent Authentication"
+        ]
+      }
+    },
+    "/v1/audit/control": {
+      "get": {
+        "operationId": "list_control_audit_v1_audit_control_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-RedHand-Org",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Redhand-Org"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ControlAuditEntry"
+                  },
+                  "title": "Response List Control Audit V1 Audit Control Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Control Audit",
+        "tags": [
+          "Agent Passports & Control Actions"
+        ]
+      }
+    },
+    "/v1/hitl/slack/interactivity": {
+      "post": {
+        "description": "Receives interactive payload from Slack when an operator clicks\n[Approve & Resume] or [Deny Execution] buttons in a Slack channel.",
+        "operationId": "handle_slack_interactivity_v1_hitl_slack_interactivity_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Handle Slack Interactivity V1 Hitl Slack Interactivity Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Handle Slack Block Kit Interactivity Webhook",
+        "tags": [
+          "Human-in-the-Loop (HITL) Circuit Breaker"
+        ]
+      }
+    },
+    "/v1/hitl/{intervention_id}/resolve": {
+      "post": {
+        "description": "The reviewer is always the authenticated operator; the body cannot name one.",
+        "operationId": "resolve_hitl_intervention_v1_hitl__intervention_id__resolve_post",
+        "parameters": [
+          {
+            "description": "UUID of the pending HITL intervention.",
+            "in": "path",
+            "name": "intervention_id",
+            "required": true,
+            "schema": {
+              "description": "UUID of the pending HITL intervention.",
+              "format": "uuid",
+              "title": "Intervention Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-RedHand-Org",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Redhand-Org"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HITLResolveRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HITLResolveResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Approve or Deny a Paused HITL Circuit-Breaker Intervention",
+        "tags": [
+          "Human-in-the-Loop (HITL) Circuit Breaker"
+        ]
+      }
+    },
+    "/v1/iam/mint": {
+      "post": {
+        "operationId": "mint_ephemeral_token_gcp_v1_iam_mint_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-RedHand-API-Key",
+            "required": true,
+            "schema": {
+              "title": "X-Redhand-Api-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DownscopedTokenRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DownscopedTokenResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Mint a Single-Use Downscoped GCP OAuth2 Token via STS Credential Access Boundary",
+        "tags": [
+          "Ephemeral IAM (Multi-Cloud STS Broker)"
+        ]
+      }
+    },
+    "/v1/iam/mint/aws": {
+      "post": {
+        "operationId": "mint_ephemeral_token_aws_v1_iam_mint_aws_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-RedHand-API-Key",
+            "required": true,
+            "schema": {
+              "title": "X-Redhand-Api-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AWSDownscopedTokenRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AWSDownscopedTokenResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Mint Single-Use Downscoped AWS Credentials via STS AssumeRole & Session Policy",
+        "tags": [
+          "Ephemeral IAM (Multi-Cloud STS Broker)"
+        ]
+      }
+    },
+    "/v1/iam/mint/gcp": {
+      "post": {
+        "operationId": "mint_ephemeral_token_gcp_v1_iam_mint_gcp_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-RedHand-API-Key",
+            "required": true,
+            "schema": {
+              "title": "X-Redhand-Api-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DownscopedTokenRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DownscopedTokenResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Mint a Single-Use Downscoped GCP OAuth2 Token via STS Credential Access Boundary",
+        "tags": [
+          "Ephemeral IAM (Multi-Cloud STS Broker)"
+        ]
+      }
+    },
+    "/v1/mcp-servers": {
+      "get": {
+        "operationId": "list_mcp_servers_v1_mcp_servers_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-RedHand-Org",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Redhand-Org"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/McpServerView"
+                  },
+                  "title": "Response List Mcp Servers V1 Mcp Servers Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Mcp Servers",
+        "tags": [
+          "Agent Passports & Control Actions"
+        ]
+      },
+      "post": {
+        "operationId": "register_mcp_server_v1_mcp_servers_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-RedHand-Org",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Redhand-Org"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/McpServerCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/McpServerView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Register Mcp Server",
+        "tags": [
+          "Agent Passports & Control Actions"
+        ]
+      }
+    },
+    "/v1/mcp-servers/{server_id}/deactivate": {
+      "post": {
+        "operationId": "deactivate_mcp_server_v1_mcp_servers__server_id__deactivate_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "server_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Server Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-RedHand-Org",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Redhand-Org"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/McpServerView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Deactivate Mcp Server",
+        "tags": [
+          "Agent Passports & Control Actions"
+        ]
+      }
+    },
+    "/v1/passports": {
+      "get": {
+        "operationId": "list_passports_v1_passports_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-RedHand-Org",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Redhand-Org"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/PassportView"
+                  },
+                  "title": "Response List Passports V1 Passports Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Passports",
+        "tags": [
+          "Agent Passports & Control Actions"
+        ]
+      },
+      "post": {
+        "operationId": "register_agent_v1_passports_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-RedHand-Org",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Redhand-Org"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PassportCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PassportCreateResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Register Agent",
+        "tags": [
+          "Agent Passports & Control Actions"
+        ]
+      }
+    },
+    "/v1/passports/freeze-all": {
+      "post": {
+        "description": "Kill switch: freezes every active agent in the organization in one statement.",
+        "operationId": "freeze_all_agents_v1_passports_freeze_all_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-RedHand-Org",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Redhand-Org"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FreezeAllRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FreezeAllResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Freeze All Agents",
+        "tags": [
+          "Agent Passports & Control Actions"
+        ]
+      }
+    },
+    "/v1/passports/{agent_id}": {
+      "get": {
+        "operationId": "get_passport_v1_passports__agent_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "agent_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Agent Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-RedHand-Org",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Redhand-Org"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PassportView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Passport",
+        "tags": [
+          "Agent Passports & Control Actions"
+        ]
+      }
+    },
+    "/v1/passports/{agent_id}/freeze": {
+      "post": {
+        "operationId": "freeze_agent_v1_passports__agent_id__freeze_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "agent_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Agent Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-RedHand-Org",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Redhand-Org"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ControlActionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ControlActionResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Freeze Agent",
+        "tags": [
+          "Agent Passports & Control Actions"
+        ]
+      }
+    },
+    "/v1/passports/{agent_id}/renew": {
+      "post": {
+        "operationId": "renew_agent_v1_passports__agent_id__renew_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "agent_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Agent Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-RedHand-Org",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Redhand-Org"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RenewRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PassportView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Renew Agent",
+        "tags": [
+          "Agent Passports & Control Actions"
+        ]
+      }
+    },
+    "/v1/passports/{agent_id}/revoke": {
+      "post": {
+        "operationId": "revoke_agent_v1_passports__agent_id__revoke_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "agent_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Agent Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-RedHand-Org",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Redhand-Org"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConfirmedControlActionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ControlActionResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Revoke Agent",
+        "tags": [
+          "Agent Passports & Control Actions"
+        ]
+      }
+    },
+    "/v1/passports/{agent_id}/rotate-key": {
+      "post": {
+        "operationId": "rotate_agent_key_v1_passports__agent_id__rotate_key_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "agent_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Agent Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-RedHand-Org",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Redhand-Org"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ControlActionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/KeyRotationResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Rotate Agent Key",
+        "tags": [
+          "Agent Passports & Control Actions"
+        ]
+      }
+    },
+    "/v1/passports/{agent_id}/scopes": {
+      "put": {
+        "operationId": "update_agent_scopes_v1_passports__agent_id__scopes_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "agent_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Agent Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-RedHand-Org",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Redhand-Org"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ScopesUpdateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ControlActionResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Agent Scopes",
+        "tags": [
+          "Agent Passports & Control Actions"
+        ]
+      }
+    },
+    "/v1/passports/{agent_id}/unfreeze": {
+      "post": {
+        "operationId": "unfreeze_agent_v1_passports__agent_id__unfreeze_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "agent_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Agent Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-RedHand-Org",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Redhand-Org"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConfirmedControlActionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ControlActionResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Unfreeze Agent",
+        "tags": [
+          "Agent Passports & Control Actions"
+        ]
+      }
+    },
+    "/v1/state/snapshot": {
+      "get": {
+        "operationId": "get_state_snapshot_v1_state_snapshot_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-RedHand-Org",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Redhand-Org"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Get State Snapshot V1 State Snapshot Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Fetch Live Topology State Snapshot (Agents, Traces, Security Events, HITL Queue)",
+        "tags": [
+          "Real-Time State & Posture Control"
+        ]
+      }
+    },
+    "/v1/state/stream": {
+      "get": {
+        "operationId": "stream_realtime_events_v1_state_stream_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "ticket",
+            "required": true,
+            "schema": {
+              "title": "Ticket",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Server-Sent Events (SSE) Real-Time Telemetry & HITL Stream",
+        "tags": [
+          "Real-Time State & Posture Control"
+        ]
+      }
+    },
+    "/v1/state/stream-ticket": {
+      "post": {
+        "operationId": "issue_stream_ticket_v1_state_stream_ticket_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-RedHand-Org",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Redhand-Org"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StreamTicketResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Issue SSE ticket",
+        "tags": [
+          "Real-Time State & Posture Control"
+        ]
+      }
+    },
+    "/v1/telemetry/ingest": {
+      "post": {
+        "operationId": "ingest_telemetry_batch_v1_telemetry_ingest_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-RedHand-API-Key",
+            "required": true,
+            "schema": {
+              "title": "X-Redhand-Api-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TelemetryBatchIngestRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TelemetryIngestResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Ingest Agent Reasoning Traces, Firewall Verdicts, and HITL Checkpoints",
+        "tags": [
+          "Telemetry & Security Ingestion"
+        ]
+      }
+    }
+  }
+}

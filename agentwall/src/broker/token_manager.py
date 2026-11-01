@@ -16,13 +16,21 @@ from .providers.vault import VaultSTSProvider
 logger = structlog.get_logger(__name__)
 
 
+def _local_sts_secret() -> bytes | None:
+    # Imported lazily so the broker can be constructed in tests without settings files.
+    from ...config.settings import get_settings
+
+    configured = get_settings().LOCAL_STS_SIGNING_SECRET
+    return configured.get_secret_value().encode("utf-8") if configured else None
+
+
 class EphemeralTokenBroker:
     """Zero-Trust Just-In-Time Credential Broker across Multi-Cloud and SaaS Providers."""
 
     def __init__(self, default_provider: str = "local_sts") -> None:
         self.default_provider = default_provider
         self._providers: dict[str, BaseSTSProvider] = {
-            "local_sts": LocalMockSTSProvider(),
+            "local_sts": LocalMockSTSProvider(signing_secret=_local_sts_secret()),
             "aws_sts": AWSSTSProvider(),
             "azure_sts": AzureSTSProvider(),
             "gcp_sts": GCPSTSProvider(),

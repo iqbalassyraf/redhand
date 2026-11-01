@@ -20,12 +20,17 @@ from uuid import uuid4
 from fastapi.testclient import TestClient
 import pytest
 
+from uuid import UUID
+
+from redhand_core.auth.operator import OperatorContext, Role, get_operator
 from redhand_core.main import create_app
 from redhand_core.routers.hitl import compute_canonical_state_checksum
 from redhand_core.routers.telemetry import get_supabase_service_client
-from redhand_core.services.local_store import DEFAULT_DEV_API_KEY, LocalSupabaseAdapter
+from redhand_core.services.local_store import DEFAULT_DEV_API_KEY
 from redhand_sdk.adapters.mcp import RedHandMCPInterceptor
 from redhand_sdk.client import RedHandClient
+
+from core_helpers import make_client, operator_headers
 
 
 def _build_mock_supabase(intervention_record: dict[str, Any]) -> Any:
@@ -75,19 +80,24 @@ def test_hitl_resolve_verifies_checksum_and_approves() -> None:
 
     app = create_app()
     app.dependency_overrides[get_supabase_service_client] = lambda: _build_mock_supabase(record)
+    # This test covers HITL logic, not authentication: inject the operator directly.
+    app.dependency_overrides[get_operator] = lambda: OperatorContext(
+        user_id=reviewer_id,
+        organization_id=UUID(record["organization_id"]),
+        role=Role.SECURITY_OPERATOR,
+    )
 
     client = TestClient(app)
     resp = client.post(
         f"/v1/hitl/{intervention_id}/resolve",
         json={
             "action": "approve",
-            "reviewer_user_id": str(reviewer_id),
             "reviewer_comment": "Approved after verifying backup snapshot.",
             "modified_tool_arguments": {"db_name": "staging_01"},
         },
     )
 
-    assert resp.status_code == 200
+    assert resp.status_code == 200, resp.text
     body = resp.json()
     assert body["status"] == "approved"
     assert body["state_integrity_verified"] is True
@@ -95,10 +105,8 @@ def test_hitl_resolve_verifies_checksum_and_approves() -> None:
 
 
 def test_local_store_telemetry_ingest_with_dlp_redaction_and_quarantine() -> None:
-    local_store = LocalSupabaseAdapter()
-    app = create_app()
-    app.dependency_overrides[get_supabase_service_client] = lambda: local_store
-    client = TestClient(app)
+    client, settings = make_client()
+    auth = operator_headers("operator", settings)
 
     # 1. Ingest a trace containing an unredacted GCP OAuth token in `thought_content`
     ingest_resp = client.post(
@@ -134,20 +142,17 @@ def test_local_store_telemetry_ingest_with_dlp_redaction_and_quarantine() -> Non
     assert data["recorded_security_events_count"] == 1
 
     # Verify stored trace thought_content was scrubbed before hitting the store
-    snapshot = client.get("/v1/state/snapshot").json()
+    snapshot = client.get("/v1/state/snapshot", headers=auth).json()
     stored_trace = snapshot["execution_traces"][0]
     assert "[REDACTED_GCP_OAUTH_TOKEN]" in stored_trace["thought_content"]
     assert "ya29." not in stored_trace["thought_content"]
     assert stored_trace["firewall_verdict"] == "redacted"
 
-    # 2. Quarantine the agent via PATCH /v1/state/agents/{id}/posture and verify 403 block
+    # 2. Freeze the agent's passport and verify further telemetry is refused (403)
     agent_id = data["agent_id"]
-    q_resp = client.patch(
-        f"/v1/state/agents/{agent_id}/posture",
-        json={"status": "quarantined"},
-    )
+    q_resp = client.post(f"/v1/passports/{agent_id}/freeze", json={}, headers=auth)
     assert q_resp.status_code == 200
-    assert q_resp.json()["agent"]["status"] == "quarantined"
+    assert q_resp.json()["passport"]["status"] == "frozen"
 
     blocked_ingest = client.post(
         "/v1/telemetry/ingest",
@@ -264,3 +269,15 @@ async def test_aws_sts_downscoper_and_router() -> None:
             target_resource_arn="arn:aws:s3:::mybucket/*",
             actions=["iam:CreateUser"],
         )
+
+
+def test_local_store_refused_outside_development(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The seeded dev key and demo data must never back a production deployment."""
+    from redhand_core.config import Settings
+
+    monkeypatch.setattr(
+        "redhand_core.main.get_settings", lambda: Settings(ENVIRONMENT="production")
+    )
+    with pytest.raises(RuntimeError, match="only allowed"):
+        with TestClient(create_app()):
+            pass

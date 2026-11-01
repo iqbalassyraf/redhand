@@ -6,6 +6,7 @@ import base64
 import hashlib
 import hmac
 import json
+import secrets
 import time
 from typing import Any
 from uuid import uuid4
@@ -13,8 +14,12 @@ from .base import BaseSTSProvider, EphemeralToken
 
 
 class LocalMockSTSProvider(BaseSTSProvider):
-    def __init__(self, signing_secret: str = "agentwall-ephemeral-hmac-key-v1") -> None:
-        self._secret = signing_secret.encode("utf-8")
+    """Development-only token provider. Tokens are signed with an HMAC secret that is
+    either supplied explicitly or generated randomly per process; there is no built-in
+    default, so a secret published in source code can never be used to forge tokens."""
+
+    def __init__(self, signing_secret: bytes | None = None) -> None:
+        self._secret = signing_secret if signing_secret else secrets.token_bytes(32)
 
     async def mint_token(
         self,
@@ -46,7 +51,7 @@ class LocalMockSTSProvider(BaseSTSProvider):
 
         payload_bytes = json.dumps(claims, sort_keys=True).encode("utf-8")
         payload_b64 = base64.urlsafe_b64encode(payload_bytes).decode("utf-8").rstrip("=")
-        signature = hmac.new(self._secret, payload_bytes, hashlib.sha256).hexdigest()[:32]
+        signature = hmac.new(self._secret, payload_bytes, hashlib.sha256).hexdigest()
         token_str = f"aw_jit.{payload_b64}.{signature}"
 
         return EphemeralToken(
@@ -73,7 +78,7 @@ class LocalMockSTSProvider(BaseSTSProvider):
         try:
             padded_b64 = parts[1] + "=" * (-len(parts[1]) % 4)
             payload_bytes = base64.urlsafe_b64decode(padded_b64.encode("utf-8"))
-            expected_sig = hmac.new(self._secret, payload_bytes, hashlib.sha256).hexdigest()[:32]
+            expected_sig = hmac.new(self._secret, payload_bytes, hashlib.sha256).hexdigest()
             return hmac.compare_digest(parts[2], expected_sig)
         except Exception:
             return False

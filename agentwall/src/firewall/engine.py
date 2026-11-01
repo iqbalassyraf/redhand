@@ -87,45 +87,8 @@ class FirewallPolicyEngine:
                     f"lacks required roles {required_user_roles} to invoke tool '{tool_name}'."
                 )
 
-        # 3. Strict Schema Validation
-        schema = tool_cfg.get("schema")
-        if schema:
-            is_valid, schema_violations = StrictSchemaValidator.validate(schema, arguments)
-            if not is_valid:
-                violations.extend(schema_violations)
-
-        # 4. AST Semantic Guardrails (always run for deep defense reporting)
-        if tool_type == "sql" and "query" in arguments:
-            query = arguments.get("query", "")
-            allowed_statements = tool_cfg.get("allowed_statements", ["SELECT"])
-            forbidden_clauses = tool_cfg.get("forbidden_clauses", [])
-            forbidden_columns = tool_cfg.get("forbidden_columns", [])
-            max_rows_limit = tool_cfg.get("max_rows_limit")
-            passed, sql_violations = SQLASTGuardrail.evaluate(
-                query,
-                allowed_statements=allowed_statements,
-                forbidden_clauses=forbidden_clauses,
-                forbidden_columns=forbidden_columns,
-                max_rows_limit=max_rows_limit,
-            )
-            if not passed:
-                violations.extend(sql_violations)
-
-        elif tool_type == "shell" and "command" in arguments:
-            command = arguments.get("command", "")
-            allowed_binaries = tool_cfg.get("allowed_binaries", [])
-            block_chaining = tool_cfg.get("block_chaining", True)
-            block_subshells = tool_cfg.get("block_subshells", True)
-            block_dangerous = tool_cfg.get("block_dangerous_primitives", True)
-            passed, shell_violations = ShellASTGuardrail.evaluate(
-                command,
-                allowed_binaries=allowed_binaries,
-                block_chaining=block_chaining,
-                block_subshells=block_subshells,
-                block_dangerous_primitives=block_dangerous,
-            )
-            if not passed:
-                violations.extend(shell_violations)
+        # 3-4. Schema validation and AST semantic guardrails
+        violations.extend(self._guardrail_violations(tool_cfg, arguments))
 
         if violations:
             logger.warning(
@@ -156,6 +119,52 @@ class FirewallPolicyEngine:
             iam_provider=iam_provider,
             egress_dlp=egress_dlp,
         )
+
+    def inspect_arguments(self, tool_name: str, arguments: dict[str, Any]) -> list[str]:
+        """
+        Deep argument inspection for the passport-authorized gateway path.
+
+        Authorization (which agent may call which tool) is decided by the Agent Passport,
+        not here. This only applies the optional per-tool guardrails from the policy file
+        (schema, SQL AST, shell allowlist) when a policy exists for the tool name.
+        Returns the list of violations; empty means no guardrail objection.
+        """
+        tool_cfg = self.get_tool_policy(tool_name)
+        if not tool_cfg:
+            return []
+        return self._guardrail_violations(tool_cfg, arguments)
+
+    def _guardrail_violations(self, tool_cfg: dict[str, Any], arguments: dict[str, Any]) -> list[str]:
+        violations: list[str] = []
+        tool_type = tool_cfg.get("type", "generic")
+
+        schema = tool_cfg.get("schema")
+        if schema:
+            is_valid, schema_violations = StrictSchemaValidator.validate(schema, arguments)
+            if not is_valid:
+                violations.extend(schema_violations)
+
+        if tool_type == "sql" and "query" in arguments:
+            passed, sql_violations = SQLASTGuardrail.evaluate(
+                arguments.get("query", ""),
+                allowed_statements=tool_cfg.get("allowed_statements", ["SELECT"]),
+                forbidden_clauses=tool_cfg.get("forbidden_clauses", []),
+                forbidden_columns=tool_cfg.get("forbidden_columns", []),
+                max_rows_limit=tool_cfg.get("max_rows_limit"),
+            )
+            if not passed:
+                violations.extend(sql_violations)
+        elif tool_type == "shell" and "command" in arguments:
+            passed, shell_violations = ShellASTGuardrail.evaluate(
+                arguments.get("command", ""),
+                allowed_binaries=tool_cfg.get("allowed_binaries", []),
+                block_chaining=tool_cfg.get("block_chaining", True),
+                block_subshells=tool_cfg.get("block_subshells", True),
+                block_dangerous_primitives=tool_cfg.get("block_dangerous_primitives", True),
+            )
+            if not passed:
+                violations.extend(shell_violations)
+        return violations
 
     def inspect_egress(self, data: Any) -> tuple[Any, list[str]]:
         """Inspects response data before returning to agent."""

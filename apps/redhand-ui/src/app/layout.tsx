@@ -1,10 +1,11 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import { AuthProvider } from "@/lib/auth";
 
 export const metadata: Metadata = {
-  title: "RedHand | Agentic Security Posture Management & Runtime Protection",
+  title: "RedHand | Agent Passports & Control",
   description:
-    "Zero-Trust Runtime Interceptor, <50ms Semantic Firewall, Ephemeral GCP STS IAM Broker, and HITL Circuit Breaker.",
+    "Identify every AI agent, control which MCP tools it can use, and stop it instantly.",
 };
 
 export default function RootLayout({
@@ -15,7 +16,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className="bg-[#FFFFFF] text-[#0F0F0F] font-sans antialiased">
-        {children}
+        <AuthProvider>{children}</AuthProvider>
       </body>
     </html>
   );

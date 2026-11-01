@@ -12,7 +12,11 @@ from uuid import uuid4
 from fastapi.testclient import TestClient
 import pytest
 
-from redhand_core.main import create_app
+from pydantic import SecretStr
+
+from redhand_core.services.local_store import DEV_OPERATORS
+
+from core_helpers import make_client, operator_headers
 from redhand_core.services.notifications.slack import (
     build_slack_hitl_blocks,
     parse_slack_interactive_payload,
@@ -120,11 +124,17 @@ def test_four_eyes_approval_lifecycle_and_slack_webhook(monkeypatch: pytest.Monk
     mock_webhook = AsyncMock()
     monkeypatch.setattr("redhand_core.routers.hitl.trigger_agent_resume_webhook", mock_webhook)
 
-    app = create_app()
-    client = TestClient(app)
+    from redhand_core.services.local_store import DEFAULT_ORG_ID
+
+    client, settings = make_client(
+        SLACK_SIGNING_SECRET=SecretStr(TEST_SLACK_SECRET),
+        SLACK_ORGANIZATION_ID=DEFAULT_ORG_ID,
+    )
+    op1_headers = operator_headers("operator", settings)
+    op1_id = DEV_OPERATORS["operator"]["id"]
 
     # 1. Fetch the default seeded intervention (which requires 2 approvals)
-    snapshot = client.get("/v1/state/snapshot").json()
+    snapshot = client.get("/v1/state/snapshot", headers=op1_headers).json()
     interventions = snapshot.get("hitl_interventions", [])
     assert len(interventions) >= 1
     target_intervention = interventions[0]
@@ -132,17 +142,17 @@ def test_four_eyes_approval_lifecycle_and_slack_webhook(monkeypatch: pytest.Monk
     assert target_intervention["required_approvals"] == 2
     assert target_intervention["status"] == "pending"
 
-    operator_1_id = str(uuid4())
-    operator_2_id = str(uuid4())
+    operator_1_id = op1_id
+    operator_2_id = str(uuid4())  # Slack user (deterministic UUID from the signed payload)
 
     # 2. First operator signs -> status becomes "partially_approved"
     resp1 = client.post(
         f"/v1/hitl/{intervention_id}/resolve",
         json={
             "action": "approve",
-            "reviewer_user_id": operator_1_id,
             "reviewer_comment": "Operator 1: Code verified against Jira ticket RH-402.",
         },
+        headers=op1_headers,
     )
     assert resp1.status_code == 200, resp1.text
     body1 = resp1.json()
@@ -156,9 +166,9 @@ def test_four_eyes_approval_lifecycle_and_slack_webhook(monkeypatch: pytest.Monk
         f"/v1/hitl/{intervention_id}/resolve",
         json={
             "action": "approve",
-            "reviewer_user_id": operator_1_id,
             "reviewer_comment": "Operator 1 signing again.",
         },
+        headers=op1_headers,
     )
     assert resp_duplicate.status_code == 400
     assert "Four-Eyes Principle violation" in resp_duplicate.json()["detail"]
@@ -178,13 +188,16 @@ def test_four_eyes_approval_lifecycle_and_slack_webhook(monkeypatch: pytest.Monk
     slack_resp = client.post(
         "/v1/hitl/slack/interactivity",
         content=encoded_form,
-        headers={"Content-Type": "application/x-www-form-urlencoded"},
+        headers={
+            "Content-Type": "application/x-www-form-urlencoded",
+            **_slack_signature_headers(TEST_SLACK_SECRET, encoded_form.encode("utf-8")),
+        },
     )
     assert slack_resp.status_code == 200, slack_resp.text
     assert "APPROVED" in slack_resp.json()["text"]
 
     # 5. Verify in state snapshot that intervention is now "approved"
-    snapshot_after = client.get("/v1/state/snapshot").json()
+    snapshot_after = client.get("/v1/state/snapshot", headers=op1_headers).json()
     resolved = next(
         i for i in snapshot_after["hitl_interventions"] if i["id"] == intervention_id
     )
@@ -195,3 +208,80 @@ def test_four_eyes_approval_lifecycle_and_slack_webhook(monkeypatch: pytest.Monk
 
     # 6. Verify webhook was dispatched
     mock_webhook.assert_called_once()
+
+
+# =============================================================================
+# Slack request signature verification (fail closed)
+# =============================================================================
+
+TEST_SLACK_SECRET = "test-slack-signing-secret"
+
+
+def _slack_signature_headers(secret: str, body: bytes, timestamp: int | None = None) -> dict[str, str]:
+    import hashlib
+    import hmac
+    import time
+
+    ts = str(timestamp if timestamp is not None else int(time.time()))
+    digest = hmac.new(secret.encode(), b"v0:" + ts.encode() + b":" + body, hashlib.sha256).hexdigest()
+    return {"X-Slack-Request-Timestamp": ts, "X-Slack-Signature": f"v0={digest}"}
+
+
+def _slack_client(secret: str | None) -> TestClient:
+    from redhand_core.services.local_store import DEFAULT_ORG_ID
+
+    client, _ = make_client(
+        SLACK_SIGNING_SECRET=SecretStr(secret) if secret else None,
+        SLACK_ORGANIZATION_ID=DEFAULT_ORG_ID,
+    )
+    return client
+
+
+_SLACK_FORM = urlencode(
+    {
+        "payload": json.dumps(
+            {
+                "user": {"id": "U123", "username": "mallory"},
+                "actions": [{"action_id": "redhand_hitl_approve", "value": str(uuid4())}],
+            }
+        )
+    }
+)
+
+
+def test_slack_interactivity_rejected_when_signing_secret_not_configured() -> None:
+    resp = _slack_client(None).post(
+        "/v1/hitl/slack/interactivity",
+        content=_SLACK_FORM,
+        headers={"Content-Type": "application/x-www-form-urlencoded"},
+    )
+    assert resp.status_code == 503
+
+
+@pytest.mark.parametrize(
+    "headers",
+    [
+        {},
+        {"X-Slack-Request-Timestamp": "not-a-number", "X-Slack-Signature": "v0=abc"},
+        _slack_signature_headers("wrong-secret", _SLACK_FORM.encode()),
+        _slack_signature_headers(TEST_SLACK_SECRET, _SLACK_FORM.encode(), timestamp=1_000_000_000),
+    ],
+    ids=["missing", "malformed", "wrong-secret", "stale-replay"],
+)
+def test_slack_interactivity_rejects_bad_signatures(headers: dict[str, str]) -> None:
+    resp = _slack_client(TEST_SLACK_SECRET).post(
+        "/v1/hitl/slack/interactivity",
+        content=_SLACK_FORM,
+        headers={"Content-Type": "application/x-www-form-urlencoded", **headers},
+    )
+    assert resp.status_code == 401
+
+
+def test_slack_signature_tampered_body_rejected() -> None:
+    headers = _slack_signature_headers(TEST_SLACK_SECRET, _SLACK_FORM.encode())
+    resp = _slack_client(TEST_SLACK_SECRET).post(
+        "/v1/hitl/slack/interactivity",
+        content=_SLACK_FORM + "&extra=1",
+        headers={"Content-Type": "application/x-www-form-urlencoded", **headers},
+    )
+    assert resp.status_code == 401
