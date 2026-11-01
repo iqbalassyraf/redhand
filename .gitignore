@@ -35,3 +35,4 @@ Thumbs.db
 *.sqlite
 *.sqlite3
 battleground/database/data/*.db
+
