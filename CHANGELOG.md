@@ -6,6 +6,8 @@
 - Every control action and its audit entry now commit in one database transaction. A failed audit
   write rolls the action back instead of leaving an unrecorded change. Concurrent changes to the
   same passport are detected and retried once, then answered with 409.
+- Database function hardening from Supabase's security advisor: pinned `search_path` on the trigger
+  functions and no `anon` access to `get_user_organization_ids()`.
 - GitHub Actions CI (ruff, strict mypy on the Phase 1 modules, pytest, dashboard type-check and
   build) runs on every push.
 
