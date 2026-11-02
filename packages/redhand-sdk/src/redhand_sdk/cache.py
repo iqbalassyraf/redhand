@@ -11,7 +11,6 @@ from __future__ import annotations
 from datetime import datetime, timezone
 import logging
 import threading
-from typing import Any
 
 from redhand_sdk.models import AWSEphemeralTokenMintResponse, EphemeralTokenMintResponse
 

@@ -9,14 +9,13 @@ or GCS Bucket Lock) with cryptographic SHA-256 block chaining and CMEK encryptio
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from enum import Enum
 import hashlib
 import json
 import logging
 from typing import Any
-from uuid import uuid4
 
 logger = logging.getLogger("redhand.core.worm")
 

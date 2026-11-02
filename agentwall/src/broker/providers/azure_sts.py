@@ -49,7 +49,7 @@ class AzureSTSProvider(BaseSTSProvider):
             provider_type="azure_sts",
             user_id=user_id,
             user_roles=user_roles or [],
-            scopes=[f"https://management.azure.com/.default"],
+            scopes=["https://management.azure.com/.default"],
         )
 
     async def validate_token(self, token: EphemeralToken) -> bool:

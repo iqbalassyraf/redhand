@@ -12,15 +12,13 @@ from datetime import datetime, timezone
 import hmac
 import logging
 from typing import Annotated, Any
-from uuid import UUID, uuid4
+from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Header, Path, Query, status
-from pydantic import BaseModel, ConfigDict, Field
-from supabase import AsyncClient
+from pydantic import BaseModel
 
 from redhand_core.auth import bearer_token
 from redhand_core.config import Settings, get_settings
-from redhand_core.routers.telemetry import get_supabase_service_client
 
 logger = logging.getLogger("redhand.core.scim")
 

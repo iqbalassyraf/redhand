@@ -10,10 +10,7 @@ text format (v0.0.4) for enterprise Prometheus, Datadog Agent, and Grafana Alloy
 from __future__ import annotations
 
 from collections import defaultdict
-from dataclasses import dataclass, field
 import threading
-import time
-from typing import Any
 
 
 class MetricsCollector:

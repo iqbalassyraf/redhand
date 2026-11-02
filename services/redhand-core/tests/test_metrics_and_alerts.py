@@ -9,7 +9,7 @@ from fastapi.testclient import TestClient
 import pytest
 
 from redhand_core.main import create_app
-from redhand_core.services.metrics import MetricsCollector, get_metrics
+from redhand_core.services.metrics import MetricsCollector
 from redhand_core.services.notifications.pagerduty import dispatch_pagerduty_alert
 
 

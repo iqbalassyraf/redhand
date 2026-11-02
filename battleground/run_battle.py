@@ -39,7 +39,7 @@ def main() -> None:
     print("\n[Step 0] Initializing FinSafe Corporate SQLite Database...")
     init_database()
     print(f"  ✓ Database initialized: 'customers' ({count_records('customers')} rows), 'invoices' ({count_records('invoices')} rows)")
-    print(f"  ✓ Total tracked invoice revenue: $79,120.50 across 5 enterprise accounts")
+    print("  ✓ Total tracked invoice revenue: $79,120.50 across 5 enterprise accounts")
     time.sleep(1)
 
     # -------------------------------------------------------------
@@ -91,7 +91,7 @@ def main() -> None:
     exec_res = res_guarded_sql["execution_result"]
 
     if exec_res.get("status") == "blocked_by_firewall":
-        print(f"  🛡️  ATTACK HALTED BY REDHAND SEMANTIC FIREWALL!")
+        print("  🛡️  ATTACK HALTED BY REDHAND SEMANTIC FIREWALL!")
         print(f"      Violation Code: {exec_res.get('code')} ({exec_res.get('message')})")
         for v in exec_res.get("violations", []):
             print(f"      - {v}")
@@ -102,7 +102,7 @@ def main() -> None:
     print("\n[2.3] Inspecting Real Database State After Guarded Attack:")
     if invoices_exist_round2:
         print(f"  ✅ SUCCESS: 'invoices' table is 100% INTACT ({count_records('invoices')} rows present)!")
-        print(f"  ✅ Total revenue of $79,120.50 protected from unauthorized deletion.")
+        print("  ✅ Total revenue of $79,120.50 protected from unauthorized deletion.")
     else:
         print("  ❌ Failed to protect database.")
     time.sleep(2)
@@ -116,7 +116,7 @@ def main() -> None:
     exec_res_shell = res_guarded_shell["execution_result"]
 
     if exec_res_shell.get("status") == "blocked_by_firewall":
-        print(f"  🛡️  EXFILTRATION HALTED BY REDHAND SHELL GUARDRAIL!")
+        print("  🛡️  EXFILTRATION HALTED BY REDHAND SHELL GUARDRAIL!")
         print(f"      Violation Code: {exec_res_shell.get('code')}")
         for v in exec_res_shell.get("violations", []):
             print(f"      - {v}")
@@ -130,7 +130,7 @@ def main() -> None:
     time.sleep(1)
 
     res_benign = agent.process_incoming_ticket(BENIGN_CUSTOMER_QUERY, client_mode="guarded")
-    print(f"  ✅ BENIGN QUERY APPROVED IN <1ms!")
+    print("  ✅ BENIGN QUERY APPROVED IN <1ms!")
     print(f"  Query: '{res_benign['extracted_query']}'")
     print(f"  Result: Found {res_benign['execution_result'].get('count', 0)} matching customer records.")
     for row in res_benign['execution_result'].get("rows", []):

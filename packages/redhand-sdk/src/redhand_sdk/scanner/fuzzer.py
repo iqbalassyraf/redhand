@@ -13,9 +13,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import time
-from typing import Any
 
-from redhand_sdk.firewall.engine import FirewallEngine, FirewallEvaluationResult
+from redhand_sdk.firewall.engine import FirewallEngine
 
 ADVERSARIAL_ATTACK_SUITE = (
     {
