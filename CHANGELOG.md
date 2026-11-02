@@ -3,6 +3,9 @@
 ## Unreleased: Phase 1 (Identity and control)
 
 ### Added (deployment)
+- `scripts/staging_agent.py`: a stand-in agent (standard library only) that runs the Phase 1 checks
+  against a deployed stack and a real MCP server, and shows freeze / revoke / freeze-all taking
+  effect live (`docs/runbooks/staging-agent-test.md`).
 - Cloud Run staging deployment: Dockerfiles for core and the gateway, a Cloud Build config, `deploy.sh`
   (secrets in Secret Manager, per-service identities) and `smoke.sh` (`deploy/cloudrun/`).
 
