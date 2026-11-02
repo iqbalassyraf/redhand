@@ -28,6 +28,9 @@ stream tickets and rate limiters live in process memory.
 1. Have ready: the Google Cloud project ID, and the Supabase **secret key**
    (Supabase dashboard → project → Project Settings → **API Keys** → *Secret keys*; if that kind
    is rejected later, the *Legacy API Keys* tab has `service_role`).
+   On macOS the built-in `openssl` may not support Ed25519; the script then tries Homebrew's
+   OpenSSL 3 and Python's `cryptography` package, and stops with instructions if neither works
+   (`brew install openssl`). It never stores an empty or malformed key.
 2. From the repository root on your computer:
 
 ```bash

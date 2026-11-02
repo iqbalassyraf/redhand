@@ -99,6 +99,28 @@ allow_secret() { # allow_secret SECRET SERVICE_ACCOUNT
     --member "serviceAccount:$(sa_email "$2")" --role roles/secretmanager.secretAccessor >/dev/null
 }
 
+# Prints a new Ed25519 private key (PEM). macOS's built-in openssl (LibreSSL) may not support
+# Ed25519, so try Homebrew's OpenSSL 3 and then Python's cryptography package.
+generate_signing_key() {
+  local candidate
+  for candidate in openssl /opt/homebrew/opt/openssl@3/bin/openssl /usr/local/opt/openssl@3/bin/openssl; do
+    if command -v "$candidate" >/dev/null 2>&1 && "$candidate" genpkey -algorithm ed25519 2>/dev/null; then
+      return 0
+    fi
+  done
+  if command -v python3 >/dev/null 2>&1; then
+    python3 - 2>/dev/null <<'PY' && return 0
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+
+key = Ed25519PrivateKey.generate()
+print(key.private_bytes(serialization.Encoding.PEM, serialization.PrivateFormat.PKCS8,
+                        serialization.NoEncryption()).decode(), end="")
+PY
+  fi
+  return 1
+}
+
 ensure_secrets() {
   if ! secret_exists "$SECRET_INTERNAL" || [ "${ROTATE:-}" = "1" ]; then
     say "Generating the internal service token (stored in Secret Manager only)"
@@ -109,7 +131,10 @@ ensure_secrets() {
 
   if ! secret_exists "$SECRET_SIGNING" || [ "${ROTATE:-}" = "1" ]; then
     say "Generating the agent-token signing key (Ed25519; stored in Secret Manager only)"
-    openssl genpkey -algorithm ed25519 | put_secret "$SECRET_SIGNING"
+    signing_key="$(generate_signing_key)" || die "could not generate an Ed25519 key: install OpenSSL 3 ('brew install openssl') or Python's 'cryptography' package, then re-run"
+    case "$signing_key" in "-----BEGIN PRIVATE KEY-----"*) ;; *) die "generated key has an unexpected format; nothing was stored";; esac
+    printf '%s\n' "$signing_key" | put_secret "$SECRET_SIGNING"
+    unset signing_key
   else
     say "Keeping existing secret $SECRET_SIGNING"
   fi
