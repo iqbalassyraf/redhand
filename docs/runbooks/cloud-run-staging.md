@@ -55,7 +55,7 @@ The script shows the account and project and asks to continue. It asks once for 
 deploy/cloudrun/smoke.sh <core-url> <gateway-url>
 ```
 
-Every line should say PASS. The `/metrics` NOTE is a known open item.
+Every line should say PASS.
 
 After the dashboard has a URL, allow it in both services:
 
@@ -114,7 +114,6 @@ gcloud run services update redhand-core --region asia-southeast1 --update-env-va
 
 - The gateway's tamper-evident audit ledger is in memory and is lost on each restart (Cloud Run's
   disk is not persistent); moving it to the database is Phase 3.
-- Core's `/metrics` is readable by anyone with the URL (follow-up 10).
 - Single instance per service; no multi-region; no custom domain yet.
 - Only MCP servers reachable over public `https` can be used (the gateway blocks private
   addresses by design).

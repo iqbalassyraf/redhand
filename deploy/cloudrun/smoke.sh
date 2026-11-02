@@ -57,11 +57,7 @@ check "gateway refuses a fake agent token" 401 \
 check "gateway audit log needs the service token" 401 "$(status "$GATEWAY/v1/audit/logs")"
 check "gateway metrics need the service token" 401 "$(status "$GATEWAY/metrics")"
 
-echo
-metrics="$(status "$CORE/metrics")"
-if [ "$metrics" = "200" ]; then
-  echo "NOTE  core /metrics is publicly readable (HTTP 200). Known open item: restrict it (docs/plans/phase1-plan.md follow-up 10)."
-fi
+check "core metrics need the service token" 401 "$(status "$CORE/metrics")"
 
 echo
 if [ "$FAILED" = "0" ]; then echo "ALL CHECKS PASSED"; else echo "SOME CHECKS FAILED"; fi

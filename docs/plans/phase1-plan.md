@@ -181,13 +181,13 @@ An agent registered with no scope was refused on every tool, as designed.
 7. Move the gateway ledger into the database (Phase 3, Black Box Recorder).
 8. Dashboard session in httpOnly cookies instead of sessionStorage.
 9. Step-up authentication for unfreeze, scope expansion and freeze-all.
-10. core `/metrics` is unauthenticated (pre-existing); restrict at the network or add a token.
+10. ~~core `/metrics` is unauthenticated~~ Done in Phase 2 M0: it now needs the service token.
 11. Explicit ruff rule set and a type-checker (mypy/pyright) in the repo and CI, so "zero new
     warnings" has a baseline. ESLint is not configured for the dashboard.
 12. Add a `LICENSE` file (README previously claimed Apache 2.0).
 13. Drop the superseded `agents.allowed_tools` column in a later contract migration.
 14. Local stdio MCP servers (needs a local shim) and resources/prompts scopes.
-15. Dashboard polish found during the staging test: edit an agent's scopes after registration (API
-    only today), warn when registering an agent with no scopes, show the actor's email and the
-    target's name in the control audit log (today a truncated user id and, for MCP servers, just
-    "mcp_server"), and allow renaming an agent.
+15. Dashboard polish found during the staging test. Done in Phase 2 M0: scope editor, zero-scope
+    warning, MCP server names in the audit log. Still open: show the actor's email in the audit log
+    (core returns only the user id) and rename an agent (needs a new API endpoint and a change to
+    the atomic SQL function, so it needs its own approval).

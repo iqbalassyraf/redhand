@@ -13,11 +13,12 @@ from contextlib import asynccontextmanager
 import logging
 from typing import Any, AsyncIterator
 
-from fastapi import FastAPI, Request, Response
+from fastapi import Depends, FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from supabase import acreate_client
 
 from redhand_core.config import Settings, get_settings
+from redhand_core.routers.agent_auth import require_internal_service
 from redhand_core.routers.agent_auth import router as agent_auth_router
 from redhand_core.routers.dev import router as dev_router
 from redhand_core.routers.hitl import router as hitl_router
@@ -146,7 +147,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "environment": active_settings.ENVIRONMENT,
         }
 
-    @app.get("/metrics", tags=["Observability"])
+    # Metrics reveal traffic volumes and internal names, so they need the same service token as
+    # the other internal endpoints. Without a configured token the endpoint answers 503 (closed).
+    @app.get("/metrics", tags=["Observability"], dependencies=[Depends(require_internal_service)])
     async def get_prometheus_metrics() -> Response:
         metrics_data = get_metrics().render_prometheus()
         return Response(

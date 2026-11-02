@@ -10,6 +10,11 @@
   (secrets in Secret Manager, per-service identities) and `smoke.sh` (`deploy/cloudrun/`).
 
 ### Changed (hardening)
+- Core's `/metrics` now needs the service token (`INTERNAL_SERVICE_TOKEN`), like the gateway's. Without
+  a configured token it answers 503. Anything that scrapes core's metrics must send
+  `Authorization: Bearer <token>`.
+- Dashboard: edit an agent's scopes after registration, a warning when registering or saving an agent
+  with no scopes, and MCP server names (not just "mcp_server") in the control audit log.
 - Operator login also works with Supabase projects that use asymmetric signing keys: core verifies
   ES256/RS256 tokens against the project's JWKS (HS256 shared-secret mode remains for local
   development). Core refuses to start outside development unless exactly one mode is configured.

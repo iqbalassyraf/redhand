@@ -155,6 +155,11 @@ export const passportsApi = {
       method: "POST",
       body: { reason: reason || null, confirm: true },
     }),
+  updateScopes: (t: string, id: string, scopes: Scope[], reason?: string) =>
+    apiFetch<ControlActionResponse>(`/v1/passports/${id}/scopes`, t, {
+      method: "PUT",
+      body: { scopes, reason: reason || null, confirm: true },
+    }),
   renew: (t: string, id: string, days: number) =>
     apiFetch<Passport>(`/v1/passports/${id}/renew`, t, {
       method: "POST",
