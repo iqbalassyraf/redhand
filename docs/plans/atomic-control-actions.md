@@ -1,6 +1,6 @@
 # Plan: atomic control actions (action and audit entry in one transaction)
 
-**Status:** Draft, awaiting approval. No migration or code has been written.
+**Status:** Approved 2026-11-02 and implemented. Decision recorded in ADR 0006. The runbook was replaced as proposed.
 **Follows up:** `docs/plans/phase1-plan.md` §9, item 1.
 
 ## 1. Goal

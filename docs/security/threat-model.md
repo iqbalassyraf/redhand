@@ -36,7 +36,7 @@
 | Forged operator identity / spoofed headers | No identity headers are trusted; reviewer is the authenticated operator | Supabase asymmetric signing keys need JWKS support |
 | Insider or compromised admin abuses control actions | Role requirements (revoke, freeze-all, scope expansion need admin), explicit confirmation, append-only audit with actor and reason | No step-up authentication yet |
 | Audit tampering | `control_audit_log` blocked from UPDATE/DELETE by trigger; gateway ledger hash-chained | Gateway ledger is per process (file optional); move to database in Phase 3 |
-| Audit gap after a control action | State change first (safety), audit second; failure returns 500 and is logged | Make each action a single SQL transaction |
+| Audit gap after a control action | Each action and its audit row commit in one database transaction (`control_*` functions); a failed audit write rolls the action back. See ADR 0006 | A network timeout after commit leaves the outcome unknown to the caller (the API says to reload; actions are safe to repeat) |
 | Core outage | Gateway fails closed (denies) | Availability target 99.9 %; no multi-region yet |
 | Signing key compromise | Ed25519 private key only in core; gateway holds public key | Signing-key rotation not automated |
 | Development shortcuts reach production | core refuses the in-memory store and `/v1/dev/login` outside development; signing key required outside dev/test; no hardcoded secrets | Deployment checklist must set all required secrets |

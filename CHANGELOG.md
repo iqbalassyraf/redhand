@@ -2,6 +2,14 @@
 
 ## Unreleased: Phase 1 (Identity and control)
 
+### Changed (hardening)
+- Every control action and its audit entry now commit in one database transaction. A failed audit
+  write rolls the action back instead of leaving an unrecorded change. Concurrent changes to the
+  same passport are detected and retried once, then answered with 409.
+- GitHub Actions CI (ruff, strict mypy on the Phase 1 modules, pytest, dashboard type-check and
+  build) runs on every push.
+
+
 ### Added
 - Agent Passports: owner, backup owner, scopes per MCP server and tool, expiry, status
   (active / frozen / revoked / expired) and version.

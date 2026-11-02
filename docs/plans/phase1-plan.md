@@ -151,8 +151,8 @@ and revocation delay are in the README (§4).
   but not spelled out.
 
 ### Follow-ups (not done in Phase 1)
-1. Make each control action and its audit row a single SQL transaction (today: two statements; a
-   failed audit write returns 500 after the action applied).
+1. ~~Make each control action and its audit row a single SQL transaction.~~ Done 2026-11-02
+   (ADR 0006).
 2. Pin the upstream connection to the address that passed the destination check (DNS rebinding).
 3. Supabase asymmetric JWT signing keys (JWKS) for operator tokens.
 4. Signing-key rotation with overlapping keys in the JWKS.

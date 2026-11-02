@@ -64,6 +64,7 @@ files = [
     "services/redhand-core/src/redhand_core/routers/state.py",
     "services/redhand-core/src/redhand_core/routers/hitl.py",
     "services/redhand-core/src/redhand_core/services/local_store.py",
+    "services/redhand-core/src/redhand_core/services/local_rpc.py",
     "services/redhand-core/src/redhand_core/services/notifications/slack.py",
     "agentwall/src/gateway",
     "agentwall/src/main.py",

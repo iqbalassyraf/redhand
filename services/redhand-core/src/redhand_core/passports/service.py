@@ -1,30 +1,37 @@
 """
 Passport control logic: registration, freeze / unfreeze / revoke / freeze-all, scope
-changes, renewal, key rotation, and the control audit trail.
+changes, renewal, key rotation, MCP server registration, and the control audit trail.
 
 Every query is filtered by the operator's organization. A passport in another tenant
 is indistinguishable from one that does not exist (404).
 
-Known limitation (tracked in docs/plans/phase1-plan.md follow-ups): the state change
-and its audit row are two statements, not one transaction. The state change is applied
-first because stopping an agent matters more than recording it; if the audit insert then
-fails we return 500 and log at error level so the gap is visible. Moving each action
-into a single SQL function removes this window.
+Atomicity: each action is ONE call to a database function (`control_*`, see
+supabase/migrations/20261102000000_atomic_control_actions.sql) that applies the change and
+writes its `control_audit_log` row in a single transaction. If anything fails, including the
+audit insert, nothing is applied and the caller gets an error. This module keeps the
+decisions (state machine, confirmations, scope-expansion rule); the database functions only
+apply the result, guarded by a compare-and-set on the status read here. A concurrent change
+makes the guard fail; the action is then re-decided once from fresh state before giving up
+with 409.
 """
 
 from __future__ import annotations
 
+from collections.abc import Awaitable, Callable
 from datetime import datetime, timedelta
+import functools
 import logging
-from typing import Any
+from typing import Any, ParamSpec, TypeVar
 from uuid import UUID, uuid4
 
 from fastapi import HTTPException, status
+from postgrest.exceptions import APIError
 
 from redhand_core.auth.operator import OperatorContext
-from redhand_core.passports.credentials import NewAgentKey, generate_agent_key
+from redhand_core.passports.credentials import generate_agent_key
 from redhand_core.passports.models import (
     ControlAuditEntry,
+    McpServerCreateRequest,
     PassportCreateRequest,
     PassportView,
     Scope,
@@ -34,9 +41,17 @@ from redhand_core.passports.models import (
 
 logger = logging.getLogger("redhand.core.passports")
 
+P = ParamSpec("P")
+T = TypeVar("T")
 
-class AuditWriteError(Exception):
-    """The control action was applied but its audit record could not be written."""
+# PostgreSQL SQLSTATE codes raised by the control_* functions and the passport triggers.
+SQLSTATE_NOT_FOUND = "P0002"  # no_data_found: the row is missing or belongs to another tenant
+SQLSTATE_UNIQUE_VIOLATION = "23505"
+SQLSTATE_CHECK_VIOLATION = "23514"  # e.g. reactivating a revoked passport
+
+
+class StateConflictError(Exception):
+    """The passport changed between reading it and applying the action (compare-and-set)."""
 
 
 def _not_found(agent_id: UUID) -> HTTPException:
@@ -55,37 +70,84 @@ def _require_confirmation(confirm: bool, action: str) -> None:
         )
 
 
-async def write_audit(
+def retry_once_on_conflict(fn: Callable[P, Awaitable[T]]) -> Callable[P, Awaitable[T]]:
+    """Re-runs an action once, from fresh state, if another operator changed the passport."""
+
+    @functools.wraps(fn)
+    async def wrapper(*args: P.args, **kwargs: P.kwargs) -> T:
+        for _ in range(2):
+            try:
+                return await fn(*args, **kwargs)
+            except StateConflictError:
+                continue
+        raise _conflict("The passport was changed by someone else at the same time. Reload and try again.")
+
+    return wrapper
+
+
+async def _rpc(
     supabase: Any,
+    function: str,
+    params: dict[str, Any],
     *,
+    not_found_detail: str,
+    conflict_detail: str,
+) -> Any:
+    """Calls one control_* database function and maps its errors to HTTP responses."""
+    try:
+        response = await supabase.rpc(function, params).execute()
+    except APIError as exc:
+        if exc.code == SQLSTATE_NOT_FOUND:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=not_found_detail) from exc
+        if exc.code in (SQLSTATE_UNIQUE_VIOLATION, SQLSTATE_CHECK_VIOLATION):
+            raise _conflict(conflict_detail) from exc
+        # The message is not logged: database messages can echo submitted values.
+        logger.error("Control action failed and was rolled back: function=%s sqlstate=%s", function, exc.code)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="The action could not be completed. Reload to see the current state.",
+        ) from exc
+    return response.data
+
+
+async def _agent_change(
+    supabase: Any,
     operator: OperatorContext,
+    agent_id: UUID,
+    *,
     action: str,
-    target_type: str,
-    target_id: UUID,
+    expected_status: str,
+    changes: dict[str, Any],
     reason: str | None,
     details: dict[str, Any] | None = None,
-) -> None:
-    row = {
-        "id": str(uuid4()),
-        "organization_id": str(operator.organization_id),
-        "actor_user_id": str(operator.user_id),
-        "action": action,
-        "target_type": target_type,
-        "target_id": str(target_id),
-        "reason": reason,
-        "details": details or {},
-    }
-    try:
-        await supabase.table("control_audit_log").insert(row).execute()
-    except Exception as exc:  # noqa: BLE001 - any storage failure must surface as AuditWriteError
-        logger.error(
-            "Control action applied but audit write failed: action=%s target=%s org=%s error=%s",
-            action,
-            target_id,
-            operator.organization_id,
-            type(exc).__name__,
-        )
-        raise AuditWriteError(action) from exc
+    deactivate_keys: bool = False,
+    new_key: dict[str, str] | None = None,
+) -> dict[str, Any]:
+    """Applies one change to one passport together with its audit row. Raises
+    StateConflictError when the passport no longer has `expected_status`."""
+    data = await _rpc(
+        supabase,
+        "control_agent_change",
+        {
+            "p_org": str(operator.organization_id),
+            "p_agent": str(agent_id),
+            "p_actor": str(operator.user_id),
+            "p_action": action,
+            "p_expected_status": expected_status,
+            "p_changes": changes,
+            "p_deactivate_keys": deactivate_keys,
+            "p_new_key": new_key,
+            "p_reason": reason,
+            "p_details": details or {},
+        },
+        not_found_detail=f"Passport '{agent_id}' not found.",
+        conflict_detail="A revoked passport cannot be reactivated. Register a new agent instead.",
+    )
+    if not isinstance(data, dict):
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Unexpected database response.")
+    if data.get("conflict"):
+        raise StateConflictError
+    return dict(data["agent"])
 
 
 async def get_passport_row(supabase: Any, operator: OperatorContext, agent_id: UUID) -> dict[str, Any]:
@@ -114,21 +176,6 @@ async def list_passport_rows(supabase: Any, operator: OperatorContext) -> list[d
     return list(res.data or [])
 
 
-async def _update_passport(
-    supabase: Any, operator: OperatorContext, agent_id: UUID, changes: dict[str, Any]
-) -> dict[str, Any]:
-    res = await (
-        supabase.table("agents")
-        .update(changes)
-        .eq("id", str(agent_id))
-        .eq("organization_id", str(operator.organization_id))
-        .execute()
-    )
-    if not res.data:
-        raise _not_found(agent_id)
-    return dict(res.data[0])
-
-
 async def _assert_members(supabase: Any, operator: OperatorContext, user_ids: list[UUID]) -> None:
     for uid in user_ids:
         res = await (
@@ -145,35 +192,6 @@ async def _assert_members(supabase: Any, operator: OperatorContext, user_ids: li
             )
 
 
-async def _insert_agent_key(
-    supabase: Any, operator: OperatorContext, agent_id: UUID, key: NewAgentKey
-) -> None:
-    await supabase.table("agent_keys").insert(
-        {
-            "id": str(uuid4()),
-            "organization_id": str(operator.organization_id),
-            "agent_id": str(agent_id),
-            "key_prefix": key.display_prefix,
-            "key_hash": key.key_hash,
-            "is_active": True,
-            "created_by": str(operator.user_id),
-        }
-    ).execute()
-
-
-async def _deactivate_agent_keys(
-    supabase: Any, operator: OperatorContext, agent_id: UUID, now: datetime
-) -> None:
-    await (
-        supabase.table("agent_keys")
-        .update({"is_active": False, "deactivated_at": now.isoformat()})
-        .eq("agent_id", str(agent_id))
-        .eq("organization_id", str(operator.organization_id))
-        .eq("is_active", True)
-        .execute()
-    )
-
-
 # -----------------------------------------------------------------------------
 # Actions
 # -----------------------------------------------------------------------------
@@ -188,54 +206,43 @@ async def create_passport(
 
     agent_id = uuid4()
     external_id = req.external_agent_id or f"agent-{agent_id.hex[:12]}"
-    existing = await (
-        supabase.table("agents")
-        .select("id")
-        .eq("organization_id", str(operator.organization_id))
-        .eq("external_agent_id", external_id)
-        .eq("environment", req.environment)
-        .execute()
-    )
-    if existing.data:
-        raise _conflict(f"An agent with external ID '{external_id}' already exists in {req.environment}.")
-
-    row = {
-        "id": str(agent_id),
-        "organization_id": str(operator.organization_id),
-        "external_agent_id": external_id,
-        "name": req.name,
-        "framework": req.framework,
-        "environment": req.environment,
-        "status": "active",
-        "owner_id": str(owner_id),
-        "backup_owner_id": str(req.backup_owner_id) if req.backup_owner_id else None,
-        "scopes": [s.model_dump() for s in req.scopes],
-        "expires_at": (now + timedelta(days=req.expires_in_days)).isoformat(),
-        "version": 1,
-        "created_at": now.isoformat(),
-    }
-    res = await supabase.table("agents").insert(row).execute()
-    created = dict(res.data[0])
-
     key = generate_agent_key()
-    await _insert_agent_key(supabase, operator, agent_id, key)
-    await write_audit(
+    scopes = [s.model_dump() for s in req.scopes]
+    expires_at = (now + timedelta(days=req.expires_in_days)).isoformat()
+
+    created = await _rpc(
         supabase,
-        operator=operator,
-        action="passport.created",
-        target_type="agent",
-        target_id=agent_id,
-        reason=None,
-        details={
-            "name": req.name,
-            "scopes": row["scopes"],
-            "expires_at": row["expires_at"],
-            "key_prefix": key.display_prefix,
+        "control_create_passport",
+        {
+            "p_org": str(operator.organization_id),
+            "p_actor": str(operator.user_id),
+            "p_agent": {
+                "id": str(agent_id),
+                "external_agent_id": external_id,
+                "name": req.name,
+                "framework": req.framework,
+                "environment": req.environment,
+                "owner_id": str(owner_id),
+                "backup_owner_id": str(req.backup_owner_id) if req.backup_owner_id else None,
+                "scopes": scopes,
+                "expires_at": expires_at,
+            },
+            # Only the hash reaches the database; the plaintext key is returned once to the caller.
+            "p_key": {"key_prefix": key.display_prefix, "key_hash": key.key_hash},
+            "p_details": {
+                "name": req.name,
+                "scopes": scopes,
+                "expires_at": expires_at,
+                "key_prefix": key.display_prefix,
+            },
         },
+        not_found_detail="Organization not found.",
+        conflict_detail=f"An agent with external ID '{external_id}' already exists in {req.environment}.",
     )
-    return PassportView.from_row(created, now), key.plaintext
+    return PassportView.from_row(dict(created), now), key.plaintext
 
 
+@retry_once_on_conflict
 async def freeze(
     supabase: Any, operator: OperatorContext, agent_id: UUID, reason: str | None, now: datetime
 ) -> tuple[PassportView, bool]:
@@ -244,16 +251,14 @@ async def freeze(
         raise _conflict("A revoked passport cannot be frozen; it is already permanently disabled.")
     if row["status"] == "frozen":
         return PassportView.from_row(row, now), False
-    updated = await _update_passport(
-        supabase, operator, agent_id, {"status": "frozen", "status_reason": reason}
-    )
-    await write_audit(
-        supabase, operator=operator, action="passport.frozen", target_type="agent",
-        target_id=agent_id, reason=reason,
+    updated = await _agent_change(
+        supabase, operator, agent_id, action="passport.frozen", expected_status=row["status"],
+        changes={"status": "frozen", "status_reason": reason}, reason=reason,
     )
     return PassportView.from_row(updated, now), True
 
 
+@retry_once_on_conflict
 async def unfreeze(
     supabase: Any,
     operator: OperatorContext,
@@ -271,16 +276,14 @@ async def unfreeze(
     view = PassportView.from_row({**row, "status": "active"}, now)
     if view.status == "expired":
         raise _conflict("The passport has expired. Renew it before unfreezing.")
-    updated = await _update_passport(
-        supabase, operator, agent_id, {"status": "active", "status_reason": reason}
-    )
-    await write_audit(
-        supabase, operator=operator, action="passport.unfrozen", target_type="agent",
-        target_id=agent_id, reason=reason,
+    updated = await _agent_change(
+        supabase, operator, agent_id, action="passport.unfrozen", expected_status=row["status"],
+        changes={"status": "active", "status_reason": reason}, reason=reason,
     )
     return PassportView.from_row(updated, now), True
 
 
+@retry_once_on_conflict
 async def revoke(
     supabase: Any,
     operator: OperatorContext,
@@ -293,41 +296,26 @@ async def revoke(
     row = await get_passport_row(supabase, operator, agent_id)
     if row["status"] == "revoked":
         return PassportView.from_row(row, now), False
-    updated = await _update_passport(
-        supabase, operator, agent_id, {"status": "revoked", "status_reason": reason}
-    )
-    await _deactivate_agent_keys(supabase, operator, agent_id, now)
-    await write_audit(
-        supabase, operator=operator, action="passport.revoked", target_type="agent",
-        target_id=agent_id, reason=reason,
+    updated = await _agent_change(
+        supabase, operator, agent_id, action="passport.revoked", expected_status=row["status"],
+        changes={"status": "revoked", "status_reason": reason}, reason=reason, deactivate_keys=True,
     )
     return PassportView.from_row(updated, now), True
 
 
-async def freeze_all(
-    supabase: Any, operator: OperatorContext, reason: str | None, now: datetime
-) -> list[UUID]:
-    """Freezes every active passport in the tenant with one UPDATE statement."""
-    res = await (
-        supabase.table("agents")
-        .update({"status": "frozen", "status_reason": reason})
-        .eq("organization_id", str(operator.organization_id))
-        .eq("status", "active")
-        .execute()
-    )
-    frozen_ids = [UUID(str(r["id"])) for r in (res.data or [])]
-    await write_audit(
+async def freeze_all(supabase: Any, operator: OperatorContext, reason: str | None) -> list[UUID]:
+    """Freezes every active passport in the tenant and records it, in one transaction."""
+    data = await _rpc(
         supabase,
-        operator=operator,
-        action="organization.frozen_all",
-        target_type="organization",
-        target_id=operator.organization_id,
-        reason=reason,
-        details={"frozen_count": len(frozen_ids), "frozen_agent_ids": [str(i) for i in frozen_ids]},
+        "control_freeze_all",
+        {"p_org": str(operator.organization_id), "p_actor": str(operator.user_id), "p_reason": reason},
+        not_found_detail="Organization not found.",
+        conflict_detail="Freeze-all conflicted with another change; try again.",
     )
-    return frozen_ids
+    return [UUID(str(agent_id)) for agent_id in data["frozen_agent_ids"]]
 
 
+@retry_once_on_conflict
 async def update_scopes(
     supabase: Any,
     operator: OperatorContext,
@@ -347,19 +335,15 @@ async def update_scopes(
     if expansion:
         _require_confirmation(confirm, "Granting new access")
     new_raw = [s.model_dump() for s in scopes]
-    updated = await _update_passport(supabase, operator, agent_id, {"scopes": new_raw})
-    await write_audit(
-        supabase,
-        operator=operator,
-        action="passport.scopes_changed",
-        target_type="agent",
-        target_id=agent_id,
-        reason=reason,
+    updated = await _agent_change(
+        supabase, operator, agent_id, action="passport.scopes_changed", expected_status=row["status"],
+        changes={"scopes": new_raw}, reason=reason,
         details={"old": [s.model_dump() for s in old], "new": new_raw, "expansion": expansion},
     )
     return PassportView.from_row(updated, now), True
 
 
+@retry_once_on_conflict
 async def renew(
     supabase: Any,
     operator: OperatorContext,
@@ -372,29 +356,64 @@ async def renew(
     if row["status"] == "revoked":
         raise _conflict("A revoked passport cannot be renewed.")
     new_expiry = (now + timedelta(days=days)).isoformat()
-    updated = await _update_passport(supabase, operator, agent_id, {"expires_at": new_expiry})
-    await write_audit(
-        supabase, operator=operator, action="passport.renewed", target_type="agent",
-        target_id=agent_id, reason=reason,
+    updated = await _agent_change(
+        supabase, operator, agent_id, action="passport.renewed", expected_status=row["status"],
+        changes={"expires_at": new_expiry}, reason=reason,
         details={"old_expires_at": str(row.get("expires_at")), "new_expires_at": new_expiry},
     )
     return PassportView.from_row(updated, now)
 
 
+@retry_once_on_conflict
 async def rotate_key(
     supabase: Any, operator: OperatorContext, agent_id: UUID, reason: str | None, now: datetime
 ) -> tuple[PassportView, str]:
     row = await get_passport_row(supabase, operator, agent_id)
     if row["status"] == "revoked":
         raise _conflict("A revoked passport cannot receive a new key.")
-    await _deactivate_agent_keys(supabase, operator, agent_id, now)
     key = generate_agent_key()
-    await _insert_agent_key(supabase, operator, agent_id, key)
-    await write_audit(
-        supabase, operator=operator, action="passport.key_rotated", target_type="agent",
-        target_id=agent_id, reason=reason, details={"key_prefix": key.display_prefix},
+    updated = await _agent_change(
+        supabase, operator, agent_id, action="passport.key_rotated", expected_status=row["status"],
+        changes={}, reason=reason, details={"key_prefix": key.display_prefix}, deactivate_keys=True,
+        new_key={"key_prefix": key.display_prefix, "key_hash": key.key_hash},
     )
-    return PassportView.from_row(row, now), key.plaintext
+    return PassportView.from_row(updated, now), key.plaintext
+
+
+async def register_mcp_server(
+    supabase: Any, operator: OperatorContext, req: McpServerCreateRequest
+) -> dict[str, Any]:
+    data = await _rpc(
+        supabase,
+        "control_mcp_server",
+        {
+            "p_org": str(operator.organization_id),
+            "p_actor": str(operator.user_id),
+            "p_op": "register",
+            "p_server": {"slug": req.slug, "name": req.name, "url": req.url},
+            "p_server_id": None,
+        },
+        not_found_detail="Organization not found.",
+        conflict_detail=f"An MCP server with slug '{req.slug}' exists.",
+    )
+    return dict(data)
+
+
+async def deactivate_mcp_server(supabase: Any, operator: OperatorContext, server_id: UUID) -> dict[str, Any]:
+    data = await _rpc(
+        supabase,
+        "control_mcp_server",
+        {
+            "p_org": str(operator.organization_id),
+            "p_actor": str(operator.user_id),
+            "p_op": "deactivate",
+            "p_server": None,
+            "p_server_id": str(server_id),
+        },
+        not_found_detail=f"MCP server '{server_id}' not found.",
+        conflict_detail="MCP server could not be deactivated.",
+    )
+    return dict(data)
 
 
 async def list_audit(supabase: Any, operator: OperatorContext, limit: int) -> list[ControlAuditEntry]:

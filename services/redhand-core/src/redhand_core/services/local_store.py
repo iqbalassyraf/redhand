@@ -19,8 +19,11 @@ from datetime import datetime, timedelta, timezone
 import hashlib
 import json
 import logging
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from uuid import uuid4
+
+if TYPE_CHECKING:
+    from redhand_core.services.local_rpc import LocalRpcBuilder
 
 logger = logging.getLogger("redhand.core.local_store")
 
@@ -252,6 +255,12 @@ class LocalSupabaseAdapter:
 
     def table(self, table_name: str) -> LocalTableQueryBuilder:
         return LocalTableQueryBuilder(self, table_name)
+
+    def rpc(self, function: str, params: dict[str, Any] | None = None) -> LocalRpcBuilder:
+        """Calls an emulated database function (all-or-nothing); see local_rpc.py."""
+        from redhand_core.services.local_rpc import LocalRpcBuilder
+
+        return LocalRpcBuilder(self, function, params or {})
 
     def subscribe(self) -> asyncio.Queue[dict[str, Any]]:
         q: asyncio.Queue[dict[str, Any]] = asyncio.Queue(maxsize=100)
