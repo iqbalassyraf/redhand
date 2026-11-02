@@ -136,9 +136,21 @@ def test_unsigned_alg_none_token_is_rejected() -> None:
     assert resp.status_code == 401
 
 
-def test_operator_auth_fails_closed_without_configured_secret() -> None:
-    client, settings = make_client(ENVIRONMENT="staging", OPERATOR_JWT_SECRET=None)
-    assert settings.OPERATOR_JWT_SECRET is None
+def test_core_refuses_to_start_without_operator_auth_outside_development() -> None:
+    """Missing operator auth is caught at startup, not as mysterious 401s later."""
+    from pydantic import ValidationError
+
+    from redhand_core.config import Settings
+
+    for environment in ("staging", "production"):
+        with pytest.raises(ValidationError, match="not configured"):
+            Settings(ENVIRONMENT=environment)
+
+
+def test_request_path_still_fails_closed_if_the_secret_is_missing() -> None:
+    """Defense in depth: even if settings were mutated after startup, no token is accepted."""
+    client, settings = make_client()
+    settings.OPERATOR_JWT_SECRET = None
     headers = {"Authorization": f"Bearer {_token(_valid_claims())}"}
     assert client.get("/v1/state/snapshot", headers=headers).status_code == 401
 

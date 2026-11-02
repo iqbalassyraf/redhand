@@ -1,6 +1,6 @@
 # Plan: verify operator logins signed with Supabase's asymmetric keys (JWKS)
 
-**Status:** Draft, awaiting approval. No code has been written.
+**Status:** Approved 2026-11-02 and implemented (ADR 0007).
 **Follows up:** ADR 0005 and `docs/plans/phase1-plan.md` §9, item 3.
 
 ## 1. Goal

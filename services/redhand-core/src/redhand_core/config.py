@@ -105,10 +105,25 @@ class Settings(BaseSettings):
     OPERATOR_JWT_SECRET: SecretStr | None = Field(
         default=None,
         description=(
-            "HS256 secret that signs operator access tokens (the Supabase project JWT "
-            "secret in production). Unset outside development means no operator can log in. "
-            "In development/test a random per-process secret is generated when unset."
+            "HS256 mode: the shared secret that signs operator access tokens (a Supabase "
+            "project still on its legacy JWT secret, and local development). In "
+            "development/test a random per-process secret is generated when unset. "
+            "Mutually exclusive with OPERATOR_JWKS_URL."
         ),
+    )
+    OPERATOR_JWKS_URL: str | None = Field(
+        default=None,
+        description=(
+            "JWKS mode: URL of the public keys that verify operator tokens, e.g. "
+            "https://<ref>.supabase.co/auth/v1/.well-known/jwks.json (Supabase projects "
+            "using asymmetric signing keys). Accepts ES256 and RS256 only. When set, HS256 "
+            "tokens are rejected and OPERATOR_JWT_SECRET is ignored."
+        ),
+    )
+    OPERATOR_JWT_ISSUER: str | None = Field(
+        default=None,
+        description="Required with OPERATOR_JWKS_URL: the `iss` claim operator tokens must carry, "
+        "e.g. https://<ref>.supabase.co/auth/v1.",
     )
     SLACK_ORGANIZATION_ID: str | None = Field(
         default=None,
@@ -144,8 +159,26 @@ class Settings(BaseSettings):
     )
 
     @model_validator(mode="after")
-    def _development_operator_secret(self) -> Settings:
-        if self.OPERATOR_JWT_SECRET is None and self.ENVIRONMENT in ("development", "test"):
+    def _operator_auth_mode(self) -> Settings:
+        """Exactly one operator verification mode; refuse to start otherwise (fail closed)."""
+        local = self.ENVIRONMENT in ("development", "test")
+        if self.OPERATOR_JWKS_URL:
+            if self.OPERATOR_JWT_SECRET is not None and not local:
+                raise ValueError(
+                    "Set either OPERATOR_JWKS_URL or OPERATOR_JWT_SECRET, not both: the two "
+                    "verification modes are mutually exclusive."
+                )
+            if not self.OPERATOR_JWT_ISSUER:
+                raise ValueError("OPERATOR_JWT_ISSUER is required when OPERATOR_JWKS_URL is set.")
+            if not local and not self.OPERATOR_JWKS_URL.startswith("https://"):
+                raise ValueError("OPERATOR_JWKS_URL must use https outside development/test.")
+            self.OPERATOR_JWT_SECRET = None  # JWKS mode never accepts shared-secret tokens
+        elif self.OPERATOR_JWT_SECRET is None:
+            if not local:
+                raise ValueError(
+                    "Operator authentication is not configured: set OPERATOR_JWKS_URL (and "
+                    "OPERATOR_JWT_ISSUER) or OPERATOR_JWT_SECRET."
+                )
             self.OPERATOR_JWT_SECRET = SecretStr(secrets.token_urlsafe(32))
         return self
 

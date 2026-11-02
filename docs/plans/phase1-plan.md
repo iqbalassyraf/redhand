@@ -154,7 +154,7 @@ and revocation delay are in the README (§4).
 1. ~~Make each control action and its audit row a single SQL transaction.~~ Done 2026-11-02
    (ADR 0006).
 2. Pin the upstream connection to the address that passed the destination check (DNS rebinding).
-3. Supabase asymmetric JWT signing keys (JWKS) for operator tokens.
+3. ~~Supabase asymmetric JWT signing keys (JWKS) for operator tokens.~~ Done 2026-11-02 (ADR 0007).
 4. Signing-key rotation with overlapping keys in the JWKS.
 5. Idempotency-Key support for `POST /v1/passports` (other control actions are naturally
    idempotent).

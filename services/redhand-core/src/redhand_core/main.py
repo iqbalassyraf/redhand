@@ -127,7 +127,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(scim_router)
     app.include_router(passports_router)
     app.include_router(agent_auth_router)
-    if active_settings.ENVIRONMENT == "development" and active_settings.uses_local_store:
+    if (
+        active_settings.ENVIRONMENT == "development"
+        and active_settings.uses_local_store
+        and not active_settings.OPERATOR_JWKS_URL
+    ):
         app.include_router(dev_router)
 
     @app.get("/healthz", tags=["System"])

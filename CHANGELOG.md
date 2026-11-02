@@ -3,6 +3,9 @@
 ## Unreleased: Phase 1 (Identity and control)
 
 ### Changed (hardening)
+- Operator login also works with Supabase projects that use asymmetric signing keys: core verifies
+  ES256/RS256 tokens against the project's JWKS (HS256 shared-secret mode remains for local
+  development). Core refuses to start outside development unless exactly one mode is configured.
 - Every control action and its audit entry now commit in one database transaction. A failed audit
   write rolls the action back instead of leaving an unrecorded change. Concurrent changes to the
   same passport are detected and retried once, then answered with 409.

@@ -16,7 +16,7 @@
 
 | # | Boundary | Authentication | Notes |
 |---|---|---|---|
-| 1 | Operator → core | Supabase access token (HS256, `aud=authenticated`), tenant and role from `organization_members` | All control actions authorized server-side |
+| 1 | Operator → core | Supabase access token (ES256/RS256 via JWKS, or HS256 with a shared secret; `aud=authenticated`), tenant and role from `organization_members` | All control actions authorized server-side |
 | 2 | Agent → core (token exchange) | Agent key (256-bit, stored hashed) | Refused unless passport active; rate-limited per key |
 | 3 | Gateway → core (`/internal`) | Shared service token, constant-time compare | Missing token means every agent call is denied |
 | 4 | Agent → gateway | Ed25519 access token, 10 min, verified with public key | Plus per-call passport status check (≤ 2 s cache) |
@@ -33,7 +33,7 @@
 | Malicious or compromised MCP server | Response size and time limits, no redirects, secrets redacted from tool results, unsupported methods refused | Poisoned tool descriptions not yet scanned (Phase 4) |
 | SSRF through registered MCP server URLs | Registration: https and public host; per request: resolve then require public addresses | DNS rebinding between check and connect (pin connection to checked IP) |
 | Cross-tenant access | Tenant from verified membership; every core query filtered by organization; gateway context bound to token's tenant; SSE stream filtered | core uses service role, so isolation relies on core's queries (RLS is defense in depth) |
-| Forged operator identity / spoofed headers | No identity headers are trusted; reviewer is the authenticated operator | Supabase asymmetric signing keys need JWKS support |
+| Forged operator identity / spoofed headers | No identity headers are trusted; reviewer is the authenticated operator; operator tokens are verified as ES256/RS256 against the project's JWKS (or HS256 with a shared secret), never both; HS256 is rejected in JWKS mode (no algorithm confusion); issuer, audience and expiry are checked (ADR 0007) | A signed-out operator's token stays valid until it expires; shorten the Supabase access-token lifetime |
 | Insider or compromised admin abuses control actions | Role requirements (revoke, freeze-all, scope expansion need admin), explicit confirmation, append-only audit with actor and reason | No step-up authentication yet |
 | Audit tampering | `control_audit_log` blocked from UPDATE/DELETE by trigger; gateway ledger hash-chained | Gateway ledger is per process (file optional); move to database in Phase 3 |
 | Audit gap after a control action | Each action and its audit row commit in one database transaction (`control_*` functions); a failed audit write rolls the action back. See ADR 0006 | A network timeout after commit leaves the outcome unknown to the caller (the API says to reload; actions are safe to repeat) |
