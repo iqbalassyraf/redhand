@@ -101,6 +101,7 @@ gcloud run services update redhand-core --region asia-southeast1 --update-env-va
 | Smoke test: database check returns 500 | Core could not use the Supabase key. Try the *Legacy API Keys* `service_role` key: Secret Manager → `redhand-supabase-secret-key` → *New version*, paste it, then Cloud Run → `redhand-core` → *Edit & deploy new revision* (or re-run `deploy.sh core`). |
 | Smoke test: JWKS check fails | `AGENT_TOKEN_SIGNING_KEY` is missing or unreadable by `redhand-core-sa`. |
 | First request very slow, then fine | Cold start (min instances 0). Expected. |
+| `/healthz` returns 404 on the `*.run.app` address | Cloud Run's front end can intercept that path. Use `/health` (served by both services). |
 
 ## Rollback and teardown
 

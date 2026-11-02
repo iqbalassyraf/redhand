@@ -134,6 +134,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     ):
         app.include_router(dev_router)
 
+    # Google Cloud Run's front end can intercept /healthz (it never reaches the app), so the
+    # same check is also served at /health. Use /health on Cloud Run, either elsewhere.
+    @app.get("/health", tags=["System"])
     @app.get("/healthz", tags=["System"])
     async def healthcheck() -> dict[str, str]:
         return {

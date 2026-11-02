@@ -1799,6 +1799,31 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/health": {
+      "get": {
+        "operationId": "healthcheck_health_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Healthcheck Health Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Healthcheck",
+        "tags": [
+          "System"
+        ]
+      }
+    },
     "/healthz": {
       "get": {
         "operationId": "healthcheck_healthz_get",

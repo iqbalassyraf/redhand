@@ -284,3 +284,12 @@ def test_local_store_refused_outside_development(monkeypatch: pytest.MonkeyPatch
     with pytest.raises(RuntimeError, match="only allowed"):
         with TestClient(create_app()):
             pass
+
+
+def test_health_is_served_at_both_paths() -> None:
+    """/healthz for Kubernetes-style probes, /health because Cloud Run can intercept /healthz."""
+    client, _ = make_client()
+    for path in ("/health", "/healthz"):
+        body = client.get(path).json()
+        assert body["status"] == "healthy" and body["service"] == "redhand-core", path
+        assert body["environment"] == "test", path

@@ -28,14 +28,14 @@ check() { # check "<what>" <expected> <actual> [hint]
 
 # The first request after an idle period can take several seconds while Cloud Run starts the service.
 echo "Waking the services (first request after idle can be slow)..."
-status "$CORE/healthz" >/dev/null; status "$GATEWAY/healthz" >/dev/null
+status "$CORE/health" >/dev/null; status "$GATEWAY/health" >/dev/null
 
-ENVIRONMENT="$(curl -s -m 40 "$CORE/healthz" | python3 -c 'import sys,json; print(json.load(sys.stdin).get("environment",""))' 2>/dev/null || true)"
+ENVIRONMENT="$(curl -s -m 40 "$CORE/health" | python3 -c 'import sys,json; print(json.load(sys.stdin).get("environment",""))' 2>/dev/null || true)"
 echo "Core reports environment: ${ENVIRONMENT:-unknown}"
 echo
 
-check "core /healthz is up" 200 "$(status "$CORE/healthz")" "check the service logs in Cloud Run"
-check "gateway /healthz is up" 200 "$(status "$GATEWAY/healthz")" "check the service logs in Cloud Run"
+check "core /health is up" 200 "$(status "$CORE/health")" "check the service logs in Cloud Run (Cloud Run itself reserves /healthz, so this check uses /health)"
+check "gateway /health is up" 200 "$(status "$GATEWAY/health")" "check the service logs in Cloud Run (Cloud Run itself reserves /healthz, so this check uses /health)"
 
 check "core refuses requests without an operator login" 401 "$(status "$CORE/v1/passports")"
 check "core refuses a fake operator token" 401 "$(status -H 'Authorization: Bearer not-a-real-token' "$CORE/v1/passports")"

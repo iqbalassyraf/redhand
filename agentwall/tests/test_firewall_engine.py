@@ -123,3 +123,13 @@ async def test_mcp_server_vetting_endpoint() -> None:
     assert "exec_raw_command" in report["recommended_policy"]["tools"]
     assert too_big.status_code == 413
     assert not_object.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_gateway_health_is_served_at_both_paths() -> None:
+    """/healthz for Kubernetes-style probes, /health because Cloud Run can intercept /healthz."""
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        for path in ("/health", "/healthz"):
+            resp = await client.get(path)
+            assert resp.status_code == 200, path
+            assert resp.json()["service"] == "agentwall", path

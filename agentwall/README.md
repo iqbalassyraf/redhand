@@ -27,7 +27,7 @@ Every failure denies: missing or invalid token → 401, inactive passport → 40
 |---|---|
 | `POST /v1/mcp/vet` | Public, rate-limited. Heuristic static vetting of a pasted MCP manifest; fetches nothing |
 | `GET /v1/policies`, `GET /v1/audit/logs`, `GET /v1/audit/verify`, `GET /metrics` | Service token (`AGENTWALL_CORE_SERVICE_TOKEN`) |
-| `GET /healthz` | Public |
+| `GET /health` (also `/healthz`) | Public. Use `/health` on Cloud Run, which can intercept `/healthz` |
 
 ## Configuration
 
