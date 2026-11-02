@@ -157,6 +157,18 @@ uv run pytest -q
 ```
 
 ```bash
+uvx ruff@0.17.3 check --config pyproject.toml .
+```
+
+```bash
+uv run --with mypy==2.4.1 mypy
+```
+
+CI (`.github/workflows/ci.yml`) runs the same checks plus the dashboard type-check and build on
+every push. The strict type-check covers the modules listed under `[tool.mypy]` in
+`pyproject.toml`; older modules are added as they are brought up to standard.
+
+```bash
 npm --prefix apps/redhand-ui run typecheck
 ```
 

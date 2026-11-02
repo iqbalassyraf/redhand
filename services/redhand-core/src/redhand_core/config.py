@@ -17,7 +17,7 @@ from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
-class Settings(BaseModelConfig := BaseSettings):
+class Settings(BaseSettings):
     """
     Production configuration contract for `redhand-core`.
     Reads from environment variables and `.env` files automatically.

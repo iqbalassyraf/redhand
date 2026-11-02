@@ -46,3 +46,33 @@ target-version = "py311"
 # undefined names). CI runs ruff with this file for every package (--config pyproject.toml).
 # Widen the rule set in its own change when the code base is ready for it.
 select = ["E9", "F"]
+
+[tool.mypy]
+# Strict type-checking on the modules written or changed in Phase 1. The older modules are not
+# yet clean; add them here as they are brought up to standard (CLAUDE.md §6.4).
+strict = true
+explicit_package_bases = true
+follow_imports = "silent"
+files = [
+    "services/redhand-core/src/redhand_core/auth",
+    "services/redhand-core/src/redhand_core/passports",
+    "services/redhand-core/src/redhand_core/main.py",
+    "services/redhand-core/src/redhand_core/config.py",
+    "services/redhand-core/src/redhand_core/routers/passports.py",
+    "services/redhand-core/src/redhand_core/routers/agent_auth.py",
+    "services/redhand-core/src/redhand_core/routers/dev.py",
+    "services/redhand-core/src/redhand_core/routers/state.py",
+    "services/redhand-core/src/redhand_core/routers/hitl.py",
+    "services/redhand-core/src/redhand_core/services/local_store.py",
+    "services/redhand-core/src/redhand_core/services/notifications/slack.py",
+    "agentwall/src/gateway",
+    "agentwall/src/main.py",
+    "agentwall/src/firewall/engine.py",
+    "agentwall/src/telemetry/audit_logger.py",
+    "agentwall/config/settings.py",
+]
+
+[[tool.mypy.overrides]]
+# PyYAML ships no type information and adding the stubs package would be a new dependency.
+module = "yaml"
+ignore_missing_imports = true
