@@ -121,6 +121,8 @@ curl -s localhost:8080/mcp/xero -H "Authorization: Bearer $TOKEN" -H "Content-Ty
 `delete_invoice` is refused because it is not in the passport's scopes. Freeze the agent in the
 dashboard and the same call returns HTTP 403 within about 2 seconds.
 
+Deploying to Google Cloud Run (staging): see [`docs/runbooks/cloud-run-staging.md`](docs/runbooks/cloud-run-staging.md).
+
 Never use `ENVIRONMENT=development`, `ALLOW_INSECURE_MCP_URLS` or
 `AGENTWALL_ALLOW_INSECURE_UPSTREAMS` in production. All settings are listed in
 [`.env.example`](.env.example).

@@ -2,6 +2,10 @@
 
 ## Unreleased: Phase 1 (Identity and control)
 
+### Added (deployment)
+- Cloud Run staging deployment: Dockerfiles for core and the gateway, a Cloud Build config, `deploy.sh`
+  (secrets in Secret Manager, per-service identities) and `smoke.sh` (`deploy/cloudrun/`).
+
 ### Changed (hardening)
 - Operator login also works with Supabase projects that use asymmetric signing keys: core verifies
   ES256/RS256 tokens against the project's JWKS (HS256 shared-secret mode remains for local

@@ -1,0 +1,33 @@
+# redhand-core for Google Cloud Run.
+# Build from the repository root:  docker build -f deploy/cloudrun/Dockerfile.core .
+#
+# Stage 1 installs only the locked, non-dev dependencies into a virtualenv; stage 2 copies that
+# virtualenv and the service source into a slim image that runs as an unprivileged user.
+FROM python:3.13-slim AS build
+ENV UV_COMPILE_BYTECODE=1 \
+    UV_LINK_MODE=copy \
+    UV_PROJECT_ENVIRONMENT=/opt/venv \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
+RUN pip install --no-cache-dir uv==0.11.32
+WORKDIR /app
+# The uv workspace needs every member's pyproject.toml present to resolve the lockfile.
+COPY pyproject.toml uv.lock README.md ./
+COPY services/redhand-core ./services/redhand-core
+COPY packages ./packages
+COPY agentwall ./agentwall
+RUN uv sync --frozen --no-dev --package redhand-core --no-install-project
+
+FROM python:3.13-slim
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONPATH=/app/services/redhand-core/src \
+    PATH=/opt/venv/bin:$PATH
+RUN useradd --system --uid 10001 --no-create-home app
+COPY --from=build /opt/venv /opt/venv
+COPY services/redhand-core/src /app/services/redhand-core/src
+WORKDIR /app
+USER app
+EXPOSE 8080
+# Single worker on purpose: stream tickets and rate limiters live in process memory
+# (docs/plans/phase1-plan.md follow-up 6). Cloud Run supplies $PORT.
+CMD ["sh", "-c", "exec uvicorn redhand_core.main:app --host 0.0.0.0 --port ${PORT:-8080} --proxy-headers"]

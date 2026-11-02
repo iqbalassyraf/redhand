@@ -1,0 +1,25 @@
+# Keeps the image build context small and free of local state. The Dockerfiles copy only what
+# they need; this is a second line of defence (e.g. no .env, no virtualenv, no git history).
+.git
+.github
+.env
+.env.*
+!.env.example
+.venv
+**/__pycache__
+**/*.pyc
+.pytest_cache
+.ruff_cache
+.mypy_cache
+node_modules
+**/node_modules
+apps
+docs
+examples
+battleground
+scripts
+supabase
+tests
+**/tests
+deploy/helm
+deploy/dashboards
