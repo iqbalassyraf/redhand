@@ -16,7 +16,7 @@ can do.
 |---|---|---|
 | M0 | Restrict core `/metrics`; dashboard polish (scope editor, zero-scope warning, server names in the audit log) | Done |
 | M1 | Telegram panic command and alerts | Built and tested locally; not yet run against a real bot or staging |
-| M2 | Safe Mode | Not started |
+| M2 | Safe Mode | Built and tested locally; not yet on staging |
 | M3 | Budget Guard (tool-call caps, not LLM spend) | Not started |
 | M4 | Dashboard, docs, staging verification | Not started |
 

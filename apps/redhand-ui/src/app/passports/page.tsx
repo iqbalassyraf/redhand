@@ -53,6 +53,7 @@ export default function PassportsPage() {
   const [passports, setPassports] = useState<Passport[]>([]);
   const [servers, setServers] = useState<McpServer[]>([]);
   const [audit, setAudit] = useState<ControlAuditEntry[]>([]);
+  const [orgSafeMode, setOrgSafeMode] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [revealedKey, setRevealedKey] = useState<{ name: string; key: string } | null>(null);
@@ -74,14 +75,20 @@ export default function PassportsPage() {
   const refresh = useCallback(async () => {
     if (!token) return;
     try {
-      const [p, s, a] = await Promise.all([
+      const [p, s, a, o] = await Promise.all([
         passportsApi.list(token),
         passportsApi.servers(token),
         passportsApi.audit(token),
+        // An older core does not have this endpoint yet (404): show Safe Mode as off rather than failing.
+        passportsApi.orgSafeMode(token).catch((err: unknown) => {
+          if (err instanceof ApiError && err.status === 404) return { enabled: false, changed: false };
+          throw err;
+        }),
       ]);
       setPassports(p);
       setServers(s);
       setAudit(a);
+      setOrgSafeMode(o.enabled);
     } catch (err) {
       handleError(err);
     }
@@ -116,6 +123,17 @@ export default function PassportsPage() {
   }, [passports]);
 
   if (!session || !token) return null;
+
+  const onOrgSafeMode = () => {
+    if (!orgSafeMode) {
+      const reason = window.prompt("Turn Safe Mode on for ALL agents. Reason (recorded in the audit log):") ?? "";
+      act("Safe Mode is on for all agents.", () => passportsApi.setOrgSafeMode(token, true, reason));
+      return;
+    }
+    if (!window.confirm("Turn Safe Mode off for all agents? Write tools will work again (agents with their own Safe Mode stay restricted).")) return;
+    const reason = window.prompt("Reason (recorded in the audit log):") ?? "";
+    act("Safe Mode is off for all agents.", () => passportsApi.setOrgSafeMode(token, false, reason));
+  };
 
   const onFreezeAll = () => {
     const typed = window.prompt(
@@ -172,6 +190,23 @@ export default function PassportsPage() {
                 <span className="font-semibold">{counts[s]}</span>
               </span>
             ))}
+          </div>
+          <div className="flex items-center gap-2 text-[13px]">
+            <span
+              className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${
+                orgSafeMode ? "bg-[#FFF4E5] text-[#8A4B00]" : "bg-[#F2F2F2] text-[#606060]"
+              }`}
+              title="While on, agents can use only tools their scopes declare as read. You declare read or write; RedHand cannot verify it."
+            >
+              Safe Mode (all agents): {orgSafeMode ? "on" : "off"}
+            </span>
+            <button
+              onClick={onOrgSafeMode}
+              disabled={busy}
+              className="rounded-full border border-[#E5E5E5] px-3 py-1.5 text-[12px] font-medium hover:bg-[#F2F2F2] disabled:opacity-40"
+            >
+              {orgSafeMode ? "Turn off" : "Turn on"}
+            </button>
           </div>
           <div className="flex items-center gap-2">
             <button
@@ -253,6 +288,16 @@ export default function PassportsPage() {
             act(`${p.name} renewed for ${days} days.`, () => passportsApi.renew(token, p.id, days));
           }}
           onEditScopes={(p) => setEditing(p)}
+          orgSafeMode={orgSafeMode}
+          onSafeMode={(p) => {
+            if (!p.safe_mode) {
+              act(`Safe Mode is on for ${p.name}.`, () => passportsApi.setSafeMode(token, p.id, true));
+              return;
+            }
+            if (!window.confirm(`Turn Safe Mode off for ${p.name}? Its write tools will work again.`)) return;
+            const reason = window.prompt("Reason (recorded in the audit log):") ?? "";
+            act(`Safe Mode is off for ${p.name}.`, () => passportsApi.setSafeMode(token, p.id, false, reason));
+          }}
         />
 
         {editing && (
@@ -307,6 +352,8 @@ function PassportTable(props: {
   onRotate: (p: Passport) => void;
   onRenew: (p: Passport) => void;
   onEditScopes: (p: Passport) => void;
+  orgSafeMode: boolean;
+  onSafeMode: (p: Passport) => void;
 }) {
   const { passports, busy } = props;
   return (
@@ -346,6 +393,13 @@ function PassportTable(props: {
                     {p.status}
                   </span>
                   {p.status_reason && <div className="mt-1 text-[11px] text-[#606060]">{p.status_reason}</div>}
+                  {(p.safe_mode || props.orgSafeMode) && (
+                    <div className="mt-1">
+                      <span className="rounded-full bg-[#FFF4E5] px-2 py-0.5 text-[11px] font-semibold text-[#8A4B00]">
+                        safe mode{props.orgSafeMode && !p.safe_mode ? " (all)" : ""}
+                      </span>
+                    </div>
+                  )}
                 </td>
                 <td className="p-3 text-[12px]">
                   <div title={p.owner_id ?? ""}>{shortId(p.owner_id)}</div>
@@ -359,7 +413,14 @@ function PassportTable(props: {
                     {p.scopes.map((s) => (
                       <span
                         key={`${s.server}/${s.tool}/${s.access}`}
-                        className="rounded-[6px] bg-[#F2F2F2] px-1.5 py-0.5 font-mono text-[11px]"
+                        className={`rounded-[6px] bg-[#F2F2F2] px-1.5 py-0.5 font-mono text-[11px] ${
+                          (p.safe_mode || props.orgSafeMode) && s.access === "write" ? "line-through opacity-60" : ""
+                        }`}
+                        title={
+                          (p.safe_mode || props.orgSafeMode) && s.access === "write"
+                            ? "Suspended: Safe Mode is on and this scope is declared write"
+                            : undefined
+                        }
                       >
                         {s.server}/{s.tool} <span className="text-[#606060]">{s.access}</span>
                       </span>
@@ -384,6 +445,11 @@ function PassportTable(props: {
                     {p.status !== "revoked" && (
                       <>
                         <ActionButton disabled={busy} onClick={() => props.onEditScopes(p)} label="Scopes" />
+                        <ActionButton
+                          disabled={busy}
+                          onClick={() => props.onSafeMode(p)}
+                          label={p.safe_mode ? "End Safe Mode" : "Safe Mode"}
+                        />
                         <ActionButton disabled={busy} onClick={() => props.onRenew(p)} label="Renew" />
                         <ActionButton disabled={busy} onClick={() => props.onRotate(p)} label="New key" />
                         <ActionButton disabled={busy} onClick={() => props.onRevoke(p)} label="Revoke" danger />
@@ -508,7 +574,8 @@ function ScopeFields(props: { servers: McpServer[]; scopes: Scope[]; onChange: (
         <span className="text-[12px] font-semibold text-[#606060]">Scopes (what it may use)</span>
         <button
           type="button"
-          onClick={() => onChange([...scopes, { server: activeServers[0]?.slug ?? "", tool: "", access: "read" }])}
+          // New scopes default to "write": an undeclared tool counts as write, so Safe Mode suspends it.
+          onClick={() => onChange([...scopes, { server: activeServers[0]?.slug ?? "", tool: "", access: "write" }])}
           className="flex items-center gap-1 text-[12px] font-medium hover:underline"
         >
           <Plus className="h-3.5 w-3.5" /> Add scope
@@ -542,7 +609,7 @@ function ScopeFields(props: { servers: McpServer[]; scopes: Scope[]; onChange: (
             value={s.access}
             onChange={(e) => update(i, { access: e.target.value as Scope["access"] })}
             className="h-[34px] rounded-[8px] border border-[#E5E5E5] px-2"
-            title="Recorded now; enforced from Phase 2 (Safe Mode)"
+            title="In Safe Mode only read tools work. You declare read or write; RedHand cannot verify it."
           >
             <option value="read">read</option>
             <option value="write">write</option>
@@ -560,9 +627,15 @@ function ScopeFields(props: { servers: McpServer[]; scopes: Scope[]; onChange: (
       {props.servers.length === 0 && (
         <p className="text-[12px] text-[#606060]">Register an MCP server first to grant tool scopes.</p>
       )}
+      {scopes.some((s) => s.tool === "*" && s.access === "read") && (
+        <p role="note" className="rounded-[8px] bg-[#FFF4E5] p-2 text-[12px] text-[#8A4B00]">
+          A <code>*</code> scope declared read means every tool on that server counts as read-only in Safe Mode.
+          Only do this if the server really has no write tools.
+        </p>
+      )}
       <p className="text-[11px] text-[#606060]">
-        The gateway enforces server and tool today. Read/write is recorded and will be enforced with Safe
-        Mode.
+        The gateway enforces server and tool. In Safe Mode only scopes declared <strong>read</strong> work.
+        You declare read or write: RedHand cannot verify that a tool really is read-only.
       </p>
     </div>
   );
@@ -702,6 +775,7 @@ function AuditPanel(props: { entries: ControlAuditEntry[]; passports: Passport[]
   const targetLabel = (e: ControlAuditEntry): string => {
     if (e.target_type === "agent") return names.get(e.target_id) ?? shortId(e.target_id);
     if (e.target_type === "mcp_server") return `MCP server ${serverSlugs.get(e.target_id) ?? shortId(e.target_id)}`;
+    if (e.target_type === "organization") return "all agents";
     return e.target_type;
   };
   return (

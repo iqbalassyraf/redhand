@@ -27,7 +27,7 @@
 
 | Threat | Mitigation | Residual risk / follow-up |
 |---|---|---|
-| Hijacked or prompt-injected agent calls tools outside its job | Passport scopes enforced per `tools/call`; `tools/list` filtered; SQL/shell guardrails; resources/prompts methods refused | Read vs write not enforced until Safe Mode (Phase 2) |
+| Hijacked or prompt-injected agent calls tools outside its job | Passport scopes enforced per `tools/call`; `tools/list` filtered; SQL/shell guardrails; resources/prompts methods refused | Read vs write is enforced only in Safe Mode, and only as declared by the operator (ADR 0009) |
 | Stolen agent access token | 10-minute lifetime; freeze/revoke denies within ≤ 2 s via status lookup | Token usable until revoked if theft is undetected |
 | Stolen agent key | Revoke or rotate deactivates it immediately; only hash stored | No anomaly detection on key use yet |
 | Agent bypasses the gateway with raw upstream credentials | Out of scope by design; product copy states the limit | Credential broker (Phase 1.5) closes this |
@@ -44,6 +44,8 @@
 | Replay of an old command | Update ids are claimed once in the database; the secret header is required | Freeze commands are idempotent anyway |
 | Bot token leaks through logs | httpx request logging disabled in the Telegram module; errors logged by class only; tests assert the token is absent | A future logging change elsewhere could reintroduce it: the test covers the module only |
 | Removed or demoted operator still has a linked phone | Role and membership are re-read per command; unlink revokes the link | None known |
+| Agent keeps writing during an incident | Safe Mode (agent or organization): the gateway allows only read-declared scopes; on within about 2 s; audited; ON from a phone, OFF only by an admin in the dashboard (ADR 0009) | RedHand cannot verify a tool is read-only: the declaration is the operator's. A `*` scope declared read covers the whole server. |
+| Safe Mode silently skipped after a version mismatch | The gateway requires `safe_mode` to be a real boolean from core; otherwise it denies. Core reads anything but a stored `false` as ON | An old gateway ignores the flag: deploy core first and enable only after both are updated |
 | Core outage | Gateway fails closed (denies) | Availability target 99.9 %; no multi-region yet |
 | Signing key compromise | Ed25519 private key only in core; gateway holds public key | Signing-key rotation not automated |
 | Development shortcuts reach production | core refuses the in-memory store and `/v1/dev/login` outside development; signing key required outside dev/test; no hardcoded secrets | Deployment checklist must set all required secrets |

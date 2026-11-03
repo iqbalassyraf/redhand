@@ -265,6 +265,42 @@ def _control_mcp_server(store: LocalSupabaseAdapter, p: dict[str, Any]) -> dict[
     raise _error("22023", f"unsupported MCP server operation {op}")
 
 
+def _control_agent_safe_mode(store: LocalSupabaseAdapter, p: dict[str, Any]) -> dict[str, Any]:
+    org, agent_id, actor, enabled = str(p["p_org"]), str(p["p_agent"]), str(p["p_actor"]), p["p_enabled"]
+    if not isinstance(enabled, bool):
+        raise _error("22P02", "p_enabled must be a boolean")
+    agent = _find(store, "agents", org, agent_id)
+    if agent is None:
+        raise _error("P0002", "agent not found")
+    if bool(agent.get("safe_mode")) == enabled:
+        return {"changed": False, "agent_id": agent_id, "enabled": enabled}
+    agent["safe_mode"] = enabled
+    _append_audit(
+        store, org=org, actor=actor,
+        action="passport.safe_mode_enabled" if enabled else "passport.safe_mode_disabled",
+        target_type="agent", target_id=agent_id, reason=p.get("p_reason"), details={"enabled": enabled},
+    )
+    return {"changed": True, "agent_id": agent_id, "enabled": enabled}
+
+
+def _control_org_safe_mode(store: LocalSupabaseAdapter, p: dict[str, Any]) -> dict[str, Any]:
+    org, actor, enabled = str(p["p_org"]), str(p["p_actor"]), p["p_enabled"]
+    if not isinstance(enabled, bool):
+        raise _error("22P02", "p_enabled must be a boolean")
+    row = next((o for o in store.tables.get("organizations", []) if str(o.get("id")) == org), None)
+    if row is None:
+        raise _error("P0002", "organization not found")
+    if bool(row.get("safe_mode")) == enabled:
+        return {"changed": False, "enabled": enabled}
+    row["safe_mode"] = enabled
+    _append_audit(
+        store, org=org, actor=actor,
+        action="organization.safe_mode_enabled" if enabled else "organization.safe_mode_disabled",
+        target_type="organization", target_id=org, reason=p.get("p_reason"), details={"enabled": enabled},
+    )
+    return {"changed": True, "enabled": enabled}
+
+
 def _telegram_link_chat(store: LocalSupabaseAdapter, p: dict[str, Any]) -> dict[str, Any]:
     code_hash, chat_id = str(p["p_code_hash"]), int(p["p_chat_id"])
     code = next(
@@ -336,6 +372,8 @@ HANDLERS: dict[str, RpcHandler] = {
     "control_freeze_all": _control_freeze_all,
     "control_create_passport": _control_create_passport,
     "control_mcp_server": _control_mcp_server,
+    "control_agent_safe_mode": _control_agent_safe_mode,
+    "control_org_safe_mode": _control_org_safe_mode,
     "telegram_link_chat": _telegram_link_chat,
     "telegram_unlink": _telegram_unlink,
     "telegram_claim_update": _telegram_claim_update,

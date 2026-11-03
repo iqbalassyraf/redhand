@@ -41,7 +41,7 @@ class Env:
 
     def __init__(self, **settings: Any) -> None:
         self.store = LocalSupabaseAdapter()
-        self.store.tables["organizations"].append({"id": OTHER_ORG, "name": "Other", "slug": "other"})
+        self.store.tables["organizations"].append({"id": OTHER_ORG, "name": "Other", "slug": "other", "safe_mode": False})
         self.store.tables["organization_members"].append(
             {"id": str(uuid4()), "organization_id": OTHER_ORG, "user_id": OTHER_OWNER, "role": "owner"}
         )

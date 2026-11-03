@@ -230,6 +230,7 @@ def apply_insert_defaults(table: str, row: dict[str, Any]) -> None:
             "expires_at", (datetime.now(timezone.utc) + timedelta(days=90)).isoformat()
         )
         row.setdefault("allowed_tools", [])
+        row.setdefault("safe_mode", False)
 
 
 def _apply_update_triggers(table: str, before: dict[str, Any], after: dict[str, Any]) -> None:
@@ -293,6 +294,7 @@ class LocalSupabaseAdapter:
                 "slug": "archtificial-prod",
                 "siem_webhook_url": None,
                 "default_hitl_timeout_seconds": 3600,
+                "safe_mode": False,
             }
         ]
 

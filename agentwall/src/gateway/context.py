@@ -16,7 +16,7 @@ from typing import Any, Literal
 from uuid import UUID
 
 import httpx
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, StrictBool, ValidationError
 import structlog
 
 logger = structlog.get_logger(__name__)
@@ -41,6 +41,9 @@ class _AgentPayload(BaseModel):
     status: Literal["active", "frozen", "revoked", "expired"]
     version: int = Field(ge=1)
     scopes: list[Scope]
+    # Required, with no default: a core that does not send the flag (an older version) makes the
+    # lookup fail and the gateway deny, rather than silently skipping Safe Mode.
+    safe_mode: StrictBool
 
 
 class _ServerPayload(BaseModel):
@@ -66,9 +69,24 @@ class GatewayContext:
     scopes: tuple[Scope, ...]
     server_slug: str
     server_url: str | None
+    safe_mode: bool
+
+    def covers_tool(self, tool: str) -> bool:
+        """True when any scope covers the tool, ignoring Safe Mode."""
+        return any(s.server == self.server_slug and s.tool in ("*", tool) for s in self.scopes)
 
     def allows_tool(self, tool: str) -> bool:
-        return any(s.server == self.server_slug and s.tool in ("*", tool) for s in self.scopes)
+        """
+        True when the tool may be called now. In Safe Mode only scopes the operator declared as
+        'read' count, so a tool covered only by a 'write' scope is refused. RedHand cannot verify
+        that a tool really is read-only: the declaration is the operator's.
+        """
+        return any(
+            s.server == self.server_slug
+            and s.tool in ("*", tool)
+            and (not self.safe_mode or s.access == "read")
+            for s in self.scopes
+        )
 
 
 class ContextUnavailableError(Exception):
@@ -150,4 +168,5 @@ class CoreContextClient:
             scopes=tuple(payload.agent.scopes),
             server_slug=server,
             server_url=payload.server.url if payload.server else None,
+            safe_mode=payload.agent.safe_mode,
         )

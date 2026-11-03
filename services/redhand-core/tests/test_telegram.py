@@ -60,7 +60,7 @@ class FakeTelegram:
 class Env:
     def __init__(self, **settings: Any) -> None:
         self.store = LocalSupabaseAdapter()
-        self.store.tables["organizations"].append({"id": OTHER_ORG, "name": "Other", "slug": "other"})
+        self.store.tables["organizations"].append({"id": OTHER_ORG, "name": "Other", "slug": "other", "safe_mode": False})
         self.store.tables["organization_members"].append(
             {"id": str(uuid4()), "organization_id": OTHER_ORG, "user_id": OTHER_OWNER, "role": "owner"}
         )
@@ -542,3 +542,76 @@ def test_http_client_reports_non_200_without_the_token(caplog: pytest.LogCapture
 def test_httpx_request_logging_is_silenced_because_urls_carry_the_token() -> None:
     assert logging.getLogger("httpx").getEffectiveLevel() >= logging.WARNING
     assert logging.getLogger("httpcore").getEffectiveLevel() >= logging.WARNING
+
+
+# ---------------------------------------------------------------------------
+# Safe Mode commands (Phase 2, M2)
+# ---------------------------------------------------------------------------
+
+
+def _org_safe_mode(env: Env) -> bool:
+    return bool(env.client.get("/v1/organization/safe-mode", headers=env.h("viewer")).json()["enabled"])
+
+
+def test_safemode_on_for_everyone_from_telegram(env: Env) -> None:
+    env.link()
+    env.send("/safemode on")
+    assert "Safe Mode is on for all agents" in env.fake.last(OWNER_CHAT)
+    assert _org_safe_mode(env) is True
+    entry = next(e for e in env.audit() if e["action"] == "organization.safe_mode_enabled")
+    assert entry["reason"] == "via Telegram" and entry["actor_user_id"] == DEV_OPERATORS["owner"]["id"]
+    env.send("/safemode on")
+    assert "already on" in env.fake.last(OWNER_CHAT)
+    env.send("/status")
+    assert "Safe Mode for all agents: on" in env.fake.last(OWNER_CHAT)
+
+
+def test_safemode_on_for_one_agent_by_name(env: Env) -> None:
+    env.register("Alpha")
+    env.link()
+    env.send("/safemode on alpha")
+    assert env.fake.last(OWNER_CHAT) == "Safe Mode is on for Alpha."
+    rows = env.client.get("/v1/passports", headers=env.h("viewer")).json()
+    assert {p["name"]: p["safe_mode"] for p in rows}["Alpha"] is True
+    assert _org_safe_mode(env) is False
+    env.send("/safemode on Nobody")
+    assert "No agent has that name" in env.fake.last(OWNER_CHAT)
+
+
+def test_safemode_off_is_not_available_from_telegram(env: Env) -> None:
+    env.link()
+    env.send("/safemode on")
+    for text in ("/safemode off", "/safemode OFF Alpha"):
+        env.send(text)
+        assert "only available in the dashboard" in env.fake.last(OWNER_CHAT)
+    assert _org_safe_mode(env) is True
+
+
+@pytest.mark.parametrize("text", ["/safemode", "/safemode maybe", "/safemode toggle all"])
+def test_safemode_needs_a_clear_on_or_off(env: Env, text: str) -> None:
+    env.link()
+    env.send(text)
+    assert "Use /safemode on" in env.fake.last(OWNER_CHAT)
+    assert _org_safe_mode(env) is False
+
+
+def test_safemode_from_an_unlinked_or_demoted_chat_does_nothing(env: Env) -> None:
+    env.send("/safemode on", chat=555)
+    assert "not linked" in env.fake.last(555)
+    env.link("admin")
+    env.set_role("admin", "viewer")
+    env.send("/safemode on")
+    assert "no longer allows panic commands" in env.fake.last(OWNER_CHAT)
+    assert _org_safe_mode(env) is False
+
+
+def test_other_chats_are_told_when_safe_mode_changes(env: Env) -> None:
+    env.link("owner", OWNER_CHAT)
+    env.link("admin", SECOND_CHAT)
+    env.send("/safemode on", OWNER_CHAT)
+    assert "Safe Mode was turned on for all agents from Telegram" in env.fake.last(SECOND_CHAT)
+    env.client.post(
+        "/v1/organization/safe-mode", json={"enabled": False, "confirm": True, "reason": "all clear"}, headers=env.h("admin")
+    )
+    assert "Safe Mode was turned off for all agents" in env.fake.last(OWNER_CHAT)
+    assert "Reason: all clear" in env.fake.last(OWNER_CHAT)

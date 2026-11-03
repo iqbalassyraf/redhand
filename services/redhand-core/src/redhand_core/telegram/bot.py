@@ -58,7 +58,8 @@ HELP_TEXT = (
     "/status - how many agents are active, frozen or revoked\n"
     "/freeze_all [reason] - stop every active agent now\n"
     "/freeze <agent name> - stop one agent\n"
-    "Unfreezing and revoking are done in the dashboard."
+    "/safemode on [agent name] - read-only mode for all agents, or one\n"
+    "Unfreezing, revoking and turning Safe Mode off are done in the dashboard."
 )
 NOT_LINKED_TEXT = (
     "This chat is not linked to a RedHand account. In the dashboard open Passports, choose "
@@ -154,7 +155,9 @@ async def _cmd_status(supabase: Any, operator: OperatorContext, now: datetime) -
     for view in views:
         counts[view.status] = counts.get(view.status, 0) + 1
     summary = ", ".join(f"{counts.get(s, 0)} {s}" for s in ("active", "frozen", "revoked", "expired"))
-    return f"Agents: {summary}."
+    org_safe = await service.get_org_safe_mode(supabase, operator.organization_id)
+    safe = f" Safe Mode for all agents: {'on' if org_safe else 'off'}."
+    return f"Agents: {summary}.{safe}"
 
 
 async def _cmd_freeze_all(supabase: Any, operator: OperatorContext, args: str) -> tuple[str, str | None]:
@@ -179,6 +182,36 @@ async def _cmd_freeze(
     target = matches[0]
     await service.freeze(supabase, operator, target.id, _reason(""), now)
     return f"Froze {target.name}.", f"{target.name} was frozen from Telegram."
+
+
+async def _cmd_safemode(
+    supabase: Any, operator: OperatorContext, args: str, now: datetime
+) -> tuple[str, str | None]:
+    """/safemode on [agent name]. Turning it off is dashboard-only, like unfreeze."""
+    parts = args.split(maxsplit=1)
+    action = parts[0].lower() if parts else ""
+    name = parts[1].strip() if len(parts) > 1 else ""
+    if action == "off":
+        return "Turning Safe Mode off is only available in the dashboard.", None
+    if action != "on":
+        return "Use /safemode on (all agents) or /safemode on <agent name>.", None
+    if not name:
+        changed = await service.set_org_safe_mode(supabase, operator, True, _reason(""), confirm=False)
+        reply = "Safe Mode is on for all agents: only tools declared read-only will work."
+        return (reply if changed else "Safe Mode was already on for all agents."), (
+            "Safe Mode was turned on for all agents from Telegram." if changed else None
+        )
+    views = [PassportView.from_row(r, now) for r in await service.list_passport_rows(supabase, operator)]
+    matches = [v for v in views if v.status != "revoked" and v.name.casefold() == name.casefold()]
+    if len(matches) != 1:
+        problem = "More than one agent has" if len(matches) > 1 else "No agent has"
+        return f"{problem} that name.", None
+    target = matches[0]
+    _, changed = await service.set_agent_safe_mode(supabase, operator, target.id, True, _reason(""), False, now)
+    return (
+        f"Safe Mode is on for {target.name}." if changed else f"Safe Mode was already on for {target.name}.",
+        f"Safe Mode was turned on for {target.name} from Telegram." if changed else None,
+    )
 
 
 async def notify_organization(
@@ -236,7 +269,7 @@ async def handle_update(
     command = parse_command(message.text, settings.TELEGRAM_BOT_USERNAME)
     if command is None:
         command = Command("help", "")
-    name = command.name if command.name in {"start", "help", "link", "status", "freeze_all", "freeze"} else "other"
+    name = command.name if command.name in {"start", "help", "link", "status", "freeze_all", "freeze", "safemode"} else "other"
 
     try:
         claim = await supabase.rpc("telegram_claim_update", {"p_update_id": update.update_id}).execute()
@@ -290,6 +323,9 @@ async def _dispatch(
         return reply, alert, operator
     if command.name == "freeze":
         reply, alert = await _cmd_freeze(supabase, operator, command.args, now)
+        return reply, alert, operator
+    if command.name == "safemode":
+        reply, alert = await _cmd_safemode(supabase, operator, command.args, now)
         return reply, alert, operator
     if command.name in {"unfreeze", "revoke"}:
         return f"/{command.name} is only available in the dashboard.", None, operator

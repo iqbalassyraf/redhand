@@ -3,6 +3,13 @@
 ## Unreleased: Phase 2 (Stop things), in progress
 
 ### Added
+- Safe Mode (M2): put one agent, or all agents, into read-only mode. The gateway then allows only
+  tools declared `read` in the agent's scopes and hides the rest from `tools/list`. Turn it on from the
+  dashboard or with `/safemode on [agent]` in Telegram; turning it off needs an admin in the dashboard.
+  New migration `20261104000000_safe_mode.sql`. **Deploy core before the gateway**: the gateway now
+  requires core to send `safe_mode` and denies every call otherwise (`docs/runbooks/safe-mode.md`,
+  ADR 0009). RedHand cannot verify a tool is read-only; the operator declares it. New scopes in the
+  dashboard default to `write`.
 - Telegram panic command (M1): linked admins and owners can `/freeze_all`, `/freeze <name>` and
   `/status` from a phone; unfreeze and revoke stay in the dashboard. Linked chats are also alerted
   about freezes, unfreezes, revokes and freeze-all done in the dashboard. Needs a bot token and the

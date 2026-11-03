@@ -315,6 +315,57 @@ async def freeze_all(supabase: Any, operator: OperatorContext, reason: str | Non
     return [UUID(str(agent_id)) for agent_id in data["frozen_agent_ids"]]
 
 
+async def set_agent_safe_mode(
+    supabase: Any,
+    operator: OperatorContext,
+    agent_id: UUID,
+    enabled: bool,
+    reason: str | None,
+    confirm: bool,
+    now: datetime,
+) -> tuple[PassportView, bool]:
+    """Turns Safe Mode on or off for one agent. Turning it off needs explicit confirmation."""
+    if not enabled:
+        _require_confirmation(confirm, "Turning Safe Mode off")
+    data = await _rpc(
+        supabase,
+        "control_agent_safe_mode",
+        {
+            "p_org": str(operator.organization_id), "p_agent": str(agent_id),
+            "p_actor": str(operator.user_id), "p_enabled": enabled, "p_reason": reason,
+        },
+        not_found_detail="Agent passport not found.",
+        conflict_detail="Safe Mode change conflicted with another change; try again.",
+    )
+    row = await get_passport_row(supabase, operator, agent_id)
+    return PassportView.from_row(row, now), bool(data["changed"])
+
+
+async def get_org_safe_mode(supabase: Any, organization_id: UUID) -> bool:
+    res = await supabase.table("organizations").select("safe_mode").eq("id", str(organization_id)).execute()
+    rows = list(res.data or [])
+    return len(rows) == 1 and rows[0].get("safe_mode") is True
+
+
+async def set_org_safe_mode(
+    supabase: Any, operator: OperatorContext, enabled: bool, reason: str | None, confirm: bool
+) -> bool:
+    """Turns Safe Mode on or off for every agent of the organization. Returns True if it changed."""
+    if not enabled:
+        _require_confirmation(confirm, "Turning Safe Mode off")
+    data = await _rpc(
+        supabase,
+        "control_org_safe_mode",
+        {
+            "p_org": str(operator.organization_id), "p_actor": str(operator.user_id),
+            "p_enabled": enabled, "p_reason": reason,
+        },
+        not_found_detail="Organization not found.",
+        conflict_detail="Safe Mode change conflicted with another change; try again.",
+    )
+    return bool(data["changed"])
+
+
 @retry_once_on_conflict
 async def update_scopes(
     supabase: Any,
