@@ -290,9 +290,7 @@ export default function PassportsPage() {
           />
         </div>
 
-        {(session.role === "admin" || session.role === "owner") && (
-          <TelegramPanel token={token} onChanged={refresh} onError={handleError} />
-        )}
+        <TelegramPanel token={token} onChanged={refresh} onError={handleError} />
 
         <AuditPanel entries={audit} passports={passports} servers={servers} />
       </main>
@@ -742,13 +740,18 @@ function TelegramPanel(props: {
   const [links, setLinks] = useState<TelegramLink[]>([]);
   const [code, setCode] = useState<TelegramLinkCode | null>(null);
   const [unavailable, setUnavailable] = useState(false);
+  // The dashboard does not know the operator's role in production; the server decides.
+  const [forbidden, setForbidden] = useState(false);
 
   const load = useCallback(async () => {
     try {
       setLinks(await telegramApi.links(token));
       setUnavailable(false);
     } catch (err) {
-      if (err instanceof ApiError && err.status === 403) return;
+      if (err instanceof ApiError && err.status === 403) {
+        setForbidden(true);
+        return;
+      }
       onError(err);
     }
   }, [token, onError]);
@@ -763,6 +766,10 @@ function TelegramPanel(props: {
     } catch (err) {
       if (err instanceof ApiError && err.status === 503) {
         setUnavailable(true);
+        return;
+      }
+      if (err instanceof ApiError && err.status === 403) {
+        setForbidden(true);
         return;
       }
       onError(err);
@@ -787,6 +794,11 @@ function TelegramPanel(props: {
         Freeze agents from your phone with <code>/freeze_all</code> or <code>/freeze &lt;name&gt;</code>. Unfreezing
         and revoking stay in this dashboard, so a lost phone can stop agents but never start them.
       </p>
+      {forbidden && (
+        <p role="note" className="mt-3 rounded-[8px] bg-[#FFF4E5] p-2 text-[12px] text-[#8A4B00]">
+          Only an owner or admin can link or manage phones.
+        </p>
+      )}
       {unavailable && (
         <p role="note" className="mt-3 rounded-[8px] bg-[#FFF4E5] p-2 text-[12px] text-[#8A4B00]">
           Telegram is not set up on this RedHand server yet.
@@ -805,7 +817,8 @@ function TelegramPanel(props: {
       </ul>
       <button
         onClick={createCode}
-        className="mt-3 h-[34px] rounded-full border border-[#0F0F0F] px-4 text-[13px] font-semibold hover:bg-[#F2F2F2]"
+        disabled={forbidden}
+        className="mt-3 disabled:opacity-40 h-[34px] rounded-full border border-[#0F0F0F] px-4 text-[13px] font-semibold hover:bg-[#F2F2F2]"
       >
         Link Telegram
       </button>
