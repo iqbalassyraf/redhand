@@ -155,11 +155,13 @@ class Harness:
             metrics=GatewayMetrics(),
         )
 
-    def add_agent(self, scopes: list[dict[str, str]], status: str = "active", org: UUID = ORG) -> UUID:
+    def add_agent(
+        self, scopes: list[dict[str, str]], status: str = "active", org: UUID = ORG, safe_mode: bool = False
+    ) -> UUID:
         agent_id = uuid4()
         self.core.agents[str(agent_id)] = {
             "id": str(agent_id), "organization_id": str(org), "status": status, "version": 1,
-            "scopes": scopes, "expires_at": "2099-01-01T00:00:00+00:00",
+            "scopes": scopes, "expires_at": "2099-01-01T00:00:00+00:00", "safe_mode": safe_mode,
         }
         self.core.servers[(str(org), "xero")] = UPSTREAM_URL
         return agent_id
@@ -597,3 +599,119 @@ async def test_operational_endpoints_accept_service_token(monkeypatch: pytest.Mo
     assert 'outcome="deny",reason="out_of_scope"' in metrics.text
     assert verify.json()["tamper_evident_chain_intact"] is True
     assert wrong.status_code == 401
+
+
+# ---------------------------------------------------------------------------
+# Safe Mode (Phase 2, M2): only tools declared 'read' are allowed
+# ---------------------------------------------------------------------------
+
+MIXED_SCOPES = [
+    {"server": "xero", "tool": "list_invoices", "access": "read"},
+    {"server": "xero", "tool": "delete_invoice", "access": "write"},
+]
+
+
+@pytest.mark.asyncio
+async def test_safe_mode_allows_read_and_refuses_write() -> None:
+    h = Harness()
+    agent = h.add_agent(MIXED_SCOPES, safe_mode=True)
+    token = h.token(agent)
+
+    allowed = await h.call(token, params=tool("list_invoices"))
+    assert "result" in allowed.body
+
+    refused = await h.call(token, params=tool("delete_invoice", id="INV-1"))
+    assert refused.status_code == 200
+    assert refused.body["error"]["code"] == JSONRPC_POLICY_VIOLATION
+    assert "Safe Mode is on" in refused.body["error"]["message"]
+    assert [m["params"]["name"] for m in h.upstream.received if m["method"] == "tools/call"] == ["list_invoices"]
+    record = h.audit.get_recent(1)[0]
+    assert record["firewall_decision"] == "BLOCK" and record["tool_name"] == "delete_invoice"
+    assert "not declared read-only" in record["policy_violation_reasons"][0]
+
+
+@pytest.mark.asyncio
+async def test_without_safe_mode_the_same_agent_can_write() -> None:
+    h = Harness()
+    agent = h.add_agent(MIXED_SCOPES, safe_mode=False)
+    assert "result" in (await h.call(h.token(agent), params=tool("delete_invoice", id="INV-1"))).body
+
+
+@pytest.mark.asyncio
+async def test_safe_mode_wildcards() -> None:
+    h = Harness()
+    wildcard_write = h.add_agent([{"server": "xero", "tool": "*", "access": "write"}], safe_mode=True)
+    wildcard_read = h.add_agent([{"server": "xero", "tool": "*", "access": "read"}], safe_mode=True)
+    assert (await h.call(h.token(wildcard_write), params=tool("list_invoices"))).body["error"]["code"] == JSONRPC_POLICY_VIOLATION
+    assert "result" in (await h.call(h.token(wildcard_read), params=tool("list_invoices"))).body
+
+
+@pytest.mark.asyncio
+async def test_safe_mode_a_read_scope_wins_when_a_tool_has_both() -> None:
+    h = Harness()
+    both = [
+        {"server": "xero", "tool": "list_invoices", "access": "write"},
+        {"server": "xero", "tool": "*", "access": "read"},
+    ]
+    agent = h.add_agent(both, safe_mode=True)
+    assert "result" in (await h.call(h.token(agent), params=tool("list_invoices"))).body
+
+
+@pytest.mark.asyncio
+async def test_safe_mode_keeps_reporting_plain_out_of_scope_for_uncovered_tools() -> None:
+    h = Harness()
+    agent = h.add_agent(INVOICES_READ, safe_mode=True)
+    resp = await h.call(h.token(agent), params=tool("execute_sql", query="select 1"))
+    assert "out of scope" in resp.body["error"]["message"]
+    assert "not in this agent's passport scopes" in h.audit.get_recent(1)[0]["policy_violation_reasons"][0]
+
+
+@pytest.mark.asyncio
+async def test_safe_mode_filters_tools_list() -> None:
+    h = Harness()
+    normal = h.add_agent(MIXED_SCOPES, safe_mode=False)
+    safe = h.add_agent(MIXED_SCOPES, safe_mode=True)
+    names = lambda resp: sorted(t["name"] for t in resp.body["result"]["tools"])  # noqa: E731
+    assert names(await h.call(h.token(normal), method="tools/list")) == ["delete_invoice", "list_invoices"]
+    assert names(await h.call(h.token(safe), method="tools/list")) == ["list_invoices"]
+
+
+@pytest.mark.asyncio
+async def test_safe_mode_still_applies_guardrails_to_read_tools() -> None:
+    h = Harness()
+    agent = h.add_agent([{"server": "xero", "tool": "execute_sql", "access": "read"}], safe_mode=True)
+    resp = await h.call(h.token(agent), params=tool("execute_sql", query="DROP TABLE invoices;"))
+    assert resp.body["error"]["code"] == JSONRPC_POLICY_VIOLATION
+    assert h.upstream.received == []
+
+
+@pytest.mark.asyncio
+async def test_turning_safe_mode_on_reaches_the_gateway_within_the_slo() -> None:
+    """A write that works now stops working once the cache window (<= 2 s) has passed."""
+    h = Harness(ttl=2.0)
+    agent = h.add_agent(MIXED_SCOPES, safe_mode=False)
+    token = h.token(agent)
+    assert "result" in (await h.call(token, params=tool("delete_invoice", id="1"))).body
+
+    h.core.agents[str(agent)]["safe_mode"] = True  # an operator turns it on in core
+    h.clock.now += 2.01
+    refused = await h.call(token, params=tool("delete_invoice", id="2"))
+    assert refused.body["error"]["code"] == JSONRPC_POLICY_VIOLATION
+    assert "Safe Mode is on" in refused.body["error"]["message"]
+    assert h.gateway.contexts._ttl <= 4.0 <= 5.0
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("bad", ["missing", "true", "false", 1, 0, None])
+async def test_a_missing_or_non_boolean_safe_mode_flag_denies(bad: Any) -> None:
+    """Fail closed: a core that does not send a real boolean makes the gateway deny everything."""
+    h = Harness()
+    agent = h.add_agent(MIXED_SCOPES)
+    if bad == "missing":
+        del h.core.agents[str(agent)]["safe_mode"]
+    else:
+        h.core.agents[str(agent)]["safe_mode"] = bad
+    resp = await h.call(h.token(agent), params=tool("list_invoices"))
+    assert resp.status_code == 503
+    assert resp.body["error"]["code"] == JSONRPC_GATEWAY_UNAVAILABLE
+    assert h.upstream.received == []

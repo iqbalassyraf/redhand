@@ -51,6 +51,7 @@ def core_handler(request: httpx.Request) -> httpx.Response:
                 "id": AGENT, "organization_id": ORG, "status": STATE["status"], "version": 1,
                 "scopes": [{"server": "xero", "tool": "list_invoices", "access": "read"}],
                 "expires_at": "2099-01-01T00:00:00+00:00",
+                "safe_mode": False,
             },
             "server": {"slug": "xero", "url": "https://mcp.example.com/x"},
         },

@@ -152,6 +152,23 @@
         "title": "AccessBoundaryCondition",
         "type": "object"
       },
+      "AgentSafeModeResponse": {
+        "properties": {
+          "changed": {
+            "title": "Changed",
+            "type": "boolean"
+          },
+          "passport": {
+            "$ref": "#/components/schemas/PassportView"
+          }
+        },
+        "required": [
+          "passport",
+          "changed"
+        ],
+        "title": "AgentSafeModeResponse",
+        "type": "object"
+      },
       "AgentTokenResponse": {
         "properties": {
           "access_token": {
@@ -897,6 +914,24 @@
         "title": "McpServerView",
         "type": "object"
       },
+      "OrganizationSafeModeResponse": {
+        "properties": {
+          "changed": {
+            "title": "Changed",
+            "type": "boolean"
+          },
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "enabled",
+          "changed"
+        ],
+        "title": "OrganizationSafeModeResponse",
+        "type": "object"
+      },
       "PassportCreateRequest": {
         "additionalProperties": false,
         "properties": {
@@ -1080,6 +1115,10 @@
             ],
             "title": "Owner Id"
           },
+          "safe_mode": {
+            "title": "Safe Mode",
+            "type": "boolean"
+          },
           "scopes": {
             "items": {
               "$ref": "#/components/schemas/Scope"
@@ -1133,7 +1172,8 @@
           "expires_at",
           "version",
           "created_at",
-          "last_seen_at"
+          "last_seen_at",
+          "safe_mode"
         ],
         "title": "PassportView",
         "type": "object"
@@ -1291,6 +1331,38 @@
           "userName"
         ],
         "title": "SCIMUserCreateRequest",
+        "type": "object"
+      },
+      "SafeModeRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "confirm": {
+            "default": false,
+            "description": "Required to turn Safe Mode off.",
+            "title": "Confirm",
+            "type": "boolean"
+          },
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          }
+        },
+        "required": [
+          "enabled"
+        ],
+        "title": "SafeModeRequest",
         "type": "object"
       },
       "Scope": {
@@ -2990,6 +3062,145 @@
         ]
       }
     },
+    "/v1/organization/safe-mode": {
+      "get": {
+        "operationId": "get_organization_safe_mode_v1_organization_safe_mode_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-RedHand-Org",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Redhand-Org"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrganizationSafeModeResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Organization Safe Mode",
+        "tags": [
+          "Agent Passports & Control Actions"
+        ]
+      },
+      "post": {
+        "description": "Safe Mode for every agent of the organization.",
+        "operationId": "set_organization_safe_mode_v1_organization_safe_mode_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-RedHand-Org",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Redhand-Org"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SafeModeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrganizationSafeModeResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Set Organization Safe Mode",
+        "tags": [
+          "Agent Passports & Control Actions"
+        ]
+      }
+    },
     "/v1/passports": {
       "get": {
         "operationId": "list_passports_v1_passports_get",
@@ -3618,6 +3829,92 @@
           }
         },
         "summary": "Rotate Agent Key",
+        "tags": [
+          "Agent Passports & Control Actions"
+        ]
+      }
+    },
+    "/v1/passports/{agent_id}/safe-mode": {
+      "post": {
+        "description": "Safe Mode: while on, the gateway allows this agent only tools its scopes declare as read.",
+        "operationId": "set_agent_safe_mode_v1_passports__agent_id__safe_mode_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "agent_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Agent Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-RedHand-Org",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Redhand-Org"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SafeModeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentSafeModeResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Set Agent Safe Mode",
         "tags": [
           "Agent Passports & Control Actions"
         ]

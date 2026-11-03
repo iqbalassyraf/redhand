@@ -17,11 +17,12 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, ConfigDict, Field
 
-from redhand_core.auth.operator import AdminDep, OperatorContext, SecurityOperatorDep, ViewerDep
+from redhand_core.auth.operator import AdminDep, OperatorContext, OperatorDep, Role, SecurityOperatorDep, ViewerDep
 from redhand_core.config import Settings, get_settings
 from redhand_core.passports import service
 from redhand_core.passports.models import (
     MAX_REASON_LENGTH,
+    AgentSafeModeResponse,
     ConfirmedControlActionRequest,
     ControlActionRequest,
     ControlActionResponse,
@@ -30,10 +31,12 @@ from redhand_core.passports.models import (
     KeyRotationResponse,
     McpServerCreateRequest,
     McpServerView,
+    OrganizationSafeModeResponse,
     PassportCreateRequest,
     PassportCreateResponse,
     PassportView,
     RenewRequest,
+    SafeModeRequest,
     ScopesUpdateRequest,
     utcnow,
 )
@@ -148,6 +151,51 @@ async def freeze_all_agents(
     return FreezeAllResponse(
         organization_id=operator.organization_id, frozen_count=len(frozen), frozen_agent_ids=frozen
     )
+
+
+def _require_safe_mode_role(operator: OperatorContext, enabled: bool) -> None:
+    """Turning Safe Mode ON is a stopping action (security operator); OFF restores access (admin)."""
+    needed = Role.SECURITY_OPERATOR if enabled else Role.ADMIN
+    if operator.role < needed:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"This action requires the '{needed.name.lower()}' role or higher.",
+        )
+
+
+@router.post("/passports/{agent_id}/safe-mode", response_model=AgentSafeModeResponse)
+async def set_agent_safe_mode(
+    agent_id: UUID, payload: SafeModeRequest, operator: OperatorDep, supabase: SupabaseDep, telegram: OptionalClientDep
+) -> AgentSafeModeResponse:
+    """Safe Mode: while on, the gateway allows this agent only tools its scopes declare as read."""
+    _require_safe_mode_role(operator, payload.enabled)
+    passport, changed = await service.set_agent_safe_mode(
+        supabase, operator, agent_id, payload.enabled, payload.reason, payload.confirm, utcnow()
+    )
+    if changed:
+        state = "on" if payload.enabled else "off"
+        await _alert(supabase, telegram, operator, f"Safe Mode was turned {state} for {passport.name}", payload.reason)
+    return AgentSafeModeResponse(passport=passport, changed=changed)
+
+
+@router.get("/organization/safe-mode", response_model=OrganizationSafeModeResponse)
+async def get_organization_safe_mode(operator: ViewerDep, supabase: SupabaseDep) -> OrganizationSafeModeResponse:
+    return OrganizationSafeModeResponse(
+        enabled=await service.get_org_safe_mode(supabase, operator.organization_id), changed=False
+    )
+
+
+@router.post("/organization/safe-mode", response_model=OrganizationSafeModeResponse)
+async def set_organization_safe_mode(
+    payload: SafeModeRequest, operator: OperatorDep, supabase: SupabaseDep, telegram: OptionalClientDep
+) -> OrganizationSafeModeResponse:
+    """Safe Mode for every agent of the organization."""
+    _require_safe_mode_role(operator, payload.enabled)
+    changed = await service.set_org_safe_mode(supabase, operator, payload.enabled, payload.reason, payload.confirm)
+    if changed:
+        state = "on" if payload.enabled else "off"
+        await _alert(supabase, telegram, operator, f"Safe Mode was turned {state} for all agents", payload.reason)
+    return OrganizationSafeModeResponse(enabled=payload.enabled, changed=changed)
 
 
 @router.put("/passports/{agent_id}/scopes", response_model=ControlActionResponse)

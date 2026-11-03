@@ -91,6 +91,7 @@ export interface Passport {
   version: number;
   created_at: string | null;
   last_seen_at: string | null;
+  safe_mode: boolean;
 }
 
 export interface PassportCreateResponse {
@@ -154,6 +155,17 @@ export const passportsApi = {
     apiFetch<ControlActionResponse>(`/v1/passports/${id}/revoke`, t, {
       method: "POST",
       body: { reason: reason || null, confirm: true },
+    }),
+  setSafeMode: (t: string, id: string, enabled: boolean, reason?: string) =>
+    apiFetch<{ passport: Passport; changed: boolean }>(`/v1/passports/${id}/safe-mode`, t, {
+      method: "POST",
+      body: { enabled, reason: reason || null, confirm: !enabled },
+    }),
+  orgSafeMode: (t: string) => apiFetch<{ enabled: boolean; changed: boolean }>("/v1/organization/safe-mode", t),
+  setOrgSafeMode: (t: string, enabled: boolean, reason?: string) =>
+    apiFetch<{ enabled: boolean; changed: boolean }>("/v1/organization/safe-mode", t, {
+      method: "POST",
+      body: { enabled, reason: reason || null, confirm: !enabled },
     }),
   updateScopes: (t: string, id: string, scopes: Scope[], reason?: string) =>
     apiFetch<ControlActionResponse>(`/v1/passports/${id}/scopes`, t, {

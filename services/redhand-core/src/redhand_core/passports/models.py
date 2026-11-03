@@ -12,7 +12,7 @@ from datetime import datetime, timezone
 from typing import Any, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, StrictBool, field_validator
 
 PassportStatus = Literal["active", "frozen", "revoked", "expired"]
 StoredStatus = Literal["active", "frozen", "revoked"]
@@ -27,9 +27,10 @@ MAX_REASON_LENGTH = 500
 class Scope(BaseModel):
     """
     One allowlisted permission. `tool="*"` allows every tool on the server.
-    `access` is recorded and displayed but NOT enforced in Phase 1: MCP servers'
-    own read/write hints are self-declared and untrusted. Enforcement arrives with
-    Safe Mode (Phase 2) together with a trusted tool classification.
+    `access` is declared by the operator, never inferred: MCP servers' own read/write hints are
+    self-declared by the server and untrusted. It is enforced only while Safe Mode is on (ADR 0009):
+    then the gateway allows a tool only if a scope with access "read" covers it. RedHand cannot verify
+    that a tool really is read-only.
     """
 
     model_config = ConfigDict(extra="forbid", frozen=True)
@@ -134,6 +135,7 @@ class PassportView(BaseModel):
     version: int
     created_at: datetime | None
     last_seen_at: datetime | None
+    safe_mode: bool
 
     @classmethod
     def from_row(cls, row: dict[str, Any], now: datetime) -> PassportView:
@@ -157,6 +159,7 @@ class PassportView(BaseModel):
             version=int(row.get("version") or 1),
             created_at=_opt_ts("created_at"),
             last_seen_at=_opt_ts("last_seen_at"),
+            safe_mode=row.get("safe_mode") is True,
         )
 
 
@@ -175,6 +178,24 @@ class ConfirmedControlActionRequest(ControlActionRequest):
     confirm: bool = Field(
         default=False, description="Must be true. Guards against accidental unfreeze/revoke."
     )
+
+
+class SafeModeRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    enabled: StrictBool
+    reason: str | None = Field(default=None, max_length=MAX_REASON_LENGTH)
+    confirm: StrictBool = Field(default=False, description="Required to turn Safe Mode off.")
+
+
+class AgentSafeModeResponse(BaseModel):
+    passport: PassportView
+    changed: bool
+
+
+class OrganizationSafeModeResponse(BaseModel):
+    enabled: bool
+    changed: bool
 
 
 class ScopesUpdateRequest(BaseModel):

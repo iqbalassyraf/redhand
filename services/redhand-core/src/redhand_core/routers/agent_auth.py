@@ -219,6 +219,7 @@ class GatewayAgentContext(BaseModel):
     version: int
     scopes: list[Scope]
     expires_at: datetime
+    safe_mode: bool
 
 
 class GatewayServerContext(BaseModel):
@@ -280,6 +281,16 @@ async def gateway_context(
     )
     server_row = server_res.data if server_res else None
 
+    # Safe Mode is on when the agent's flag OR the organization's flag is on. Anything that is not
+    # an explicit false (a missing row, null, a non-boolean) counts as ON: the restrictive reading.
+    org_res = await (
+        supabase.table("organizations").select("safe_mode").eq("id", str(organization_id)).maybe_single().execute()
+    )
+    org_row = org_res.data if org_res else None
+    safe_mode = not (
+        agent.get("safe_mode") is False and org_row is not None and org_row.get("safe_mode") is False
+    )
+
     await (
         supabase.table("agents")
         .update({"last_seen_at": now.isoformat()})
@@ -296,6 +307,7 @@ async def gateway_context(
             version=int(agent.get("version") or 1),
             scopes=scopes,
             expires_at=expires_at,
+            safe_mode=safe_mode,
         ),
         server=GatewayServerContext(slug=server_row["slug"], url=server_row["url"]) if server_row else None,
     )

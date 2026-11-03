@@ -155,6 +155,11 @@ class McpGateway:
             tool_name, arguments = params["name"], raw_args
 
             if not context.allows_tool(tool_name):
+                if context.safe_mode and context.covers_tool(tool_name):
+                    reasons = [f"Safe Mode is on: tool '{tool_name}' on server '{server}' is not declared read-only."]
+                    self._record(identity, context, method, message, "BLOCK", reasons, 403, tool_name, arguments)
+                    return deny(200, JSONRPC_POLICY_VIOLATION, f"PolicyViolation: Safe Mode is on and tool '{tool_name}' is not read-only.",
+                                "safe_mode", {"tool_name": tool_name, "violations": reasons})
                 reasons = [f"Tool '{tool_name}' on server '{server}' is not in this agent's passport scopes."]
                 self._record(identity, context, method, message, "BLOCK", reasons, 403, tool_name, arguments)
                 return deny(200, JSONRPC_POLICY_VIOLATION, f"PolicyViolation: tool '{tool_name}' is out of scope.",
