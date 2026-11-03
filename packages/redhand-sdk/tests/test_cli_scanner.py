@@ -9,7 +9,6 @@ import json
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-import pytest
 
 from redhand_sdk.cli import main as cli_main
 from redhand_sdk.scanner.ast_checker import scan_python_file

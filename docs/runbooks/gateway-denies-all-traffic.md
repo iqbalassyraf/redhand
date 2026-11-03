@@ -5,7 +5,7 @@
 
 This is the fail-closed design working: the gateway could not confirm passports, so it refused.
 
-1. Check core health: `curl https://<core>/healthz`.
+1. Check core health: `curl https://<core>/health` (on Google Cloud Run use `/health`; the platform can intercept `/healthz`).
 2. Check the gateway has the service token: `AGENTWALL_CORE_SERVICE_TOKEN` must equal core's
    `INTERNAL_SERVICE_TOKEN`. On startup the gateway logs an error when it is unset.
 3. Check gateway → core reachability from the gateway host: `AGENTWALL_CORE_URL`.

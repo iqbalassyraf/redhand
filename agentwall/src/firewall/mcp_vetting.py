@@ -179,7 +179,7 @@ class MCPServerAuditor:
                             category="SCHEMA_RISK",
                             tool_name=tool_name,
                             title=f"Permissive additionalProperties in Tool '{tool_name}'",
-                            description=f"Tool schema allows arbitrary additional fields to pass unvalidated.",
+                            description="Tool schema allows arbitrary additional fields to pass unvalidated.",
                             remediation="Set 'additionalProperties: false' in tool JSON schema.",
                         )
                     )

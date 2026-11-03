@@ -155,6 +155,11 @@ export const passportsApi = {
       method: "POST",
       body: { reason: reason || null, confirm: true },
     }),
+  updateScopes: (t: string, id: string, scopes: Scope[], reason?: string) =>
+    apiFetch<ControlActionResponse>(`/v1/passports/${id}/scopes`, t, {
+      method: "PUT",
+      body: { scopes, reason: reason || null, confirm: true },
+    }),
   renew: (t: string, id: string, days: number) =>
     apiFetch<Passport>(`/v1/passports/${id}/renew`, t, {
       method: "POST",
@@ -174,4 +179,24 @@ export const passportsApi = {
   servers: (t: string) => apiFetch<McpServer[]>("/v1/mcp-servers", t),
   createServer: (t: string, body: { slug: string; name: string; url: string }) =>
     apiFetch<McpServer>("/v1/mcp-servers", t, { method: "POST", body }),
+};
+
+export interface TelegramLinkCode {
+  code: string;
+  expires_at: string;
+  bot_username: string | null;
+  deep_link: string | null;
+}
+
+export interface TelegramLink {
+  id: string;
+  user_id: string;
+  created_at: string;
+}
+
+export const telegramApi = {
+  createCode: (t: string) => apiFetch<TelegramLinkCode>("/v1/telegram/link-code", t, { method: "POST" }),
+  links: (t: string) => apiFetch<TelegramLink[]>("/v1/telegram/links", t),
+  unlink: (t: string, id: string) =>
+    apiFetch<{ link_id: string; changed: boolean }>(`/v1/telegram/links/${id}/unlink`, t, { method: "POST" }),
 };

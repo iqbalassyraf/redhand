@@ -18,6 +18,9 @@ import {
   type PassportStatus,
   type Scope,
   passportsApi,
+  type TelegramLink,
+  type TelegramLinkCode,
+  telegramApi,
 } from "@/lib/api";
 import { useAuth, useRequiredSession } from "@/lib/auth";
 
@@ -54,6 +57,7 @@ export default function PassportsPage() {
   const [notice, setNotice] = useState<string | null>(null);
   const [revealedKey, setRevealedKey] = useState<{ name: string; key: string } | null>(null);
   const [busy, setBusy] = useState(false);
+  const [editing, setEditing] = useState<Passport | null>(null);
 
   const handleError = useCallback(
     (err: unknown) => {
@@ -248,7 +252,25 @@ export default function PassportsPage() {
             if (!Number.isInteger(days) || days < 1 || days > 365) return;
             act(`${p.name} renewed for ${days} days.`, () => passportsApi.renew(token, p.id, days));
           }}
+          onEditScopes={(p) => setEditing(p)}
         />
+
+        {editing && (
+          <ScopeEditor
+            key={editing.id}
+            passport={editing}
+            servers={servers}
+            busy={busy}
+            onCancel={() => setEditing(null)}
+            onSave={(scopes, reason) => {
+              const target = editing;
+              setEditing(null);
+              act(`Scopes updated for ${target.name}.`, () =>
+                passportsApi.updateScopes(token, target.id, scopes, reason)
+              );
+            }}
+          />
+        )}
 
         <div className="grid gap-6 lg:grid-cols-2">
           <RegisterAgentForm
@@ -268,7 +290,11 @@ export default function PassportsPage() {
           />
         </div>
 
-        <AuditPanel entries={audit} passports={passports} />
+        {(session.role === "admin" || session.role === "owner") && (
+          <TelegramPanel token={token} onChanged={refresh} onError={handleError} />
+        )}
+
+        <AuditPanel entries={audit} passports={passports} servers={servers} />
       </main>
     </div>
   );
@@ -282,6 +308,7 @@ function PassportTable(props: {
   onRevoke: (p: Passport) => void;
   onRotate: (p: Passport) => void;
   onRenew: (p: Passport) => void;
+  onEditScopes: (p: Passport) => void;
 }) {
   const { passports, busy } = props;
   return (
@@ -358,6 +385,7 @@ function PassportTable(props: {
                     )}
                     {p.status !== "revoked" && (
                       <>
+                        <ActionButton disabled={busy} onClick={() => props.onEditScopes(p)} label="Scopes" />
                         <ActionButton disabled={busy} onClick={() => props.onRenew(p)} label="Renew" />
                         <ActionButton disabled={busy} onClick={() => props.onRotate(p)} label="New key" />
                         <ActionButton disabled={busy} onClick={() => props.onRevoke(p)} label="Revoke" danger />
@@ -399,10 +427,6 @@ function RegisterAgentForm(props: {
   const [framework, setFramework] = useState("n8n");
   const [days, setDays] = useState(90);
   const [scopes, setScopes] = useState<Scope[]>([]);
-  const firstServer = props.servers.find((s) => s.is_active)?.slug ?? "";
-
-  const updateScope = (i: number, patch: Partial<Scope>) =>
-    setScopes((prev) => prev.map((s, idx) => (idx === i ? { ...s, ...patch } : s)));
 
   return (
     <section className="rounded-[12px] border border-[#E5E5E5] bg-[#FFFFFF] p-4">
@@ -411,6 +435,12 @@ function RegisterAgentForm(props: {
         className="mt-3 flex flex-col gap-3 text-[13px]"
         onSubmit={(e) => {
           e.preventDefault();
+          if (
+            scopes.length === 0 &&
+            !window.confirm("This agent has no scopes and will be refused on every tool. Register it anyway?")
+          ) {
+            return;
+          }
           props.onSubmit({ name, framework, scopes, expires_in_days: days });
           setName("");
           setScopes([]);
@@ -448,70 +478,12 @@ function RegisterAgentForm(props: {
           </label>
         </div>
 
-        <div className="flex flex-col gap-2">
-          <div className="flex items-center justify-between">
-            <span className="text-[12px] font-semibold text-[#606060]">Scopes (what it may use)</span>
-            <button
-              type="button"
-              onClick={() => setScopes((prev) => [...prev, { server: firstServer, tool: "", access: "read" }])}
-              className="flex items-center gap-1 text-[12px] font-medium hover:underline"
-            >
-              <Plus className="h-3.5 w-3.5" /> Add scope
-            </button>
-          </div>
-          {scopes.map((s, i) => (
-            <div key={i} className="flex gap-2">
-              <select
-                value={s.server}
-                onChange={(e) => updateScope(i, { server: e.target.value })}
-                className="h-[34px] w-[130px] rounded-[8px] border border-[#E5E5E5] px-2"
-                required
-              >
-                <option value="" disabled>
-                  server
-                </option>
-                {props.servers
-                  .filter((srv) => srv.is_active)
-                  .map((srv) => (
-                    <option key={srv.id} value={srv.slug}>
-                      {srv.slug}
-                    </option>
-                  ))}
-              </select>
-              <input
-                required
-                placeholder="tool name or *"
-                value={s.tool}
-                onChange={(e) => updateScope(i, { tool: e.target.value })}
-                className="h-[34px] flex-1 rounded-[8px] border border-[#E5E5E5] px-2 font-mono text-[12px]"
-              />
-              <select
-                value={s.access}
-                onChange={(e) => updateScope(i, { access: e.target.value as Scope["access"] })}
-                className="h-[34px] rounded-[8px] border border-[#E5E5E5] px-2"
-                title="Recorded now; enforced from Phase 2 (Safe Mode)"
-              >
-                <option value="read">read</option>
-                <option value="write">write</option>
-              </select>
-              <button
-                type="button"
-                aria-label="Remove scope"
-                onClick={() => setScopes((prev) => prev.filter((_, idx) => idx !== i))}
-                className="px-1 text-[#606060] hover:text-[#B42318]"
-              >
-                <Trash2 className="h-4 w-4" />
-              </button>
-            </div>
-          ))}
-          {props.servers.length === 0 && (
-            <p className="text-[12px] text-[#606060]">Register an MCP server first to grant tool scopes.</p>
-          )}
-          <p className="text-[11px] text-[#606060]">
-            The gateway enforces server and tool today. Read/write is recorded and will be enforced with
-            Safe Mode.
+        <ScopeFields servers={props.servers} scopes={scopes} onChange={setScopes} />
+        {scopes.length === 0 && (
+          <p role="note" className="rounded-[8px] bg-[#FFF4E5] p-2 text-[12px] text-[#8A4B00]">
+            No scopes: this agent will be refused on every tool until you add some.
           </p>
-        </div>
+        )}
 
         <button
           type="submit"
@@ -520,6 +492,132 @@ function RegisterAgentForm(props: {
         >
           Register and issue key
         </button>
+      </form>
+    </section>
+  );
+}
+
+/** Editable list of scopes; shared by the register form and the scope editor. */
+function ScopeFields(props: { servers: McpServer[]; scopes: Scope[]; onChange: (next: Scope[]) => void }) {
+  const { scopes, onChange } = props;
+  const activeServers = props.servers.filter((srv) => srv.is_active);
+  const update = (i: number, patch: Partial<Scope>) =>
+    onChange(scopes.map((s, idx) => (idx === i ? { ...s, ...patch } : s)));
+
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="flex items-center justify-between">
+        <span className="text-[12px] font-semibold text-[#606060]">Scopes (what it may use)</span>
+        <button
+          type="button"
+          onClick={() => onChange([...scopes, { server: activeServers[0]?.slug ?? "", tool: "", access: "read" }])}
+          className="flex items-center gap-1 text-[12px] font-medium hover:underline"
+        >
+          <Plus className="h-3.5 w-3.5" /> Add scope
+        </button>
+      </div>
+      {scopes.map((s, i) => (
+        <div key={i} className="flex gap-2">
+          <select
+            value={s.server}
+            onChange={(e) => update(i, { server: e.target.value })}
+            className="h-[34px] w-[130px] rounded-[8px] border border-[#E5E5E5] px-2"
+            required
+          >
+            <option value="" disabled>
+              server
+            </option>
+            {activeServers.map((srv) => (
+              <option key={srv.id} value={srv.slug}>
+                {srv.slug}
+              </option>
+            ))}
+          </select>
+          <input
+            required
+            placeholder="tool name or *"
+            value={s.tool}
+            onChange={(e) => update(i, { tool: e.target.value })}
+            className="h-[34px] flex-1 rounded-[8px] border border-[#E5E5E5] px-2 font-mono text-[12px]"
+          />
+          <select
+            value={s.access}
+            onChange={(e) => update(i, { access: e.target.value as Scope["access"] })}
+            className="h-[34px] rounded-[8px] border border-[#E5E5E5] px-2"
+            title="Recorded now; enforced from Phase 2 (Safe Mode)"
+          >
+            <option value="read">read</option>
+            <option value="write">write</option>
+          </select>
+          <button
+            type="button"
+            aria-label="Remove scope"
+            onClick={() => onChange(scopes.filter((_, idx) => idx !== i))}
+            className="px-1 text-[#606060] hover:text-[#B42318]"
+          >
+            <Trash2 className="h-4 w-4" />
+          </button>
+        </div>
+      ))}
+      {props.servers.length === 0 && (
+        <p className="text-[12px] text-[#606060]">Register an MCP server first to grant tool scopes.</p>
+      )}
+      <p className="text-[11px] text-[#606060]">
+        The gateway enforces server and tool today. Read/write is recorded and will be enforced with Safe
+        Mode.
+      </p>
+    </div>
+  );
+}
+
+function ScopeEditor(props: {
+  passport: Passport;
+  servers: McpServer[];
+  busy: boolean;
+  onSave: (scopes: Scope[], reason: string) => void;
+  onCancel: () => void;
+}) {
+  const [scopes, setScopes] = useState<Scope[]>(props.passport.scopes);
+  const [reason, setReason] = useState("");
+  return (
+    <section className="rounded-[12px] border-2 border-[#0F0F0F] bg-[#FFFFFF] p-4">
+      <h2 className="text-[15px] font-semibold">Edit scopes for {props.passport.name}</h2>
+      <form
+        className="mt-3 flex flex-col gap-3 text-[13px]"
+        onSubmit={(e) => {
+          e.preventDefault();
+          props.onSave(scopes, reason);
+        }}
+      >
+        <ScopeFields servers={props.servers} scopes={scopes} onChange={setScopes} />
+        {scopes.length === 0 && (
+          <p role="note" className="rounded-[8px] bg-[#FFF4E5] p-2 text-[12px] text-[#8A4B00]">
+            Saving with no scopes makes this agent refuse every tool.
+          </p>
+        )}
+        <input
+          maxLength={500}
+          placeholder="Reason (recorded in the audit log)"
+          value={reason}
+          onChange={(e) => setReason(e.target.value)}
+          className="h-[34px] rounded-[8px] border border-[#E5E5E5] px-3"
+        />
+        <div className="flex gap-2">
+          <button
+            type="submit"
+            disabled={props.busy}
+            className="h-[34px] flex-1 rounded-full bg-[#0F0F0F] font-semibold text-[#FFFFFF] disabled:opacity-40"
+          >
+            Save scopes (admin)
+          </button>
+          <button
+            type="button"
+            onClick={props.onCancel}
+            className="h-[34px] rounded-full border border-[#E5E5E5] px-4 hover:bg-[#F2F2F2]"
+          >
+            Cancel
+          </button>
+        </div>
       </form>
     </section>
   );
@@ -600,8 +698,14 @@ function McpServersPanel(props: {
   );
 }
 
-function AuditPanel(props: { entries: ControlAuditEntry[]; passports: Passport[] }) {
+function AuditPanel(props: { entries: ControlAuditEntry[]; passports: Passport[]; servers: McpServer[] }) {
   const names = new Map(props.passports.map((p) => [p.id, p.name]));
+  const serverSlugs = new Map(props.servers.map((s) => [s.id, s.slug]));
+  const targetLabel = (e: ControlAuditEntry): string => {
+    if (e.target_type === "agent") return names.get(e.target_id) ?? shortId(e.target_id);
+    if (e.target_type === "mcp_server") return `MCP server ${serverSlugs.get(e.target_id) ?? shortId(e.target_id)}`;
+    return e.target_type;
+  };
   return (
     <section className="rounded-[12px] border border-[#E5E5E5] bg-[#FFFFFF] p-4">
       <h2 className="text-[15px] font-semibold">Control audit log</h2>
@@ -612,7 +716,7 @@ function AuditPanel(props: { entries: ControlAuditEntry[]; passports: Passport[]
           <li key={e.id} className="flex flex-wrap items-baseline justify-between gap-2 py-2">
             <span>
               <span className="font-mono font-semibold">{e.action}</span>{" "}
-              {e.target_type === "agent" ? names.get(e.target_id) ?? shortId(e.target_id) : e.target_type}
+              {targetLabel(e)}
               {e.reason && <span className="text-[#606060]"> · {e.reason}</span>}
               {typeof e.details?.frozen_count === "number" && (
                 <span className="text-[#606060]"> · {String(e.details.frozen_count)} agents</span>
@@ -624,6 +728,104 @@ function AuditPanel(props: { entries: ControlAuditEntry[]; passports: Passport[]
           </li>
         ))}
       </ul>
+    </section>
+  );
+}
+
+/** Link a phone to the panic command and manage linked chats (admin / owner). */
+function TelegramPanel(props: {
+  token: string;
+  onChanged: () => void;
+  onError: (err: unknown) => void;
+}) {
+  const { token, onChanged, onError } = props;
+  const [links, setLinks] = useState<TelegramLink[]>([]);
+  const [code, setCode] = useState<TelegramLinkCode | null>(null);
+  const [unavailable, setUnavailable] = useState(false);
+
+  const load = useCallback(async () => {
+    try {
+      setLinks(await telegramApi.links(token));
+      setUnavailable(false);
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 403) return;
+      onError(err);
+    }
+  }, [token, onError]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  const createCode = async () => {
+    try {
+      setCode(await telegramApi.createCode(token));
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 503) {
+        setUnavailable(true);
+        return;
+      }
+      onError(err);
+    }
+  };
+
+  const unlink = async (link: TelegramLink) => {
+    if (!window.confirm("Remove this phone? It will no longer be able to freeze agents.")) return;
+    try {
+      await telegramApi.unlink(token, link.id);
+      await load();
+      onChanged();
+    } catch (err) {
+      onError(err);
+    }
+  };
+
+  return (
+    <section className="rounded-[12px] border border-[#E5E5E5] bg-[#FFFFFF] p-4">
+      <h2 className="text-[15px] font-semibold">Telegram panic command</h2>
+      <p className="mt-1 text-[12px] text-[#606060]">
+        Freeze agents from your phone with <code>/freeze_all</code> or <code>/freeze &lt;name&gt;</code>. Unfreezing
+        and revoking stay in this dashboard, so a lost phone can stop agents but never start them.
+      </p>
+      {unavailable && (
+        <p role="note" className="mt-3 rounded-[8px] bg-[#FFF4E5] p-2 text-[12px] text-[#8A4B00]">
+          Telegram is not set up on this RedHand server yet.
+        </p>
+      )}
+      <ul className="mt-3 flex flex-col gap-1 text-[13px]">
+        {links.length === 0 && <li className="text-[#606060]">No phone linked.</li>}
+        {links.map((l) => (
+          <li key={l.id} className="flex items-center justify-between gap-2">
+            <span>
+              Linked by {shortId(l.user_id)} · {new Date(l.created_at).toLocaleString()}
+            </span>
+            <ActionButton label="Unlink" danger onClick={() => unlink(l)} />
+          </li>
+        ))}
+      </ul>
+      <button
+        onClick={createCode}
+        className="mt-3 h-[34px] rounded-full border border-[#0F0F0F] px-4 text-[13px] font-semibold hover:bg-[#F2F2F2]"
+      >
+        Link Telegram
+      </button>
+      {code && (
+        <div className="mt-3 rounded-[8px] bg-[#F2F2F2] p-3 text-[13px]">
+          <p>
+            Send this to the bot within 10 minutes: <code className="font-semibold">/link {code.code}</code>
+          </p>
+          {code.deep_link && (
+            <p className="mt-1">
+              Or open{" "}
+              <a href={code.deep_link} target="_blank" rel="noreferrer" className="underline">
+                {code.deep_link}
+              </a>{" "}
+              on your phone and tap Start.
+            </p>
+          )}
+          <p className="mt-1 text-[11px] text-[#606060]">The code works once. Anyone who has it can link their phone.</p>
+        </div>
+      )}
     </section>
   );
 }

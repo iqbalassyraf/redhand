@@ -12,12 +12,12 @@ from __future__ import annotations
 import ipaddress
 from typing import Annotated, Any
 from urllib.parse import urlsplit
-from uuid import UUID, uuid4
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, ConfigDict, Field
 
-from redhand_core.auth.operator import AdminDep, SecurityOperatorDep, ViewerDep
+from redhand_core.auth.operator import AdminDep, OperatorContext, SecurityOperatorDep, ViewerDep
 from redhand_core.config import Settings, get_settings
 from redhand_core.passports import service
 from redhand_core.passports.models import (
@@ -37,18 +37,23 @@ from redhand_core.passports.models import (
     ScopesUpdateRequest,
     utcnow,
 )
+from redhand_core.routers.telegram import OptionalClientDep
 from redhand_core.routers.telemetry import get_supabase_service_client
+from redhand_core.telegram.bot import notify_organization
+from redhand_core.telegram.client import TelegramClient
 
 router = APIRouter(prefix="/v1", tags=["Agent Passports & Control Actions"])
 
 SupabaseDep = Annotated[Any, Depends(get_supabase_service_client)]
 
 
-def _audit_failed() -> HTTPException:
-    return HTTPException(
-        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-        detail="The action was applied, but its audit record could not be written. Contact support.",
-    )
+async def _alert(
+    supabase: Any, telegram: TelegramClient | None, operator: OperatorContext, what: str, reason: str | None
+) -> None:
+    """Tells linked Telegram chats about a stopping or restoring action. Best effort, never raises."""
+    who = operator.email or "An operator"
+    text = f"RedHand: {what} in the dashboard by {who}." + (f" Reason: {reason}" if reason else "")
+    await notify_organization(supabase, telegram, operator.organization_id, text)
 
 
 # -----------------------------------------------------------------------------
@@ -60,10 +65,7 @@ def _audit_failed() -> HTTPException:
 async def register_agent(
     payload: PassportCreateRequest, operator: SecurityOperatorDep, supabase: SupabaseDep
 ) -> PassportCreateResponse:
-    try:
-        passport, key = await service.create_passport(supabase, operator, payload, utcnow())
-    except service.AuditWriteError as exc:
-        raise _audit_failed() from exc
+    passport, key = await service.create_passport(supabase, operator, payload, utcnow())
     return PassportCreateResponse(passport=passport, agent_key=key)
 
 
@@ -80,12 +82,15 @@ async def get_passport(agent_id: UUID, operator: ViewerDep, supabase: SupabaseDe
 
 @router.post("/passports/{agent_id}/freeze", response_model=ControlActionResponse)
 async def freeze_agent(
-    agent_id: UUID, payload: ControlActionRequest, operator: SecurityOperatorDep, supabase: SupabaseDep
+    agent_id: UUID,
+    payload: ControlActionRequest,
+    operator: SecurityOperatorDep,
+    supabase: SupabaseDep,
+    telegram: OptionalClientDep,
 ) -> ControlActionResponse:
-    try:
-        passport, changed = await service.freeze(supabase, operator, agent_id, payload.reason, utcnow())
-    except service.AuditWriteError as exc:
-        raise _audit_failed() from exc
+    passport, changed = await service.freeze(supabase, operator, agent_id, payload.reason, utcnow())
+    if changed:
+        await _alert(supabase, telegram, operator, f"{passport.name} was frozen", payload.reason)
     return ControlActionResponse(passport=passport, changed=changed)
 
 
@@ -95,26 +100,29 @@ async def unfreeze_agent(
     payload: ConfirmedControlActionRequest,
     operator: SecurityOperatorDep,
     supabase: SupabaseDep,
+    telegram: OptionalClientDep,
 ) -> ControlActionResponse:
-    try:
-        passport, changed = await service.unfreeze(
-            supabase, operator, agent_id, payload.reason, payload.confirm, utcnow()
-        )
-    except service.AuditWriteError as exc:
-        raise _audit_failed() from exc
+    passport, changed = await service.unfreeze(
+        supabase, operator, agent_id, payload.reason, payload.confirm, utcnow()
+    )
+    if changed:
+        await _alert(supabase, telegram, operator, f"{passport.name} was unfrozen", payload.reason)
     return ControlActionResponse(passport=passport, changed=changed)
 
 
 @router.post("/passports/{agent_id}/revoke", response_model=ControlActionResponse)
 async def revoke_agent(
-    agent_id: UUID, payload: ConfirmedControlActionRequest, operator: AdminDep, supabase: SupabaseDep
+    agent_id: UUID,
+    payload: ConfirmedControlActionRequest,
+    operator: AdminDep,
+    supabase: SupabaseDep,
+    telegram: OptionalClientDep,
 ) -> ControlActionResponse:
-    try:
-        passport, changed = await service.revoke(
-            supabase, operator, agent_id, payload.reason, payload.confirm, utcnow()
-        )
-    except service.AuditWriteError as exc:
-        raise _audit_failed() from exc
+    passport, changed = await service.revoke(
+        supabase, operator, agent_id, payload.reason, payload.confirm, utcnow()
+    )
+    if changed:
+        await _alert(supabase, telegram, operator, f"{passport.name} was permanently revoked", payload.reason)
     return ControlActionResponse(passport=passport, changed=changed)
 
 
@@ -127,7 +135,7 @@ class FreezeAllRequest(BaseModel):
 
 @router.post("/passports/freeze-all", response_model=FreezeAllResponse)
 async def freeze_all_agents(
-    payload: FreezeAllRequest, operator: AdminDep, supabase: SupabaseDep
+    payload: FreezeAllRequest, operator: AdminDep, supabase: SupabaseDep, telegram: OptionalClientDep
 ) -> FreezeAllResponse:
     """Kill switch: freezes every active agent in the organization in one statement."""
     if not payload.confirm:
@@ -135,10 +143,8 @@ async def freeze_all_agents(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail='Freeze-all requires explicit confirmation: send "confirm": true.',
         )
-    try:
-        frozen = await service.freeze_all(supabase, operator, payload.reason, utcnow())
-    except service.AuditWriteError as exc:
-        raise _audit_failed() from exc
+    frozen = await service.freeze_all(supabase, operator, payload.reason)
+    await _alert(supabase, telegram, operator, f"All agents were frozen ({len(frozen)} stopped)", payload.reason)
     return FreezeAllResponse(
         organization_id=operator.organization_id, frozen_count=len(frozen), frozen_agent_ids=frozen
     )
@@ -148,12 +154,9 @@ async def freeze_all_agents(
 async def update_agent_scopes(
     agent_id: UUID, payload: ScopesUpdateRequest, operator: AdminDep, supabase: SupabaseDep
 ) -> ControlActionResponse:
-    try:
-        passport, changed = await service.update_scopes(
-            supabase, operator, agent_id, payload.scopes, payload.reason, payload.confirm, utcnow()
-        )
-    except service.AuditWriteError as exc:
-        raise _audit_failed() from exc
+    passport, changed = await service.update_scopes(
+        supabase, operator, agent_id, payload.scopes, payload.reason, payload.confirm, utcnow()
+    )
     return ControlActionResponse(passport=passport, changed=changed)
 
 
@@ -161,22 +164,16 @@ async def update_agent_scopes(
 async def renew_agent(
     agent_id: UUID, payload: RenewRequest, operator: AdminDep, supabase: SupabaseDep
 ) -> PassportView:
-    try:
-        return await service.renew(
-            supabase, operator, agent_id, payload.expires_in_days, payload.reason, utcnow()
-        )
-    except service.AuditWriteError as exc:
-        raise _audit_failed() from exc
+    return await service.renew(
+        supabase, operator, agent_id, payload.expires_in_days, payload.reason, utcnow()
+    )
 
 
 @router.post("/passports/{agent_id}/rotate-key", response_model=KeyRotationResponse)
 async def rotate_agent_key(
     agent_id: UUID, payload: ControlActionRequest, operator: SecurityOperatorDep, supabase: SupabaseDep
 ) -> KeyRotationResponse:
-    try:
-        passport, key = await service.rotate_key(supabase, operator, agent_id, payload.reason, utcnow())
-    except service.AuditWriteError as exc:
-        raise _audit_failed() from exc
+    passport, key = await service.rotate_key(supabase, operator, agent_id, payload.reason, utcnow())
     return KeyRotationResponse(passport=passport, agent_key=key)
 
 
@@ -237,35 +234,7 @@ async def register_mcp_server(
     settings: Annotated[Settings, Depends(get_settings)],
 ) -> McpServerView:
     validate_mcp_server_url(payload.url, settings.ALLOW_INSECURE_MCP_URLS)
-    existing = await (
-        supabase.table("mcp_servers")
-        .select("id")
-        .eq("organization_id", str(operator.organization_id))
-        .eq("slug", payload.slug)
-        .execute()
-    )
-    if existing.data:
-        raise HTTPException(status.HTTP_409_CONFLICT, f"An MCP server with slug '{payload.slug}' exists.")
-    server_id = uuid4()
-    res = await supabase.table("mcp_servers").insert(
-        {
-            "id": str(server_id),
-            "organization_id": str(operator.organization_id),
-            "slug": payload.slug,
-            "name": payload.name,
-            "url": payload.url,
-            "is_active": True,
-            "created_by": str(operator.user_id),
-        }
-    ).execute()
-    try:
-        await service.write_audit(
-            supabase, operator=operator, action="mcp_server.registered", target_type="mcp_server",
-            target_id=server_id, reason=None, details={"slug": payload.slug, "url": payload.url},
-        )
-    except service.AuditWriteError as exc:
-        raise _audit_failed() from exc
-    return _server_view(dict(res.data[0]))
+    return _server_view(await service.register_mcp_server(supabase, operator, payload))
 
 
 @router.get("/mcp-servers", response_model=list[McpServerView])
@@ -280,20 +249,4 @@ async def list_mcp_servers(operator: ViewerDep, supabase: SupabaseDep) -> list[M
 async def deactivate_mcp_server(
     server_id: UUID, operator: AdminDep, supabase: SupabaseDep
 ) -> McpServerView:
-    res = await (
-        supabase.table("mcp_servers")
-        .update({"is_active": False})
-        .eq("id", str(server_id))
-        .eq("organization_id", str(operator.organization_id))
-        .execute()
-    )
-    if not res.data:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, f"MCP server '{server_id}' not found.")
-    try:
-        await service.write_audit(
-            supabase, operator=operator, action="mcp_server.deactivated", target_type="mcp_server",
-            target_id=server_id, reason=None,
-        )
-    except service.AuditWriteError as exc:
-        raise _audit_failed() from exc
-    return _server_view(dict(res.data[0]))
+    return _server_view(await service.deactivate_mcp_server(supabase, operator, server_id))

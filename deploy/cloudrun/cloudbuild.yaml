@@ -1,0 +1,13 @@
+# Builds one image with Google Cloud Build and pushes it to Artifact Registry.
+# Used by deploy.sh:  gcloud builds submit --config deploy/cloudrun/cloudbuild.yaml \
+#     --substitutions _DOCKERFILE=...,_IMAGE=... .
+substitutions:
+  _DOCKERFILE: deploy/cloudrun/Dockerfile.core
+  _IMAGE: ""
+steps:
+  - name: gcr.io/cloud-builders/docker
+    args: ["build", "-f", "${_DOCKERFILE}", "-t", "${_IMAGE}", "."]
+images:
+  - "${_IMAGE}"
+options:
+  logging: CLOUD_LOGGING_ONLY

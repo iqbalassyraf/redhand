@@ -1,8 +1,14 @@
 """
 Operator (human) authentication and tenant resolution for redhand-core.
 
-Operators authenticate with a Supabase Auth access token (a JWT). We verify it locally
-with an explicit algorithm allowlist, audience and expiry, then resolve which tenant
+Operators authenticate with a Supabase Auth access token (a JWT). We verify it locally, in
+one of two mutually exclusive modes chosen by configuration (ADR 0007):
+
+- JWKS mode (`OPERATOR_JWKS_URL`): Supabase projects using asymmetric signing keys; ES256 or
+  RS256 against the project's public keys (see operator_jwks.py).
+- HS256 mode (`OPERATOR_JWT_SECRET`): a shared secret; local development and tests.
+
+Either way the algorithm allowlist, audience and expiry are enforced. We then resolve which tenant
 (organization) and role the operator acts as from `organization_members`. The tenant is
 never taken from the request on trust: a requested organization is only honoured if the
 verified user is a member of it.
@@ -23,14 +29,14 @@ from fastapi import Depends, Header, HTTPException, status
 import jwt
 
 from redhand_core.auth import bearer_token
+from redhand_core.auth.operator_jwks import OperatorJwksVerifier, OperatorTokenError
 from redhand_core.config import Settings, get_settings
 from redhand_core.routers.telemetry import get_supabase_service_client
 
 logger = logging.getLogger("redhand.core.auth")
 
-# Supabase signs user access tokens with HS256 (project JWT secret) and the
-# "authenticated" audience. Only this algorithm is accepted; "none" and asymmetric
-# algorithms are rejected so a token can't pick its own verification method.
+# HS256 mode accepts only HS256; "none" and every other algorithm are rejected so a token
+# can't pick its own verification method.
 OPERATOR_JWT_ALGORITHMS = ["HS256"]
 OPERATOR_JWT_AUDIENCE = "authenticated"
 OPERATOR_JWT_LEEWAY_SECONDS = 30
@@ -80,7 +86,7 @@ def _signing_secret(settings: Settings) -> str | None:
 
 
 def decode_operator_token(token: str, settings: Settings) -> dict[str, Any]:
-    """Verifies signature, algorithm, audience and expiry. Raises 401 on any failure."""
+    """HS256 mode: verifies signature, algorithm, audience and expiry. Raises 401 on failure."""
     secret = _signing_secret(settings)
     if not secret:
         # Fail closed: without a configured secret no operator can authenticate.
@@ -100,6 +106,32 @@ def decode_operator_token(token: str, settings: Settings) -> dict[str, Any]:
         logger.info("Operator token rejected: %s", type(exc).__name__)
         raise _unauthorized("Invalid or expired operator token.") from exc
     return claims
+
+
+_jwks_verifiers: dict[tuple[str, str], OperatorJwksVerifier] = {}
+
+
+def _jwks_verifier(settings: Settings) -> OperatorJwksVerifier:
+    """One verifier (and key cache) per configured JWKS URL and issuer."""
+    url, issuer = settings.OPERATOR_JWKS_URL, settings.OPERATOR_JWT_ISSUER
+    if not url or not issuer:
+        raise _unauthorized()  # unreachable: Settings validation enforces both together
+    cache_key = (url, issuer)
+    if cache_key not in _jwks_verifiers:
+        _jwks_verifiers[cache_key] = OperatorJwksVerifier(jwks_url=url, issuer=issuer)
+    return _jwks_verifiers[cache_key]
+
+
+async def verify_operator_token(token: str, settings: Settings) -> dict[str, Any]:
+    """Verifies an operator token in whichever mode is configured. Raises 401 on any failure."""
+    if settings.OPERATOR_JWKS_URL:
+        try:
+            return await _jwks_verifier(settings).verify(token)
+        except OperatorTokenError as exc:
+            # Log the failure class only; never the token.
+            logger.info("Operator token rejected: %s", exc)
+            raise _unauthorized("Invalid or expired operator token.") from exc
+    return decode_operator_token(token, settings)
 
 
 async def resolve_membership(
@@ -145,7 +177,7 @@ async def get_operator(
     token = bearer_token(authorization)
     if token is None:
         raise _unauthorized()
-    claims = decode_operator_token(token, settings)
+    claims = await verify_operator_token(token, settings)
 
     try:
         user_id = UUID(str(claims["sub"]))

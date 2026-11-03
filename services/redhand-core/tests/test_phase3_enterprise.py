@@ -5,19 +5,14 @@ File: services/redhand-core/tests/test_phase3_enterprise.py
 
 from __future__ import annotations
 
-import json
-from uuid import uuid4
 
 from fastapi.testclient import TestClient
-import pytest
 
 from pydantic import SecretStr
 
 
 from core_helpers import make_client
 from redhand_core.services.worm_audit_logger import (
-    WORMProvider,
-    compute_merkle_root,
     get_worm_audit_logger,
 )
 from redhand_sidecar.proxy import app as sidecar_app

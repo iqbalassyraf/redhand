@@ -47,7 +47,9 @@ class FirewallPolicyEngine:
         logger.info("Loaded AgentWall firewall policies", tools_count=tools_count, path=str(self.policy_file_path))
 
     def get_tool_policy(self, tool_name: str) -> dict[str, Any] | None:
-        return self.policies.get("tools", {}).get(tool_name)
+        policy = self.policies.get("tools", {}).get(tool_name)
+        # A malformed entry (not a mapping) is treated as "no policy", which denies.
+        return policy if isinstance(policy, dict) else None
 
     def evaluate_tool_call(
         self,

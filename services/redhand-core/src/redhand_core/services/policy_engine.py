@@ -12,8 +12,6 @@ from dataclasses import dataclass
 from enum import Enum
 import fnmatch
 import logging
-import re
-from typing import Any
 
 logger = logging.getLogger("redhand.core.policy_engine")
 

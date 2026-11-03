@@ -4,7 +4,7 @@ FastAPI application entrypoint for AgentWall, the RedHand MCP gateway.
 Public surface:
 - POST /mcp/{server}   agents' MCP traffic (agent access token required)
 - POST /v1/mcp/vet     static MCP manifest vetting (public, size- and rate-limited)
-- GET  /healthz        liveness
+- GET  /health, /healthz   liveness (use /health on Cloud Run)
 Operational endpoints (/v1/policies, /v1/audit/*, /metrics) require the internal
 service token; operators reach audit data through redhand-core.
 """
@@ -148,6 +148,9 @@ async def _read_json_body(request: Request, limit: int) -> Any:
         return None
 
 
+# Google Cloud Run's front end can intercept /healthz (it never reaches the app), so the same
+# check is also served at /health. Use /health on Cloud Run, either elsewhere.
+@app.get("/health", status_code=status.HTTP_200_OK)
 @app.get("/healthz", status_code=status.HTTP_200_OK)
 async def healthz() -> dict[str, Any]:
     return {"status": "healthy", "service": "agentwall", "version": "0.2.0"}

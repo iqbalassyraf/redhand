@@ -150,11 +150,28 @@ and revocation delay are in the README (§4).
   `X-RedHand-Upstream-Authorization`. This was implied by "customers keep their own keys in v1"
   but not spelled out.
 
+### Staging verification (2026-11-02)
+Run by the project owner on the staging stack (Cloud Run `asia-southeast1`, Supabase Singapore,
+Vercel dashboard) with `scripts/staging_agent.py` and a real public MCP server (DeepWiki, over the
+internet). Delays are measured between the dashboard's control audit log (whole seconds) and the
+agent script's millisecond clock, so each is accurate to about one second.
+
+| Done test | Result on staging |
+|---|---|
+| 1. Register an agent, passport visible | Passed. Agents appear with owner, scopes, expiry and status. |
+| 2. In-scope call allowed, out-of-scope denied and logged | Passed. `run` mode 6 of 6: allowed call reached DeepWiki, `ask_question` refused, `tools/list` filtered, unknown server refused. The refusal's record in the gateway log was not checked. |
+| 3. Revoke one agent, next call fails within the SLO | Passed. The agent stopped 1.2 to 2.2 s after the revoke, with "passport is revoked". Not yet re-checked: that the revoked key can no longer obtain a new token. |
+| 4. Freeze all, every agent denied, action audited | Passed. The audit log records `organization.frozen_all` (3 agents, with reason). Both watched agents stopped 0.7 to 2.3 s later. |
+
+Also observed: freeze of one agent took effect in 1.5 to 2.5 s; unfreeze resumed calls in 0.5 to
+3 s (the denied status is cached up to 2 s and the script polls every 1 s). Target: 5 s.
+An agent registered with no scope was refused on every tool, as designed.
+
 ### Follow-ups (not done in Phase 1)
-1. Make each control action and its audit row a single SQL transaction (today: two statements; a
-   failed audit write returns 500 after the action applied).
+1. ~~Make each control action and its audit row a single SQL transaction.~~ Done 2026-11-02
+   (ADR 0006).
 2. Pin the upstream connection to the address that passed the destination check (DNS rebinding).
-3. Supabase asymmetric JWT signing keys (JWKS) for operator tokens.
+3. ~~Supabase asymmetric JWT signing keys (JWKS) for operator tokens.~~ Done 2026-11-02 (ADR 0007).
 4. Signing-key rotation with overlapping keys in the JWKS.
 5. Idempotency-Key support for `POST /v1/passports` (other control actions are naturally
    idempotent).
@@ -164,9 +181,13 @@ and revocation delay are in the README (§4).
 7. Move the gateway ledger into the database (Phase 3, Black Box Recorder).
 8. Dashboard session in httpOnly cookies instead of sessionStorage.
 9. Step-up authentication for unfreeze, scope expansion and freeze-all.
-10. core `/metrics` is unauthenticated (pre-existing); restrict at the network or add a token.
+10. ~~core `/metrics` is unauthenticated~~ Done in Phase 2 M0: it now needs the service token.
 11. Explicit ruff rule set and a type-checker (mypy/pyright) in the repo and CI, so "zero new
     warnings" has a baseline. ESLint is not configured for the dashboard.
 12. Add a `LICENSE` file (README previously claimed Apache 2.0).
 13. Drop the superseded `agents.allowed_tools` column in a later contract migration.
 14. Local stdio MCP servers (needs a local shim) and resources/prompts scopes.
+15. Dashboard polish found during the staging test. Done in Phase 2 M0: scope editor, zero-scope
+    warning, MCP server names in the audit log. Still open: show the actor's email in the audit log
+    (core returns only the user id) and rename an agent (needs a new API endpoint and a change to
+    the atomic SQL function, so it needs its own approval).

@@ -5,6 +5,7 @@ Agent Passports, agent credentials, control actions and the gateway context endp
 
 from __future__ import annotations
 
+import copy
 from datetime import datetime, timedelta, timezone
 from typing import Any
 from uuid import uuid4
@@ -484,21 +485,111 @@ def test_control_audit_is_tenant_scoped_and_append_only(env: Env) -> None:
         asyncio.run(env.store.table("control_audit_log").update({"reason": "x"}).execute())
 
 
-def test_audit_failure_after_action_is_reported(env: Env, monkeypatch: pytest.MonkeyPatch) -> None:
+class _FailingAuditLog(list):  # type: ignore[type-arg]  # test double for an unwritable audit table
+    def insert(self, *_: Any) -> None:
+        from postgrest.exceptions import APIError
+
+        # The database reports a failed statement as an APIError with a SQLSTATE code.
+        raise APIError({"code": "P0001", "message": "simulated audit failure", "hint": None, "details": None})
+
+
+def _break_audit_log(env: Env) -> dict[str, Any]:
+    """Makes the audit insert fail and returns a copy of every other table for comparison."""
+    state = copy.deepcopy({k: v for k, v in env.store.tables.items() if k != "control_audit_log"})
+    env.store.tables["control_audit_log"] = _FailingAuditLog()
+    return state
+
+
+def _state_without_audit(env: Env) -> dict[str, Any]:
+    return {k: v for k, v in env.store.tables.items() if k != "control_audit_log"}
+
+
+def test_failed_audit_write_rolls_back_every_control_action(env: Env) -> None:
+    """Atomicity: if the audit row cannot be written, the action is not applied at all."""
+    created = env.register()
+    agent_id, key = created["passport"]["id"], created["agent_key"]
+    env.client.post(
+        "/v1/mcp-servers", json={"slug": "xero", "name": "Xero", "url": "http://localhost:9100/mcp"},
+        headers=env.h("admin"),
+    )
+    server_id = env.client.get("/v1/mcp-servers", headers=env.h("viewer")).json()[0]["id"]
+    before = _break_audit_log(env)
+
+    attempts: list[tuple[str, str, dict[str, Any], str]] = [
+        ("post", f"/v1/passports/{agent_id}/freeze", {"reason": "x"}, "operator"),
+        ("post", f"/v1/passports/{agent_id}/revoke", {"confirm": True}, "admin"),
+        ("post", f"/v1/passports/{agent_id}/rotate-key", {}, "operator"),
+        ("post", f"/v1/passports/{agent_id}/renew", {"expires_in_days": 5}, "admin"),
+        ("put", f"/v1/passports/{agent_id}/scopes", {"scopes": [], "confirm": True}, "admin"),
+        ("post", "/v1/passports/freeze-all", {"confirm": True, "reason": "x"}, "admin"),
+        ("post", "/v1/passports", {"name": "Second bot"}, "operator"),
+        ("post", "/v1/mcp-servers", {"slug": "github", "name": "GH", "url": "http://localhost:9101/mcp"}, "admin"),
+        ("post", f"/v1/mcp-servers/{server_id}/deactivate", {}, "admin"),
+    ]
+    for method, url, body, role in attempts:
+        resp = env.client.request(method, url, json=body, headers=env.h(role))
+        assert resp.status_code == 500, (url, resp.text)
+        assert "could not be completed" in resp.json()["detail"], url
+        assert _state_without_audit(env) == before, f"{url} left partial changes behind"
+
+    # The agent was never affected: its key still works.
+    env.store.tables["control_audit_log"] = []
+    assert env.exchange(key).status_code == 200
+
+
+def test_unexpected_database_error_is_generic_and_does_not_leak(env: Env, monkeypatch: pytest.MonkeyPatch) -> None:
+    from postgrest.exceptions import APIError
+
     agent_id = env.register()["passport"]["id"]
-    original_table = env.store.table
 
-    def failing_table(name: str) -> Any:
-        if name == "control_audit_log":
-            raise RuntimeError("storage down")
-        return original_table(name)
+    def exploding_rpc(function: str, params: Any = None) -> Any:
+        raise APIError({"code": "XX000", "message": "internal detail: relation secret_table", "hint": None, "details": None})
 
-    monkeypatch.setattr(env.store, "table", failing_table)
+    monkeypatch.setattr(env.store, "rpc", exploding_rpc)
     resp = env.client.post(f"/v1/passports/{agent_id}/freeze", json={}, headers=env.h())
     assert resp.status_code == 500
-    assert "audit record could not be written" in resp.json()["detail"]
-    # The safety action itself still took effect.
-    assert next(r for r in env.store.tables["agents"] if r["id"] == agent_id)["status"] == "frozen"
+    assert "secret_table" not in resp.text and "internal detail" not in resp.text
+
+
+def _interfere_before_rpc(env: Env, agent_id: str, statuses: list[str]) -> list[int]:
+    """Simulates another operator changing the passport between our read and our write."""
+    calls: list[int] = []
+    original = env.store.rpc
+
+    def rpc(function: str, params: Any = None) -> Any:
+        if function == "control_agent_change":
+            index = len(calls)
+            calls.append(index)
+            if index < len(statuses):
+                row = next(r for r in env.store.tables["agents"] if r["id"] == agent_id)
+                row["status"] = statuses[index]
+        return original(function, params)
+
+    env.store.rpc = rpc  # type: ignore[method-assign]  # test double
+    return calls
+
+
+def test_concurrent_change_is_retried_once_from_fresh_state(env: Env) -> None:
+    agent_id = env.register()["passport"]["id"]
+    # Another operator freezes the agent after our revoke read "active" but before it applies.
+    calls = _interfere_before_rpc(env, agent_id, ["frozen"])
+    resp = env.client.post(f"/v1/passports/{agent_id}/revoke", json={"confirm": True}, headers=env.h("admin"))
+    assert resp.status_code == 200 and resp.json()["passport"]["status"] == "revoked"
+    assert len(calls) == 2  # first attempt conflicted, second succeeded
+    actions = [e["action"] for e in env.audit()]
+    assert actions.count("passport.revoked") == 1
+
+
+def test_persistent_concurrent_changes_end_in_409_without_partial_state(env: Env) -> None:
+    agent_id = env.register()["passport"]["id"]
+    audit_before = len(env.audit())
+    _interfere_before_rpc(env, agent_id, ["frozen", "active"])
+    resp = env.client.post(f"/v1/passports/{agent_id}/revoke", json={"confirm": True}, headers=env.h("admin"))
+    assert resp.status_code == 409
+    assert "changed by someone else" in resp.json()["detail"]
+    assert len(env.audit()) == audit_before  # nothing was recorded because nothing was applied
+    row = next(r for r in env.store.tables["agents"] if r["id"] == agent_id)
+    assert row["status"] != "revoked"
 
 
 def test_signing_key_required_outside_development() -> None:

@@ -36,7 +36,7 @@ outside the gateway are not covered. Copy must say "RedHand covers agents connec
 | Revocation | Per-call status lookup, ≤ 2 s cache, ≤ 5 s SLO | ADR 0004 |
 | Operator login and tenancy | Supabase Auth; tenant from membership | ADR 0005 |
 | Who holds upstream credentials (v1) | The customer/agent (`X-RedHand-Upstream-Authorization`); RedHand brokering is Phase 1.5 | ADR 0001 |
-| Hosting | Hosted first; self-host via existing sidecar/Helm later | Open |
+| Hosting | Hosted first; staging on Google Cloud Run in `asia-southeast1` (free tier), Supabase in Singapore; self-host via existing sidecar/Helm later | Staging: `docs/runbooks/cloud-run-staging.md` |
 | Where customers' agents run | To be validated with 5–10 Malaysian SMEs | Open |
 | Starter-tier gating of enterprise features (SCIM, multi-cloud STS, Helm, OCSF) | Gate by tier, don't delete | Open |
 

@@ -13,11 +13,12 @@ from contextlib import asynccontextmanager
 import logging
 from typing import Any, AsyncIterator
 
-from fastapi import FastAPI, Request, Response
+from fastapi import Depends, FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from supabase import acreate_client
 
 from redhand_core.config import Settings, get_settings
+from redhand_core.routers.agent_auth import require_internal_service
 from redhand_core.routers.agent_auth import router as agent_auth_router
 from redhand_core.routers.dev import router as dev_router
 from redhand_core.routers.hitl import router as hitl_router
@@ -25,6 +26,7 @@ from redhand_core.routers.passports import router as passports_router
 from redhand_core.routers.iam_broker import get_sts_downscoper, router as iam_broker_router
 from redhand_core.routers.scim import router as scim_router
 from redhand_core.routers.state import router as state_router
+from redhand_core.routers.telegram import router as telegram_router
 from redhand_core.routers.telemetry import (
     get_supabase_service_client,
     router as telemetry_router,
@@ -127,9 +129,17 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(scim_router)
     app.include_router(passports_router)
     app.include_router(agent_auth_router)
-    if active_settings.ENVIRONMENT == "development" and active_settings.uses_local_store:
+    app.include_router(telegram_router)
+    if (
+        active_settings.ENVIRONMENT == "development"
+        and active_settings.uses_local_store
+        and not active_settings.OPERATOR_JWKS_URL
+    ):
         app.include_router(dev_router)
 
+    # Google Cloud Run's front end can intercept /healthz (it never reaches the app), so the
+    # same check is also served at /health. Use /health on Cloud Run, either elsewhere.
+    @app.get("/health", tags=["System"])
     @app.get("/healthz", tags=["System"])
     async def healthcheck() -> dict[str, str]:
         return {
@@ -139,7 +149,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "environment": active_settings.ENVIRONMENT,
         }
 
-    @app.get("/metrics", tags=["Observability"])
+    # Metrics reveal traffic volumes and internal names, so they need the same service token as
+    # the other internal endpoints. Without a configured token the endpoint answers 503 (closed).
+    @app.get("/metrics", tags=["Observability"], dependencies=[Depends(require_internal_service)])
     async def get_prometheus_metrics() -> Response:
         metrics_data = get_metrics().render_prometheus()
         return Response(

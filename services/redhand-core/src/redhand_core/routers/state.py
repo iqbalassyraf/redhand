@@ -11,6 +11,7 @@ Bridges `redhand-ui` directly to `redhand-core` via:
 from __future__ import annotations
 
 import asyncio
+from collections.abc import AsyncIterator
 from datetime import datetime, timedelta, timezone
 import json
 import secrets
@@ -115,7 +116,7 @@ async def stream_realtime_events(request: Request, ticket: str) -> StreamingResp
     store = get_local_store()
     queue = store.subscribe()
 
-    async def event_generator():
+    async def event_generator() -> AsyncIterator[str]:
         try:
             yield f"data: {json.dumps({'event': 'connected'})}\n\n"
             while True:

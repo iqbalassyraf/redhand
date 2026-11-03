@@ -121,6 +121,8 @@ curl -s localhost:8080/mcp/xero -H "Authorization: Bearer $TOKEN" -H "Content-Ty
 `delete_invoice` is refused because it is not in the passport's scopes. Freeze the agent in the
 dashboard and the same call returns HTTP 403 within about 2 seconds.
 
+Deploying to Google Cloud Run (staging): see [`docs/runbooks/cloud-run-staging.md`](docs/runbooks/cloud-run-staging.md).
+
 Never use `ENVIRONMENT=development`, `ALLOW_INSECURE_MCP_URLS` or
 `AGENTWALL_ALLOW_INSECURE_UPSTREAMS` in production. All settings are listed in
 [`.env.example`](.env.example).
@@ -155,6 +157,18 @@ notifications. Resources and prompts are refused until passport scopes cover the
 ```bash
 uv run pytest -q
 ```
+
+```bash
+uvx ruff@0.17.3 check --config pyproject.toml .
+```
+
+```bash
+uv run --with mypy==2.4.1 mypy
+```
+
+CI (`.github/workflows/ci.yml`) runs the same checks plus the dashboard type-check and build on
+every push. The strict type-check covers the modules listed under `[tool.mypy]` in
+`pyproject.toml`; older modules are added as they are brought up to standard.
 
 ```bash
 npm --prefix apps/redhand-ui run typecheck
