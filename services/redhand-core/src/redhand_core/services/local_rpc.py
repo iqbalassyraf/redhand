@@ -265,11 +265,80 @@ def _control_mcp_server(store: LocalSupabaseAdapter, p: dict[str, Any]) -> dict[
     raise _error("22023", f"unsupported MCP server operation {op}")
 
 
+def _telegram_link_chat(store: LocalSupabaseAdapter, p: dict[str, Any]) -> dict[str, Any]:
+    code_hash, chat_id = str(p["p_code_hash"]), int(p["p_chat_id"])
+    code = next(
+        (c for c in store.tables.setdefault("telegram_link_codes", []) if c.get("code_hash") == code_hash), None
+    )
+    if (
+        code is None
+        or code.get("used_at") is not None
+        or datetime.fromisoformat(str(code["expires_at"])) <= datetime.now(timezone.utc)
+    ):
+        raise _error("P0002", "link code is invalid or expired")
+    org, user = str(code["organization_id"]), str(code["user_id"])
+    member = next(
+        (
+            m
+            for m in store.tables.get("organization_members", [])
+            if str(m.get("organization_id")) == org and str(m.get("user_id")) == user
+        ),
+        None,
+    )
+    role = str(member.get("role")) if member else None
+    if role not in ("admin", "owner"):
+        raise _error("42501", "operator may not use the panic command")
+
+    links = store.tables.setdefault("telegram_links", [])
+    for link in links:
+        if link.get("chat_id") == chat_id and link.get("revoked_at") is None:
+            link["revoked_at"] = _now()
+    code["used_at"] = _now()
+    link_id = str(uuid4())
+    new_link: dict[str, Any] = {
+        "id": link_id, "organization_id": org, "user_id": user, "chat_id": chat_id,
+        "created_at": _now(), "revoked_at": None,
+    }
+    links.insert(0, new_link)
+    _append_audit(
+        store, org=org, actor=user, action="telegram.linked", target_type="telegram_link",
+        target_id=link_id, reason=None, details={"channel": "telegram"},
+    )
+    return {"link_id": link_id, "organization_id": org, "user_id": user, "role": role}
+
+
+def _telegram_unlink(store: LocalSupabaseAdapter, p: dict[str, Any]) -> dict[str, Any]:
+    org, actor, link_id = str(p["p_org"]), str(p["p_actor"]), str(p["p_link_id"])
+    link = _find(store, "telegram_links", org, link_id)
+    if link is None:
+        raise _error("P0002", "telegram link not found")
+    if link.get("revoked_at") is not None:
+        return {"link_id": link_id, "changed": False}
+    link["revoked_at"] = _now()
+    _append_audit(
+        store, org=org, actor=actor, action="telegram.unlinked", target_type="telegram_link",
+        target_id=link_id, reason=None, details={"linked_user_id": str(link["user_id"])},
+    )
+    return {"link_id": link_id, "changed": True}
+
+
+def _telegram_claim_update(store: LocalSupabaseAdapter, p: dict[str, Any]) -> bool:
+    update_id = int(p["p_update_id"])
+    seen = store.tables.setdefault("telegram_updates", [])
+    if any(row.get("update_id") == update_id for row in seen):
+        return False
+    seen.append({"update_id": update_id, "received_at": _now()})
+    return True
+
+
 HANDLERS: dict[str, RpcHandler] = {
     "control_agent_change": _control_agent_change,
     "control_freeze_all": _control_freeze_all,
     "control_create_passport": _control_create_passport,
     "control_mcp_server": _control_mcp_server,
+    "telegram_link_chat": _telegram_link_chat,
+    "telegram_unlink": _telegram_unlink,
+    "telegram_claim_update": _telegram_claim_update,
 }
 
 

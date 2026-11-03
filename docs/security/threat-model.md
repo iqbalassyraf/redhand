@@ -1,6 +1,6 @@
-# Threat model: Phase 1 (Identity and control)
+# Threat model: Phases 1 and 2 (Identity and control; Stop things)
 
-**Last updated:** 2026-11-01. Update this file whenever a trust boundary changes (CLAUDE.md §5.1).
+**Last updated:** 2026-11-03. Update this file whenever a trust boundary changes (CLAUDE.md §5.1).
 
 ## 1. Components and trust boundaries
 
@@ -21,6 +21,7 @@
 | 3 | Gateway → core (`/internal`) | Shared service token, constant-time compare | Missing token means every agent call is denied |
 | 4 | Agent → gateway | Ed25519 access token, 10 min, verified with public key | Plus per-call passport status check (≤ 2 s cache) |
 | 5 | Gateway → MCP server | Optional upstream credential supplied by the agent | Destination check per request: https, public IPs, no redirects |
+| 6 | Telegram → core webhook | Secret header (constant-time compare), then the chat must be linked to an operator whose role is re-read on every command | Public endpoint by necessity; private chats only; stop-only commands (ADR 0008) |
 
 ## 2. Threats and mitigations
 
@@ -37,11 +38,17 @@
 | Insider or compromised admin abuses control actions | Role requirements (revoke, freeze-all, scope expansion need admin), explicit confirmation, append-only audit with actor and reason | No step-up authentication yet |
 | Audit tampering | `control_audit_log` blocked from UPDATE/DELETE by trigger; gateway ledger hash-chained | Gateway ledger is per process (file optional); move to database in Phase 3 |
 | Audit gap after a control action | Each action and its audit row commit in one database transaction (`control_*` functions); a failed audit write rolls the action back. See ADR 0006 | A network timeout after commit leaves the outcome unknown to the caller (the API says to reload; actions are safe to repeat) |
+| Stolen or lost phone with the panic command | Stop-only commands: it cannot unfreeze, revoke or widen scopes; admins can unlink a chat in the dashboard; every action is audited with `via Telegram` | The holder can freeze every agent (a denial of service, by design); no PIN on top of Telegram's own lock |
+| Forged Telegram webhook calls | Secret header compared in constant time; a wrong secret does nothing and returns 401; unlinked chats get no information beyond "not linked" | Anyone who learns the webhook secret can send updates, but still needs a linked chat id to act |
+| Attacker links their own chat | Link codes are created only by a signed-in admin or owner, are single use, expire in 10 minutes, stored hashed, with about 49 bits of entropy and 5 attempts per minute per chat | A code shown on screen can be shoulder-surfed within its 10 minutes |
+| Replay of an old command | Update ids are claimed once in the database; the secret header is required | Freeze commands are idempotent anyway |
+| Bot token leaks through logs | httpx request logging disabled in the Telegram module; errors logged by class only; tests assert the token is absent | A future logging change elsewhere could reintroduce it: the test covers the module only |
+| Removed or demoted operator still has a linked phone | Role and membership are re-read per command; unlink revokes the link | None known |
 | Core outage | Gateway fails closed (denies) | Availability target 99.9 %; no multi-region yet |
 | Signing key compromise | Ed25519 private key only in core; gateway holds public key | Signing-key rotation not automated |
 | Development shortcuts reach production | core refuses the in-memory store and `/v1/dev/login` outside development; signing key required outside dev/test; no hardcoded secrets | Deployment checklist must set all required secrets |
 | Supply chain | Locked dependencies (`uv.lock`, `package-lock.json`); no new packages added in Phase 1 (pyjwt was already locked) | No automated vulnerability scan in CI yet |
 
-## 3. Out of scope for Phase 1
+## 3. Out of scope so far
 Local stdio MCP servers, non-MCP REST APIs, LLM API spend (Budget Guard, Phase 2), recording of
 payloads (Black Box, Phase 3), MCP server reputation (Phase 4).

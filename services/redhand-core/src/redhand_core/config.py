@@ -9,6 +9,7 @@ using Pydantic `BaseSettings`.
 from __future__ import annotations
 
 from functools import lru_cache
+import re
 import secrets
 from pathlib import Path
 from typing import Literal
@@ -153,6 +154,27 @@ class Settings(BaseSettings):
             "unset, those endpoints reject every call, so the gateway denies all traffic."
         ),
     )
+    # -------------------------------------------------------------------------
+    # Telegram panic command (Phase 2). Unset token or secret disables the feature.
+    # -------------------------------------------------------------------------
+    TELEGRAM_BOT_TOKEN: SecretStr | None = Field(
+        default=None,
+        description="Bot token from @BotFather. Never logged. Unset disables the Telegram feature.",
+    )
+    TELEGRAM_WEBHOOK_SECRET: SecretStr | None = Field(
+        default=None,
+        description=(
+            "Secret Telegram sends in X-Telegram-Bot-Api-Secret-Token on every webhook call "
+            "(32-256 characters: letters, digits, '_' or '-'). Unset disables the webhook."
+        ),
+    )
+    TELEGRAM_BOT_USERNAME: str | None = Field(
+        default=None,
+        pattern=r"^[A-Za-z0-9_]{3,64}$",
+        description="The bot's @username without the @; used to build the one-tap link.",
+    )
+    TELEGRAM_COMMANDS_PER_MINUTE: int = Field(default=20, ge=1, le=120)
+
     ALLOW_INSECURE_MCP_URLS: bool = Field(
         default=False,
         description="Development only: allow http:// and localhost MCP server URLs.",
@@ -181,6 +203,13 @@ class Settings(BaseSettings):
                 )
             self.OPERATOR_JWT_SECRET = SecretStr(secrets.token_urlsafe(32))
         return self
+
+    @field_validator("TELEGRAM_WEBHOOK_SECRET")
+    @classmethod
+    def _telegram_secret_shape(cls, v: SecretStr | None) -> SecretStr | None:
+        if v is not None and not re.fullmatch(r"[A-Za-z0-9_-]{32,256}", v.get_secret_value()):
+            raise ValueError("TELEGRAM_WEBHOOK_SECRET must be 32-256 characters of letters, digits, '_' or '-'.")
+        return v
 
     @property
     def uses_local_store(self) -> bool:

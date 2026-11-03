@@ -103,6 +103,11 @@ gcloud run services update redhand-core --region asia-southeast1 --update-env-va
 | First request very slow, then fine | Cold start (min instances 0). Expected. |
 | `/healthz` returns 404 on the `*.run.app` address | Cloud Run's front end can intercept that path. Use `/health` (served by both services). |
 
+## Telegram panic command (optional)
+Set up after the first deploy; see `docs/runbooks/telegram-panic-command.md`. Note that
+`deploy.sh core` keeps the Telegram settings only if the `telegram` step has been run and
+`TELEGRAM_BOT_USERNAME` is set.
+
 ## Rollback and teardown
 
 - **Roll back:** Cloud Run → service → *Revisions* → *Manage traffic* → send 100% to the previous

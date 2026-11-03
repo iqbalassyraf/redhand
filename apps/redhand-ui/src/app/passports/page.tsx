@@ -18,6 +18,9 @@ import {
   type PassportStatus,
   type Scope,
   passportsApi,
+  type TelegramLink,
+  type TelegramLinkCode,
+  telegramApi,
 } from "@/lib/api";
 import { useAuth, useRequiredSession } from "@/lib/auth";
 
@@ -286,6 +289,10 @@ export default function PassportsPage() {
             onCreate={(body) => act(`MCP server ${body.slug} registered.`, () => passportsApi.createServer(token, body))}
           />
         </div>
+
+        {(session.role === "admin" || session.role === "owner") && (
+          <TelegramPanel token={token} onChanged={refresh} onError={handleError} />
+        )}
 
         <AuditPanel entries={audit} passports={passports} servers={servers} />
       </main>
@@ -721,6 +728,104 @@ function AuditPanel(props: { entries: ControlAuditEntry[]; passports: Passport[]
           </li>
         ))}
       </ul>
+    </section>
+  );
+}
+
+/** Link a phone to the panic command and manage linked chats (admin / owner). */
+function TelegramPanel(props: {
+  token: string;
+  onChanged: () => void;
+  onError: (err: unknown) => void;
+}) {
+  const { token, onChanged, onError } = props;
+  const [links, setLinks] = useState<TelegramLink[]>([]);
+  const [code, setCode] = useState<TelegramLinkCode | null>(null);
+  const [unavailable, setUnavailable] = useState(false);
+
+  const load = useCallback(async () => {
+    try {
+      setLinks(await telegramApi.links(token));
+      setUnavailable(false);
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 403) return;
+      onError(err);
+    }
+  }, [token, onError]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  const createCode = async () => {
+    try {
+      setCode(await telegramApi.createCode(token));
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 503) {
+        setUnavailable(true);
+        return;
+      }
+      onError(err);
+    }
+  };
+
+  const unlink = async (link: TelegramLink) => {
+    if (!window.confirm("Remove this phone? It will no longer be able to freeze agents.")) return;
+    try {
+      await telegramApi.unlink(token, link.id);
+      await load();
+      onChanged();
+    } catch (err) {
+      onError(err);
+    }
+  };
+
+  return (
+    <section className="rounded-[12px] border border-[#E5E5E5] bg-[#FFFFFF] p-4">
+      <h2 className="text-[15px] font-semibold">Telegram panic command</h2>
+      <p className="mt-1 text-[12px] text-[#606060]">
+        Freeze agents from your phone with <code>/freeze_all</code> or <code>/freeze &lt;name&gt;</code>. Unfreezing
+        and revoking stay in this dashboard, so a lost phone can stop agents but never start them.
+      </p>
+      {unavailable && (
+        <p role="note" className="mt-3 rounded-[8px] bg-[#FFF4E5] p-2 text-[12px] text-[#8A4B00]">
+          Telegram is not set up on this RedHand server yet.
+        </p>
+      )}
+      <ul className="mt-3 flex flex-col gap-1 text-[13px]">
+        {links.length === 0 && <li className="text-[#606060]">No phone linked.</li>}
+        {links.map((l) => (
+          <li key={l.id} className="flex items-center justify-between gap-2">
+            <span>
+              Linked by {shortId(l.user_id)} · {new Date(l.created_at).toLocaleString()}
+            </span>
+            <ActionButton label="Unlink" danger onClick={() => unlink(l)} />
+          </li>
+        ))}
+      </ul>
+      <button
+        onClick={createCode}
+        className="mt-3 h-[34px] rounded-full border border-[#0F0F0F] px-4 text-[13px] font-semibold hover:bg-[#F2F2F2]"
+      >
+        Link Telegram
+      </button>
+      {code && (
+        <div className="mt-3 rounded-[8px] bg-[#F2F2F2] p-3 text-[13px]">
+          <p>
+            Send this to the bot within 10 minutes: <code className="font-semibold">/link {code.code}</code>
+          </p>
+          {code.deep_link && (
+            <p className="mt-1">
+              Or open{" "}
+              <a href={code.deep_link} target="_blank" rel="noreferrer" className="underline">
+                {code.deep_link}
+              </a>{" "}
+              on your phone and tap Start.
+            </p>
+          )}
+          <p className="mt-1 text-[11px] text-[#606060]">The code works once. Anyone who has it can link their phone.</p>
+        </div>
+      )}
     </section>
   );
 }

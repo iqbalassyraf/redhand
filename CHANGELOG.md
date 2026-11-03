@@ -1,6 +1,17 @@
 # Changelog
 
-## Unreleased: Phase 1 (Identity and control)
+## Unreleased: Phase 2 (Stop things), in progress
+
+### Added
+- Telegram panic command (M1): linked admins and owners can `/freeze_all`, `/freeze <name>` and
+  `/status` from a phone; unfreeze and revoke stay in the dashboard. Linked chats are also alerted
+  about freezes, unfreezes, revokes and freeze-all done in the dashboard. Needs a bot token and the
+  new migration `20261103000000_telegram_panic.sql`; set up with `deploy/cloudrun/deploy.sh telegram`
+  and `scripts/telegram_webhook.py` (`docs/runbooks/telegram-panic-command.md`, ADR 0008).
+- Dashboard: "Telegram panic command" panel to link a phone and unlink lost ones.
+- New control audit actions `telegram.linked` and `telegram.unlinked`.
+
+## Phase 1 (Identity and control)
 
 ### Added (deployment)
 - `scripts/staging_agent.py`: a stand-in agent (standard library only) that runs the Phase 1 checks

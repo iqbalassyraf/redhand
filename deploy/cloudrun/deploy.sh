@@ -1,13 +1,16 @@
 #!/usr/bin/env bash
 # Deploys redhand-core and the AgentWall gateway to Google Cloud Run (staging).
 #
-#   deploy/cloudrun/deploy.sh [all|secrets|core|gateway|cors]
+#   deploy/cloudrun/deploy.sh [all|secrets|core|gateway|cors|telegram]
 #
 #   all      secrets + core + gateway (default)
 #   secrets  create the three secrets in Secret Manager and the per-service identities
 #   core     build and deploy redhand-core
 #   gateway  build and deploy the gateway (needs core deployed first: it needs core's URL)
 #   cors     point both services at the dashboard origin (set DASHBOARD_ORIGIN)
+#   telegram store the Telegram bot token (hidden prompt) and a generated webhook secret in
+#            Secret Manager and give them to redhand-core (set TELEGRAM_BOT_USERNAME, without @).
+#            Then run scripts/telegram_webhook.py to point Telegram at core.
 #
 # Configuration comes from environment variables (defaults in brackets):
 #   PROJECT_ID          [gcloud's current project]
@@ -34,6 +37,9 @@ SECRET_INTERNAL="redhand-internal-service-token"
 SECRET_SIGNING="redhand-agent-token-signing-key"
 CORE_SA="redhand-core-sa"
 GATEWAY_SA="redhand-gateway-sa"
+SECRET_TG_TOKEN="redhand-telegram-bot-token"
+SECRET_TG_WEBHOOK="redhand-telegram-webhook-secret"
+TELEGRAM_BOT_USERNAME="${TELEGRAM_BOT_USERNAME:-}"
 
 die() { echo "error: $*" >&2; exit 1; }
 say() { echo "==> $*"; }
@@ -53,6 +59,17 @@ preflight() {
   echo "Region  : $REGION"
   echo "Command : $COMMAND"
   [ "${YES:-}" = "1" ] || { read -r -p "Continue? [y/N] " answer; [ "$answer" = "y" ] || die "cancelled"; }
+}
+
+# Core's --set-secrets / --set-env-vars REPLACE the previous lists, so a plain 'core' deploy must
+# re-state the Telegram settings or it would silently switch the panic command off.
+telegram_secret_args() {
+  if secret_exists "$SECRET_TG_TOKEN" && secret_exists "$SECRET_TG_WEBHOOK"; then
+    printf ',TELEGRAM_BOT_TOKEN=%s:latest,TELEGRAM_WEBHOOK_SECRET=%s:latest' "$SECRET_TG_TOKEN" "$SECRET_TG_WEBHOOK"
+  fi
+}
+telegram_env_args() {
+  if [ -n "$TELEGRAM_BOT_USERNAME" ]; then printf '@TELEGRAM_BOT_USERNAME=%s' "$TELEGRAM_BOT_USERNAME"; fi
 }
 
 cors_json() {
@@ -172,9 +189,12 @@ deploy_core() {
   gcloud run deploy redhand-core --image "$IMAGE" --region "$REGION" --project "$PROJECT_ID" \
     --service-account "$(sa_email "$CORE_SA")" \
     --allow-unauthenticated --min-instances 0 --max-instances 1 --cpu 1 --memory 512Mi --timeout 300 \
-    --set-env-vars "^@^ENVIRONMENT=staging@LOG_LEVEL=INFO@SUPABASE_URL=${SUPABASE_URL}@OPERATOR_JWKS_URL=${SUPABASE_URL}/auth/v1/.well-known/jwks.json@OPERATOR_JWT_ISSUER=${SUPABASE_URL}/auth/v1@CORS_ALLOWED_ORIGINS=$(cors_json)" \
-    --set-secrets "SUPABASE_SERVICE_ROLE_KEY=${SECRET_SUPABASE}:latest,INTERNAL_SERVICE_TOKEN=${SECRET_INTERNAL}:latest,AGENT_TOKEN_SIGNING_KEY=${SECRET_SIGNING}:latest"
+    --set-env-vars "^@^ENVIRONMENT=staging@LOG_LEVEL=INFO@SUPABASE_URL=${SUPABASE_URL}@OPERATOR_JWKS_URL=${SUPABASE_URL}/auth/v1/.well-known/jwks.json@OPERATOR_JWT_ISSUER=${SUPABASE_URL}/auth/v1@CORS_ALLOWED_ORIGINS=$(cors_json)$(telegram_env_args)" \
+    --set-secrets "SUPABASE_SERVICE_ROLE_KEY=${SECRET_SUPABASE}:latest,INTERNAL_SERVICE_TOKEN=${SECRET_INTERNAL}:latest,AGENT_TOKEN_SIGNING_KEY=${SECRET_SIGNING}:latest$(telegram_secret_args)"
   say "redhand-core: $(service_url redhand-core)"
+  if secret_exists "$SECRET_TG_TOKEN" && [ -z "$TELEGRAM_BOT_USERNAME" ]; then
+    echo "note: TELEGRAM_BOT_USERNAME is not set, so the dashboard's one-tap Telegram link is off until you re-run with it." >&2
+  fi
 }
 
 deploy_gateway() {
@@ -188,6 +208,36 @@ deploy_gateway() {
     --set-env-vars "^@^AGENTWALL_ENVIRONMENT=staging@AGENTWALL_CORE_URL=${core_url}@AGENTWALL_CONTEXT_CACHE_TTL_SECONDS=2@AGENTWALL_CORS_ALLOWED_ORIGINS=$(cors_json)" \
     --set-secrets "AGENTWALL_CORE_SERVICE_TOKEN=${SECRET_INTERNAL}:latest"
   say "gateway: $(service_url redhand-gateway)"
+}
+
+setup_telegram() {
+  [ -n "$TELEGRAM_BOT_USERNAME" ] || die "set TELEGRAM_BOT_USERNAME (the bot's @name without the @)"
+  case "$TELEGRAM_BOT_USERNAME" in *[!A-Za-z0-9_]*) die "TELEGRAM_BOT_USERNAME may only contain letters, digits and _";; esac
+  ensure_foundation
+  if ! secret_exists "$SECRET_TG_TOKEN"; then
+    say "The Telegram bot token is needed once (from @BotFather)."
+    read -r -s -p "Paste it now (input is hidden): " bot_token; echo
+    case "$bot_token" in [0-9]*:?*) ;; *) die "that does not look like a bot token (expected 123456789:AA...); nothing was stored";; esac
+    printf %s "$bot_token" | put_secret "$SECRET_TG_TOKEN"
+    unset bot_token
+  else
+    say "Keeping existing secret $SECRET_TG_TOKEN"
+  fi
+  if ! secret_exists "$SECRET_TG_WEBHOOK" || [ "${ROTATE:-}" = "1" ]; then
+    say "Generating the Telegram webhook secret (stored in Secret Manager only)"
+    openssl rand -hex 32 | tr -d '\n' | put_secret "$SECRET_TG_WEBHOOK"
+  else
+    say "Keeping existing secret $SECRET_TG_WEBHOOK"
+  fi
+  allow_secret "$SECRET_TG_TOKEN" "$CORE_SA"
+  allow_secret "$SECRET_TG_WEBHOOK" "$CORE_SA"
+  say "Giving redhand-core the Telegram settings"
+  gcloud run services update redhand-core --region "$REGION" --project "$PROJECT_ID" \
+    --update-secrets "TELEGRAM_BOT_TOKEN=${SECRET_TG_TOKEN}:latest,TELEGRAM_WEBHOOK_SECRET=${SECRET_TG_WEBHOOK}:latest" \
+    --update-env-vars "TELEGRAM_BOT_USERNAME=${TELEGRAM_BOT_USERNAME}"
+  echo
+  echo "Done. Now point Telegram at core:"
+  echo "  python3 scripts/telegram_webhook.py set --project ${PROJECT_ID} --core-url \"$(gcloud run services describe redhand-core --region ${REGION} --format='value(status.url)')\""
 }
 
 update_cors() {
@@ -214,6 +264,7 @@ case "$COMMAND" in
   core) ensure_foundation; deploy_core; summary;;
   gateway) ensure_foundation; deploy_gateway; summary;;
   cors) update_cors;;
+  telegram) setup_telegram;;
   all) ensure_foundation; ensure_secrets; deploy_core; deploy_gateway; summary;;
-  *) die "unknown command '$COMMAND' (use all, secrets, core, gateway or cors)";;
+  *) die "unknown command '$COMMAND' (use all, secrets, core, gateway, cors or telegram)";;
 esac

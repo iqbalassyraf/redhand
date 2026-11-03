@@ -17,7 +17,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, ConfigDict, Field
 
-from redhand_core.auth.operator import AdminDep, SecurityOperatorDep, ViewerDep
+from redhand_core.auth.operator import AdminDep, OperatorContext, SecurityOperatorDep, ViewerDep
 from redhand_core.config import Settings, get_settings
 from redhand_core.passports import service
 from redhand_core.passports.models import (
@@ -37,11 +37,23 @@ from redhand_core.passports.models import (
     ScopesUpdateRequest,
     utcnow,
 )
+from redhand_core.routers.telegram import OptionalClientDep
 from redhand_core.routers.telemetry import get_supabase_service_client
+from redhand_core.telegram.bot import notify_organization
+from redhand_core.telegram.client import TelegramClient
 
 router = APIRouter(prefix="/v1", tags=["Agent Passports & Control Actions"])
 
 SupabaseDep = Annotated[Any, Depends(get_supabase_service_client)]
+
+
+async def _alert(
+    supabase: Any, telegram: TelegramClient | None, operator: OperatorContext, what: str, reason: str | None
+) -> None:
+    """Tells linked Telegram chats about a stopping or restoring action. Best effort, never raises."""
+    who = operator.email or "An operator"
+    text = f"RedHand: {what} in the dashboard by {who}." + (f" Reason: {reason}" if reason else "")
+    await notify_organization(supabase, telegram, operator.organization_id, text)
 
 
 # -----------------------------------------------------------------------------
@@ -70,9 +82,15 @@ async def get_passport(agent_id: UUID, operator: ViewerDep, supabase: SupabaseDe
 
 @router.post("/passports/{agent_id}/freeze", response_model=ControlActionResponse)
 async def freeze_agent(
-    agent_id: UUID, payload: ControlActionRequest, operator: SecurityOperatorDep, supabase: SupabaseDep
+    agent_id: UUID,
+    payload: ControlActionRequest,
+    operator: SecurityOperatorDep,
+    supabase: SupabaseDep,
+    telegram: OptionalClientDep,
 ) -> ControlActionResponse:
     passport, changed = await service.freeze(supabase, operator, agent_id, payload.reason, utcnow())
+    if changed:
+        await _alert(supabase, telegram, operator, f"{passport.name} was frozen", payload.reason)
     return ControlActionResponse(passport=passport, changed=changed)
 
 
@@ -82,20 +100,29 @@ async def unfreeze_agent(
     payload: ConfirmedControlActionRequest,
     operator: SecurityOperatorDep,
     supabase: SupabaseDep,
+    telegram: OptionalClientDep,
 ) -> ControlActionResponse:
     passport, changed = await service.unfreeze(
         supabase, operator, agent_id, payload.reason, payload.confirm, utcnow()
     )
+    if changed:
+        await _alert(supabase, telegram, operator, f"{passport.name} was unfrozen", payload.reason)
     return ControlActionResponse(passport=passport, changed=changed)
 
 
 @router.post("/passports/{agent_id}/revoke", response_model=ControlActionResponse)
 async def revoke_agent(
-    agent_id: UUID, payload: ConfirmedControlActionRequest, operator: AdminDep, supabase: SupabaseDep
+    agent_id: UUID,
+    payload: ConfirmedControlActionRequest,
+    operator: AdminDep,
+    supabase: SupabaseDep,
+    telegram: OptionalClientDep,
 ) -> ControlActionResponse:
     passport, changed = await service.revoke(
         supabase, operator, agent_id, payload.reason, payload.confirm, utcnow()
     )
+    if changed:
+        await _alert(supabase, telegram, operator, f"{passport.name} was permanently revoked", payload.reason)
     return ControlActionResponse(passport=passport, changed=changed)
 
 
@@ -108,7 +135,7 @@ class FreezeAllRequest(BaseModel):
 
 @router.post("/passports/freeze-all", response_model=FreezeAllResponse)
 async def freeze_all_agents(
-    payload: FreezeAllRequest, operator: AdminDep, supabase: SupabaseDep
+    payload: FreezeAllRequest, operator: AdminDep, supabase: SupabaseDep, telegram: OptionalClientDep
 ) -> FreezeAllResponse:
     """Kill switch: freezes every active agent in the organization in one statement."""
     if not payload.confirm:
@@ -117,6 +144,7 @@ async def freeze_all_agents(
             detail='Freeze-all requires explicit confirmation: send "confirm": true.',
         )
     frozen = await service.freeze_all(supabase, operator, payload.reason)
+    await _alert(supabase, telegram, operator, f"All agents were frozen ({len(frozen)} stopped)", payload.reason)
     return FreezeAllResponse(
         organization_id=operator.organization_id, frozen_count=len(frozen), frozen_agent_ids=frozen
     )

@@ -26,6 +26,7 @@ from redhand_core.routers.passports import router as passports_router
 from redhand_core.routers.iam_broker import get_sts_downscoper, router as iam_broker_router
 from redhand_core.routers.scim import router as scim_router
 from redhand_core.routers.state import router as state_router
+from redhand_core.routers.telegram import router as telegram_router
 from redhand_core.routers.telemetry import (
     get_supabase_service_client,
     router as telemetry_router,
@@ -128,6 +129,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(scim_router)
     app.include_router(passports_router)
     app.include_router(agent_auth_router)
+    app.include_router(telegram_router)
     if (
         active_settings.ENVIRONMENT == "development"
         and active_settings.uses_local_store
