@@ -79,7 +79,11 @@ export default function PassportsPage() {
         passportsApi.list(token),
         passportsApi.servers(token),
         passportsApi.audit(token),
-        passportsApi.orgSafeMode(token),
+        // An older core does not have this endpoint yet (404): show Safe Mode as off rather than failing.
+        passportsApi.orgSafeMode(token).catch((err: unknown) => {
+          if (err instanceof ApiError && err.status === 404) return { enabled: false, changed: false };
+          throw err;
+        }),
       ]);
       setPassports(p);
       setServers(s);
