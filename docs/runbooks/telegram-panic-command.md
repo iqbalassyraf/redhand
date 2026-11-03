@@ -21,7 +21,7 @@ to staging before deploying the new core, because core now calls the new functio
 
 ### 3. Store the secrets and give them to core (your Mac terminal, repo root)
 ```bash
-SUPABASE_URL=https://qxxiksevqfmkqstrdkxi.supabase.co TELEGRAM_BOT_USERNAME=<bot username without @> deploy/cloudrun/deploy.sh core
+SUPABASE_URL=https://qxxiksevqfmkqstrdkxi.supabase.co DASHBOARD_ORIGIN=https://redhand-dashboard.vercel.app TELEGRAM_BOT_USERNAME=<bot username without @> deploy/cloudrun/deploy.sh core
 ```
 This redeploys core with the Telegram code. Then:
 ```bash

@@ -16,7 +16,7 @@
 #   PROJECT_ID          [gcloud's current project]
 #   REGION              [asia-southeast1]
 #   SUPABASE_URL        [required: https://<project-ref>.supabase.co]
-#   DASHBOARD_ORIGIN    [empty: browsers on http://localhost:3000 only]
+#   DASHBOARD_ORIGIN    [required for all/core/gateway: the dashboard's https origin]
 #
 # Secrets are never printed. The Supabase secret key is read with hidden input, the internal
 # service token and the agent-token signing key are generated here and sent straight to
@@ -52,6 +52,12 @@ preflight() {
     || die "not logged in: run 'gcloud auth login'"
   case "$COMMAND" in
     all|core|gateway|cors) [ -n "$SUPABASE_URL" ] || die "set SUPABASE_URL (https://<project-ref>.supabase.co)";;
+  esac
+  # core/gateway deploys REPLACE the browser allow-list; without the dashboard origin the
+  # dashboard would be locked out ("Failed to fetch").
+  case "$COMMAND" in
+    all|core|gateway) [ -n "$DASHBOARD_ORIGIN" ] || [ "${ALLOW_LOCALHOST_ONLY:-}" = "1" ] \
+      || die "set DASHBOARD_ORIGIN (for example https://redhand-dashboard.vercel.app) or the dashboard will be blocked; ALLOW_LOCALHOST_ONLY=1 overrides";;
   esac
   case "$SUPABASE_URL" in ""|https://*.supabase.co) ;; *) die "SUPABASE_URL must look like https://<ref>.supabase.co";; esac
   echo "Account : $(gcloud auth list --filter=status:ACTIVE --format='value(account)')"
