@@ -92,6 +92,8 @@ export interface Passport {
   created_at: string | null;
   last_seen_at: string | null;
   safe_mode: boolean;
+  daily_call_limit: number | null;
+  budget_action: "deny" | "freeze";
 }
 
 export interface PassportCreateResponse {
@@ -129,6 +131,22 @@ export interface McpServer {
   is_active: boolean;
 }
 
+export interface AgentUsage {
+  agent_id: string;
+  name: string;
+  calls: number;
+  daily_call_limit: number | null;
+  budget_action: string;
+  percent: number | null;
+}
+
+export interface UsageSummary {
+  day_key: string;
+  resets_at: string;
+  utc_offset_minutes: number;
+  agents: AgentUsage[];
+}
+
 export const passportsApi = {
   list: (t: string) => apiFetch<Passport[]>("/v1/passports", t),
   create: (
@@ -155,6 +173,19 @@ export const passportsApi = {
     apiFetch<ControlActionResponse>(`/v1/passports/${id}/revoke`, t, {
       method: "POST",
       body: { reason: reason || null, confirm: true },
+    }),
+  usage: (t: string) => apiFetch<UsageSummary>("/v1/usage", t),
+  setBudget: (
+    t: string,
+    id: string,
+    dailyCallLimit: number | null,
+    action: "deny" | "freeze",
+    reason: string,
+    confirm: boolean
+  ) =>
+    apiFetch<{ passport: Passport; changed: boolean }>(`/v1/passports/${id}/budget`, t, {
+      method: "PUT",
+      body: { daily_call_limit: dailyCallLimit, action, reason: reason || null, confirm },
     }),
   setSafeMode: (t: string, id: string, enabled: boolean, reason?: string) =>
     apiFetch<{ passport: Passport; changed: boolean }>(`/v1/passports/${id}/safe-mode`, t, {

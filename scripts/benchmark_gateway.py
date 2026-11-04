@@ -31,6 +31,7 @@ import httpx
 import jwt
 
 from agentwall.src.firewall.engine import FirewallPolicyEngine
+from agentwall.src.gateway.budget import BudgetMeter
 from agentwall.src.gateway.context import CoreContextClient
 from agentwall.src.gateway.identity import AgentTokenVerifier
 from agentwall.src.gateway.metrics import GatewayMetrics
@@ -52,6 +53,10 @@ def core_handler(request: httpx.Request) -> httpx.Response:
                 "scopes": [{"server": "xero", "tool": "list_invoices", "access": "read"}],
                 "expires_at": "2099-01-01T00:00:00+00:00",
                 "safe_mode": False,
+                "budget": {
+                    "daily_call_limit": None, "used_by_other_instances": 0, "day_key": "2026-11-04",
+                    "resets_at": "2026-11-04T16:00:00+00:00", "action": "deny",
+                },
             },
             "server": {"slug": "xero", "url": "https://mcp.example.com/x"},
         },
@@ -63,6 +68,13 @@ def upstream_handler(request: httpx.Request) -> httpx.Response:
 
     msg = json.loads(request.content)
     return httpx.Response(200, json={"jsonrpc": "2.0", "id": msg["id"], "result": {"content": [{"type": "text", "text": "ok"}]}})
+
+
+class _NullReporter:
+    """Reports go nowhere: this benchmark measures the gateway's own cost, not the network to core."""
+
+    async def send(self, instance_id: str, items: list[dict[str, Any]]) -> bool:
+        return True
 
 
 def build(ttl: float) -> tuple[McpGateway, str]:
@@ -77,7 +89,7 @@ def build(ttl: float) -> tuple[McpGateway, str]:
     gateway = McpGateway(
         verifier=AgentTokenVerifier(public_key_pem=pem, jwks_url=None),
         contexts=CoreContextClient(
-            core_url="http://core", service_token="t", ttl_seconds=ttl,
+            core_url="http://core", service_token="t", ttl_seconds=ttl, instance_id="benchmark-gateway-0001",
             http_client=httpx.AsyncClient(transport=httpx.MockTransport(core_handler)),
         ),
         forwarder=UpstreamForwarder(
@@ -87,6 +99,7 @@ def build(ttl: float) -> tuple[McpGateway, str]:
         firewall=FirewallPolicyEngine("agentwall/config/policies.yaml"),
         audit_logger=TamperEvidentAuditLogger(),
         metrics=GatewayMetrics(),
+        budget=BudgetMeter(instance_id="benchmark-gateway-0001", reporter=_NullReporter()),
     )
     return gateway, token
 

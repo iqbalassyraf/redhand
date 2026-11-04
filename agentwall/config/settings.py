@@ -81,6 +81,14 @@ class Settings(BaseSettings):
         default=2.0, ge=0.0, le=4.0,
         description="How long a passport lookup is reused. Bounded to keep revocation within 5 s.",
     )
+    BUDGET_FLUSH_INTERVAL_SECONDS: float = Field(
+        default=5.0, ge=1.0, le=60.0,
+        description="How often call counts are reported to core while there are unreported calls.",
+    )
+    BUDGET_MAX_TRACKED_KEYS: int = Field(
+        default=100_000, ge=100, le=10_000_000,
+        description="Most (agent, day) counters held in memory. A limited agent that cannot be tracked is refused.",
+    )
     ALLOW_INSECURE_UPSTREAMS: bool = Field(
         default=False,
         description="Development only: allow http:// and private-network MCP server URLs.",

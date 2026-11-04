@@ -152,6 +152,23 @@
         "title": "AccessBoundaryCondition",
         "type": "object"
       },
+      "AgentBudgetResponse": {
+        "properties": {
+          "changed": {
+            "title": "Changed",
+            "type": "boolean"
+          },
+          "passport": {
+            "$ref": "#/components/schemas/PassportView"
+          }
+        },
+        "required": [
+          "passport",
+          "changed"
+        ],
+        "title": "AgentBudgetResponse",
+        "type": "object"
+      },
       "AgentSafeModeResponse": {
         "properties": {
           "changed": {
@@ -213,6 +230,108 @@
           "passport_version"
         ],
         "title": "AgentTokenResponse",
+        "type": "object"
+      },
+      "AgentUsageView": {
+        "properties": {
+          "agent_id": {
+            "format": "uuid",
+            "title": "Agent Id",
+            "type": "string"
+          },
+          "budget_action": {
+            "title": "Budget Action",
+            "type": "string"
+          },
+          "calls": {
+            "title": "Calls",
+            "type": "integer"
+          },
+          "daily_call_limit": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Daily Call Limit"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "percent": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Calls as a percentage of the limit; null when there is no limit.",
+            "title": "Percent"
+          }
+        },
+        "required": [
+          "agent_id",
+          "name",
+          "calls",
+          "daily_call_limit",
+          "budget_action",
+          "percent"
+        ],
+        "title": "AgentUsageView",
+        "type": "object"
+      },
+      "BudgetUpdateRequest": {
+        "additionalProperties": false,
+        "description": "Set an agent's daily limit on tool calls through the gateway (null removes the limit).",
+        "properties": {
+          "action": {
+            "default": "deny",
+            "enum": [
+              "deny",
+              "freeze"
+            ],
+            "title": "Action",
+            "type": "string"
+          },
+          "confirm": {
+            "default": false,
+            "description": "Required to raise or remove a limit.",
+            "title": "Confirm",
+            "type": "boolean"
+          },
+          "daily_call_limit": {
+            "anyOf": [
+              {
+                "maximum": 10000000.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Daily Call Limit"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          }
+        },
+        "title": "BudgetUpdateRequest",
         "type": "object"
       },
       "ConfirmedControlActionRequest": {
@@ -1048,6 +1167,10 @@
             ],
             "title": "Backup Owner Id"
           },
+          "budget_action": {
+            "title": "Budget Action",
+            "type": "string"
+          },
           "created_at": {
             "anyOf": [
               {
@@ -1059,6 +1182,17 @@
               }
             ],
             "title": "Created At"
+          },
+          "daily_call_limit": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Daily Call Limit"
           },
           "environment": {
             "title": "Environment",
@@ -1173,7 +1307,9 @@
           "version",
           "created_at",
           "last_seen_at",
-          "safe_mode"
+          "safe_mode",
+          "daily_call_limit",
+          "budget_action"
         ],
         "title": "PassportView",
         "type": "object"
@@ -1367,7 +1503,7 @@
       },
       "Scope": {
         "additionalProperties": false,
-        "description": "One allowlisted permission. `tool=\"*\"` allows every tool on the server.\n`access` is recorded and displayed but NOT enforced in Phase 1: MCP servers'\nown read/write hints are self-declared and untrusted. Enforcement arrives with\nSafe Mode (Phase 2) together with a trusted tool classification.",
+        "description": "One allowlisted permission. `tool=\"*\"` allows every tool on the server.\n`access` is declared by the operator, never inferred: MCP servers' own read/write hints are\nself-declared by the server and untrusted. It is enforced only while Safe Mode is on (ADR 0009):\nthen the gateway allows a tool only if a scope with access \"read\" covers it. RedHand cannot verify\nthat a tool really is read-only.",
         "properties": {
           "access": {
             "default": "read",
@@ -1908,6 +2044,39 @@
           "changed"
         ],
         "title": "UnlinkResponse",
+        "type": "object"
+      },
+      "UsageSummary": {
+        "properties": {
+          "agents": {
+            "items": {
+              "$ref": "#/components/schemas/AgentUsageView"
+            },
+            "title": "Agents",
+            "type": "array"
+          },
+          "day_key": {
+            "format": "date",
+            "title": "Day Key",
+            "type": "string"
+          },
+          "resets_at": {
+            "format": "date-time",
+            "title": "Resets At",
+            "type": "string"
+          },
+          "utc_offset_minutes": {
+            "title": "Utc Offset Minutes",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "day_key",
+          "resets_at",
+          "utc_offset_minutes",
+          "agents"
+        ],
+        "title": "UsageSummary",
         "type": "object"
       },
       "ValidationError": {
@@ -3494,6 +3663,91 @@
         ]
       }
     },
+    "/v1/passports/{agent_id}/budget": {
+      "put": {
+        "operationId": "set_agent_budget_v1_passports__agent_id__budget_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "agent_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Agent Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-RedHand-Org",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Redhand-Org"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BudgetUpdateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentBudgetResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Set Agent Budget",
+        "tags": [
+          "Budget Guard"
+        ]
+      }
+    },
     "/v1/passports/{agent_id}/freeze": {
       "post": {
         "operationId": "freeze_agent_v1_passports__agent_id__freeze_post",
@@ -4576,6 +4830,71 @@
         "summary": "Ingest Agent Reasoning Traces, Firewall Verdicts, and HITL Checkpoints",
         "tags": [
           "Telemetry & Security Ingestion"
+        ]
+      }
+    },
+    "/v1/usage": {
+      "get": {
+        "operationId": "get_usage_v1_usage_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-RedHand-Org",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Redhand-Org"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UsageSummary"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Usage",
+        "tags": [
+          "Budget Guard"
         ]
       }
     }

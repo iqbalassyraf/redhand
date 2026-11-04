@@ -615,3 +615,37 @@ def test_other_chats_are_told_when_safe_mode_changes(env: Env) -> None:
     )
     assert "Safe Mode was turned off for all agents" in env.fake.last(OWNER_CHAT)
     assert "Reason: all clear" in env.fake.last(OWNER_CHAT)
+
+
+# ---------------------------------------------------------------------------
+# /usage (Phase 2, M3c)
+# ---------------------------------------------------------------------------
+
+
+def test_usage_shows_todays_calls_against_each_limit(env: Env) -> None:
+    from redhand_core.passports import budget as budget_rules
+    from redhand_core.passports.models import utcnow
+
+    alpha, beta = env.register("Alpha"), env.register("Beta")
+    env.register("Gamma")
+    day = budget_rules.local_day(utcnow(), 480).isoformat()
+    env.client.put(f"/v1/passports/{alpha['id']}/budget", json={"daily_call_limit": 10}, headers=env.h("operator"))
+    env.link()
+    for agent, calls in ((alpha, 8), (beta, 3)):
+        env.store.tables.setdefault("agent_usage_daily", []).append(
+            {"agent_id": agent["id"], "organization_id": DEFAULT_ORG_ID, "day_key": day, "instance_id": "gateway-instance-aaaa", "calls": calls}
+        )
+    env.send("/usage")
+    reply = env.fake.last(OWNER_CHAT)
+    assert reply.startswith("Tool calls today (") and "UTC+8" in reply
+    assert "Alpha: 8 of 10 calls (80%)" in reply and "Beta: 3 calls (no limit)" in reply
+    assert "Gamma" not in reply  # no calls and no limit: nothing to say
+    assert "spend" not in reply.lower() and "$" not in reply
+
+
+def test_usage_with_no_calls_and_from_an_unlinked_chat(env: Env) -> None:
+    env.send("/usage", chat=555)
+    assert "not linked" in env.fake.last(555)
+    env.link()
+    env.send("/usage")
+    assert "No calls yet." in env.fake.last(OWNER_CHAT)

@@ -13,6 +13,7 @@ import { Hand, LogOut, OctagonX, Plus, RefreshCw, Trash2 } from "lucide-react";
 import {
   ApiError,
   type ControlAuditEntry,
+  type AgentUsage,
   type McpServer,
   type Passport,
   type PassportStatus,
@@ -20,9 +21,13 @@ import {
   passportsApi,
   type TelegramLink,
   type TelegramLinkCode,
+  type UsageSummary,
   telegramApi,
 } from "@/lib/api";
 import { useAuth, useRequiredSession } from "@/lib/auth";
+
+// Budget Guard's automatic freezes are recorded under this fixed actor (not a person).
+const SYSTEM_ACTOR_ID = "00000000-0000-0000-0000-000000000000";
 
 const FRAMEWORKS = ["n8n", "Claude", "LangGraph", "CrewAI", "custom"];
 
@@ -54,6 +59,8 @@ export default function PassportsPage() {
   const [servers, setServers] = useState<McpServer[]>([]);
   const [audit, setAudit] = useState<ControlAuditEntry[]>([]);
   const [orgSafeMode, setOrgSafeMode] = useState(false);
+  const [usage, setUsage] = useState<UsageSummary | null>(null);
+  const [budgetEditing, setBudgetEditing] = useState<Passport | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [revealedKey, setRevealedKey] = useState<{ name: string; key: string } | null>(null);
@@ -75,7 +82,7 @@ export default function PassportsPage() {
   const refresh = useCallback(async () => {
     if (!token) return;
     try {
-      const [p, s, a, o] = await Promise.all([
+      const [p, s, a, o, u] = await Promise.all([
         passportsApi.list(token),
         passportsApi.servers(token),
         passportsApi.audit(token),
@@ -84,11 +91,17 @@ export default function PassportsPage() {
           if (err instanceof ApiError && err.status === 404) return { enabled: false, changed: false };
           throw err;
         }),
+        // Same for the usage view on a core that predates Budget Guard.
+        passportsApi.usage(token).catch((err: unknown) => {
+          if (err instanceof ApiError && err.status === 404) return null;
+          throw err;
+        }),
       ]);
       setPassports(p);
       setServers(s);
       setAudit(a);
       setOrgSafeMode(o.enabled);
+      setUsage(u);
     } catch (err) {
       handleError(err);
     }
@@ -288,6 +301,8 @@ export default function PassportsPage() {
             act(`${p.name} renewed for ${days} days.`, () => passportsApi.renew(token, p.id, days));
           }}
           onEditScopes={(p) => setEditing(p)}
+          usage={usage}
+          onEditBudget={(p) => setBudgetEditing(p)}
           orgSafeMode={orgSafeMode}
           onSafeMode={(p) => {
             if (!p.safe_mode) {
@@ -299,6 +314,22 @@ export default function PassportsPage() {
             act(`Safe Mode is off for ${p.name}.`, () => passportsApi.setSafeMode(token, p.id, false, reason));
           }}
         />
+
+        {budgetEditing && (
+          <BudgetEditor
+            key={budgetEditing.id}
+            passport={budgetEditing}
+            busy={busy}
+            onCancel={() => setBudgetEditing(null)}
+            onSave={(limit, action, reason, confirm) => {
+              const target = budgetEditing;
+              setBudgetEditing(null);
+              act(`Daily limit updated for ${target.name}.`, () =>
+                passportsApi.setBudget(token, target.id, limit, action, reason, confirm)
+              );
+            }}
+          />
+        )}
 
         {editing && (
           <ScopeEditor
@@ -354,8 +385,11 @@ function PassportTable(props: {
   onEditScopes: (p: Passport) => void;
   orgSafeMode: boolean;
   onSafeMode: (p: Passport) => void;
+  usage: UsageSummary | null;
+  onEditBudget: (p: Passport) => void;
 }) {
   const { passports, busy } = props;
+  const usageByAgent = new Map<string, AgentUsage>((props.usage?.agents ?? []).map((u) => [u.agent_id, u]));
   return (
     <section className="overflow-x-auto rounded-[12px] border border-[#E5E5E5] bg-[#FFFFFF]">
       <table className="w-full min-w-[900px] text-left text-[13px]">
@@ -365,6 +399,7 @@ function PassportTable(props: {
             <th className="p-3">Status</th>
             <th className="p-3">Owner</th>
             <th className="p-3">Scopes</th>
+            <th className="p-3">Calls today</th>
             <th className="p-3">Expires</th>
             <th className="p-3">Last seen</th>
             <th className="p-3 text-right">Actions</th>
@@ -373,7 +408,7 @@ function PassportTable(props: {
         <tbody>
           {passports.length === 0 && (
             <tr>
-              <td colSpan={7} className="p-6 text-center text-[#606060]">
+              <td colSpan={8} className="p-6 text-center text-[#606060]">
                 No agents yet. Register one below.
               </td>
             </tr>
@@ -428,6 +463,9 @@ function PassportTable(props: {
                   </div>
                 </td>
                 <td className="p-3 text-[12px]">
+                  <CallsCell passport={p} usage={usageByAgent.get(p.id)} />
+                </td>
+                <td className="p-3 text-[12px]">
                   <div>{new Date(p.expires_at).toLocaleDateString()}</div>
                   <div className={`text-[11px] ${days <= 7 ? "text-[#B42318]" : "text-[#606060]"}`}>
                     {days > 0 ? `${days} days left` : "expired"}
@@ -445,6 +483,7 @@ function PassportTable(props: {
                     {p.status !== "revoked" && (
                       <>
                         <ActionButton disabled={busy} onClick={() => props.onEditScopes(p)} label="Scopes" />
+                        <ActionButton disabled={busy} onClick={() => props.onEditBudget(p)} label="Limit" />
                         <ActionButton
                           disabled={busy}
                           onClick={() => props.onSafeMode(p)}
@@ -790,12 +829,19 @@ function AuditPanel(props: { entries: ControlAuditEntry[]; passports: Passport[]
               <span className="font-mono font-semibold">{e.action}</span>{" "}
               {targetLabel(e)}
               {e.reason && <span className="text-[#606060]"> · {e.reason}</span>}
+              {e.action === "passport.budget_changed" && (
+                <span className="text-[#606060]">
+                  {" "}
+                  · limit {String(e.details?.old_limit ?? "none")} → {String(e.details?.new_limit ?? "none")}
+                </span>
+              )}
               {typeof e.details?.frozen_count === "number" && (
                 <span className="text-[#606060]"> · {String(e.details.frozen_count)} agents</span>
               )}
             </span>
             <span className="text-[11px] text-[#606060]">
-              by {shortId(e.actor_user_id)} · {new Date(e.created_at).toLocaleString()}
+              by {e.actor_user_id === SYSTEM_ACTOR_ID ? "RedHand Budget Guard" : shortId(e.actor_user_id)} ·{" "}
+              {new Date(e.created_at).toLocaleString()}
             </span>
           </li>
         ))}
@@ -913,6 +959,125 @@ function TelegramPanel(props: {
           <p className="mt-1 text-[11px] text-[#606060]">The code works once. Anyone who has it can link their phone.</p>
         </div>
       )}
+    </section>
+  );
+}
+
+/** Calls today against the limit. Counts tool calls through the gateway; never money. */
+function CallsCell(props: { passport: Passport; usage: AgentUsage | undefined }) {
+  const { passport, usage } = props;
+  if (passport.status === "revoked") return <span className="text-[#606060]">-</span>;
+  const calls = usage?.calls ?? 0;
+  const limit = passport.daily_call_limit;
+  if (limit === null) {
+    return (
+      <div>
+        <div>{calls} calls</div>
+        <div className="text-[11px] text-[#8A4B00]">no limit set</div>
+      </div>
+    );
+  }
+  const percent = Math.min(100, Math.floor((calls * 100) / limit));
+  const color = percent >= 100 ? "bg-[#B42318]" : percent >= 80 ? "bg-[#E8A33D]" : "bg-[#1E7B34]";
+  return (
+    <div className="min-w-[110px]">
+      <div className="font-semibold">
+        {calls} / {limit}
+      </div>
+      <div className="mt-1 h-[6px] w-full rounded-full bg-[#F2F2F2]" role="progressbar" aria-valuenow={percent} aria-valuemin={0} aria-valuemax={100}>
+        <div className={`h-[6px] rounded-full ${color}`} style={{ width: `${percent}%` }} />
+      </div>
+      <div className="mt-1 text-[11px] text-[#606060]">
+        {percent >= 100 ? "refused until tomorrow" : `${percent}%`}
+        {passport.budget_action === "freeze" ? " · freezes at limit" : ""}
+      </div>
+    </div>
+  );
+}
+
+/** Set an agent's daily limit on tool calls (calls through the gateway, not money). */
+function BudgetEditor(props: {
+  passport: Passport;
+  busy: boolean;
+  onSave: (limit: number | null, action: "deny" | "freeze", reason: string, confirm: boolean) => void;
+  onCancel: () => void;
+}) {
+  const { passport } = props;
+  const [limit, setLimit] = useState(passport.daily_call_limit === null ? "" : String(passport.daily_call_limit));
+  const [action, setAction] = useState<"deny" | "freeze">(passport.budget_action);
+  const [reason, setReason] = useState("");
+  const parsed = limit.trim() === "" ? null : Number(limit);
+  const valid = parsed === null || (Number.isInteger(parsed) && parsed >= 1 && parsed <= 10_000_000);
+  const old = passport.daily_call_limit;
+  // Raising or removing a limit, or turning auto-freeze off, relaxes the restriction: the server wants an admin and confirmation.
+  const relaxes = (old !== null && (parsed === null || parsed > old)) || (passport.budget_action === "freeze" && action !== "freeze");
+  return (
+    <section className="rounded-[12px] border-2 border-[#0F0F0F] bg-[#FFFFFF] p-4">
+      <h2 className="text-[15px] font-semibold">Daily limit for {passport.name}</h2>
+      <p className="mt-1 text-[12px] text-[#606060]">
+        A cap on tool calls this agent makes through the RedHand gateway per day (the day starts at midnight in your
+        organization&apos;s time zone). It does not see LLM tokens or money.
+      </p>
+      <form
+        className="mt-3 flex flex-col gap-3 text-[13px]"
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (!valid) return;
+          if (relaxes && !window.confirm("This relaxes the restriction (raises or removes the limit, or turns auto-freeze off). Continue?")) return;
+          props.onSave(parsed, action, reason, relaxes);
+        }}
+      >
+        <label className="flex items-center gap-2">
+          Calls per day
+          <input
+            inputMode="numeric"
+            placeholder="blank = no limit"
+            value={limit}
+            onChange={(e) => setLimit(e.target.value)}
+            className="h-[34px] w-[160px] rounded-[8px] border border-[#E5E5E5] px-2"
+          />
+        </label>
+        {!valid && <p role="alert" className="text-[12px] text-[#B42318]">Enter a whole number from 1 to 10,000,000, or leave it blank.</p>}
+        <label className="flex items-center gap-2">
+          At the limit
+          <select
+            value={action}
+            onChange={(e) => setAction(e.target.value as "deny" | "freeze")}
+            className="h-[34px] rounded-[8px] border border-[#E5E5E5] px-2"
+          >
+            <option value="deny">refuse further calls and alert me</option>
+            <option value="freeze">refuse, alert me, and freeze the agent</option>
+          </select>
+        </label>
+        <input
+          maxLength={500}
+          placeholder="Reason (recorded in the audit log)"
+          value={reason}
+          onChange={(e) => setReason(e.target.value)}
+          className="h-[34px] rounded-[8px] border border-[#E5E5E5] px-3"
+        />
+        {relaxes && (
+          <p role="note" className="rounded-[8px] bg-[#FFF4E5] p-2 text-[12px] text-[#8A4B00]">
+            Raising or removing a limit needs an admin. You will be asked to confirm.
+          </p>
+        )}
+        <div className="flex gap-2">
+          <button
+            type="submit"
+            disabled={props.busy || !valid}
+            className="h-[34px] flex-1 rounded-full bg-[#0F0F0F] font-semibold text-[#FFFFFF] disabled:opacity-40"
+          >
+            Save limit
+          </button>
+          <button
+            type="button"
+            onClick={props.onCancel}
+            className="h-[34px] rounded-full border border-[#E5E5E5] px-4 hover:bg-[#F2F2F2]"
+          >
+            Cancel
+          </button>
+        </div>
+      </form>
     </section>
   );
 }

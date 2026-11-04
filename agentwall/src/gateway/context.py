@@ -11,13 +11,16 @@ from __future__ import annotations
 
 from collections import OrderedDict
 from dataclasses import dataclass
+from datetime import datetime
 import time
 from typing import Any, Literal
 from uuid import UUID
 
 import httpx
-from pydantic import BaseModel, ConfigDict, Field, StrictBool, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictInt, ValidationError
 import structlog
+
+from .budget import BudgetState
 
 logger = structlog.get_logger(__name__)
 
@@ -33,6 +36,16 @@ class Scope(BaseModel):
     access: Literal["read", "write"] = "read"
 
 
+class _BudgetPayload(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    daily_call_limit: StrictInt | None = Field(ge=0)  # 0 is what core sends for a malformed stored limit
+    used_by_other_instances: StrictInt = Field(ge=0)
+    day_key: str = Field(pattern=r"^\d{4}-\d{2}-\d{2}$")
+    resets_at: datetime
+    action: str = Field(pattern=r"^(deny|freeze)$")
+
+
 class _AgentPayload(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
@@ -44,6 +57,9 @@ class _AgentPayload(BaseModel):
     # Required, with no default: a core that does not send the flag (an older version) makes the
     # lookup fail and the gateway deny, rather than silently skipping Safe Mode.
     safe_mode: StrictBool
+    # Also required with no default, for the same reason: an older core that sends no budget makes the
+    # lookup fail and the call is denied rather than running with no limit.
+    budget: _BudgetPayload
 
 
 class _ServerPayload(BaseModel):
@@ -70,6 +86,7 @@ class GatewayContext:
     server_slug: str
     server_url: str | None
     safe_mode: bool
+    budget: BudgetState
 
     def covers_tool(self, tool: str) -> bool:
         """True when any scope covers the tool, ignoring Safe Mode."""
@@ -104,11 +121,13 @@ class CoreContextClient:
         core_url: str,
         service_token: str | None,
         ttl_seconds: float,
+        instance_id: str,
         http_client: httpx.AsyncClient | None = None,
         clock: Any = time.monotonic,
     ) -> None:
         self._url = core_url.rstrip("/") + "/internal/v1/gateway-context"
         self._token = service_token
+        self._instance_id = instance_id
         self._ttl = max(0.0, min(ttl_seconds, MAX_CONTEXT_TTL_SECONDS))
         self._http = http_client or httpx.AsyncClient(timeout=httpx.Timeout(2.0, connect=1.0))
         self._clock = clock
@@ -137,7 +156,10 @@ class CoreContextClient:
         try:
             resp = await self._http.get(
                 self._url,
-                params={"agent_id": str(agent_id), "organization_id": str(organization_id), "server": server},
+                params={
+                    "agent_id": str(agent_id), "organization_id": str(organization_id), "server": server,
+                    "instance_id": self._instance_id,
+                },
                 headers={"Authorization": f"Bearer {self._token}"},
             )
         except httpx.HTTPError as exc:
@@ -169,4 +191,10 @@ class CoreContextClient:
             server_slug=server,
             server_url=payload.server.url if payload.server else None,
             safe_mode=payload.agent.safe_mode,
+            budget=BudgetState(
+                daily_call_limit=payload.agent.budget.daily_call_limit,
+                used_by_other_instances=payload.agent.budget.used_by_other_instances,
+                day_key=payload.agent.budget.day_key,
+                resets_at=payload.agent.budget.resets_at,
+            ),
         )

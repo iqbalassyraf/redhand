@@ -16,6 +16,7 @@ import hmac
 import json
 import time
 from typing import Annotated, Any, AsyncGenerator
+from uuid import uuid4
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Path, Query, Request, status
 from fastapi.middleware.cors import CORSMiddleware
@@ -25,6 +26,7 @@ import structlog
 from ..config.settings import Settings, get_settings
 from .firewall.engine import FirewallPolicyEngine
 from .firewall.mcp_vetting import MCPServerAuditor, MCPVettingReport
+from .gateway.budget import BudgetMeter, HttpUsageReporter
 from .gateway.context import CoreContextClient
 from .gateway.identity import AgentTokenVerifier
 from .gateway.metrics import GatewayMetrics
@@ -43,13 +45,16 @@ VET_REQUESTS_PER_MINUTE = 30
 def build_gateway(settings: Settings, firewall: FirewallPolicyEngine, audit: TamperEvidentAuditLogger) -> McpGateway:
     core = settings.CORE_URL.rstrip("/")
     token = settings.CORE_SERVICE_TOKEN.get_secret_value() if settings.CORE_SERVICE_TOKEN else None
+    instance_id = f"gw-{uuid4().hex}"  # identifies this process in usage reports; a restart gets a new one
+    metrics = GatewayMetrics()
     return McpGateway(
         verifier=AgentTokenVerifier(
             public_key_pem=settings.AGENT_TOKEN_PUBLIC_KEY,
             jwks_url=f"{core}/v1/agent-auth/jwks",
         ),
         contexts=CoreContextClient(
-            core_url=core, service_token=token, ttl_seconds=settings.CONTEXT_CACHE_TTL_SECONDS
+            core_url=core, service_token=token, ttl_seconds=settings.CONTEXT_CACHE_TTL_SECONDS,
+            instance_id=instance_id,
         ),
         forwarder=UpstreamForwarder(
             allow_insecure=settings.ALLOW_INSECURE_UPSTREAMS,
@@ -59,7 +64,14 @@ def build_gateway(settings: Settings, firewall: FirewallPolicyEngine, audit: Tam
         ),
         firewall=firewall,
         audit_logger=audit,
-        metrics=GatewayMetrics(),
+        metrics=metrics,
+        budget=BudgetMeter(
+            instance_id=instance_id,
+            reporter=HttpUsageReporter(core_url=core, service_token=token),
+            flush_interval=settings.BUDGET_FLUSH_INTERVAL_SECONDS,
+            max_keys=settings.BUDGET_MAX_TRACKED_KEYS,
+            metrics=metrics,
+        ),
     )
 
 
@@ -78,8 +90,10 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         logger.warning("AGENTWALL_AUDIT_LOG_FILE is not set: gateway audit records are in memory only")
     setup_telemetry(settings.OTEL_SERVICE_NAME)
     firewall_engine.load_policies()
+    gateway.budget.start()
     yield
     logger.info("Shutting down AgentWall gateway")
+    await gateway.budget.stop()
 
 
 app = FastAPI(

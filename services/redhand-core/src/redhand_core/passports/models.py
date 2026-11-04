@@ -12,7 +12,7 @@ from datetime import datetime, timezone
 from typing import Any, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, StrictBool, field_validator
+from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictInt, field_validator
 
 PassportStatus = Literal["active", "frozen", "revoked", "expired"]
 StoredStatus = Literal["active", "frozen", "revoked"]
@@ -118,6 +118,11 @@ class PassportCreateRequest(BaseModel):
     expires_in_days: int = Field(default=90, ge=1, le=365)
 
 
+def _stored_limit(raw: Any) -> int | None:
+    """A stored daily call limit for display; anything that is not a positive integer shows as none."""
+    return raw if isinstance(raw, int) and not isinstance(raw, bool) and raw >= 1 else None
+
+
 class PassportView(BaseModel):
     id: UUID
     organization_id: UUID
@@ -136,6 +141,8 @@ class PassportView(BaseModel):
     created_at: datetime | None
     last_seen_at: datetime | None
     safe_mode: bool
+    daily_call_limit: int | None
+    budget_action: str
 
     @classmethod
     def from_row(cls, row: dict[str, Any], now: datetime) -> PassportView:
@@ -160,6 +167,8 @@ class PassportView(BaseModel):
             created_at=_opt_ts("created_at"),
             last_seen_at=_opt_ts("last_seen_at"),
             safe_mode=row.get("safe_mode") is True,
+            daily_call_limit=_stored_limit(row.get("daily_call_limit")),
+            budget_action=str(row.get("budget_action") or "deny"),
         )
 
 
@@ -178,6 +187,22 @@ class ConfirmedControlActionRequest(ControlActionRequest):
     confirm: bool = Field(
         default=False, description="Must be true. Guards against accidental unfreeze/revoke."
     )
+
+
+class BudgetUpdateRequest(BaseModel):
+    """Set an agent's daily limit on tool calls through the gateway (null removes the limit)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    daily_call_limit: StrictInt | None = Field(default=None, ge=1, le=10_000_000)
+    action: Literal["deny", "freeze"] = "deny"
+    reason: str | None = Field(default=None, max_length=MAX_REASON_LENGTH)
+    confirm: StrictBool = Field(default=False, description="Required to raise or remove a limit.")
+
+
+class AgentBudgetResponse(BaseModel):
+    passport: PassportView
+    changed: bool
 
 
 class SafeModeRequest(BaseModel):
