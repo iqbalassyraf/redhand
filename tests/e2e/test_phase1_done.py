@@ -26,6 +26,7 @@ import pytest
 
 from agentwall.src import main as gateway_main
 from agentwall.src.firewall.engine import FirewallPolicyEngine
+from agentwall.src.gateway.budget import BudgetMeter, HttpUsageReporter
 from agentwall.src.gateway.context import CoreContextClient
 from agentwall.src.gateway.identity import AgentTokenVerifier
 from agentwall.src.gateway.metrics import GatewayMetrics
@@ -55,6 +56,7 @@ class Stack:
         )
         self.store = LocalSupabaseAdapter()
         core_app = create_app(self.settings)
+        self.core_app = core_app
         core_app.dependency_overrides[get_settings] = lambda: self.settings
         core_app.dependency_overrides[get_supabase_service_client] = lambda: self.store
         agent_auth._exchange_limiter._events.clear()
@@ -67,7 +69,8 @@ class Stack:
                 public_key_pem=None, jwks_url="http://core/v1/agent-auth/jwks", http_client=self.core
             ),
             contexts=CoreContextClient(
-                core_url="http://core", service_token=SERVICE_TOKEN, ttl_seconds=context_ttl, http_client=self.core
+                core_url="http://core", service_token=SERVICE_TOKEN, ttl_seconds=context_ttl,
+                instance_id="e2e-gateway-0001", http_client=self.core,
             ),
             forwarder=UpstreamForwarder(
                 allow_insecure=True,
@@ -79,6 +82,10 @@ class Stack:
             firewall=FirewallPolicyEngine(POLICY_FILE),
             audit_logger=self.audit,
             metrics=GatewayMetrics(),
+            budget=BudgetMeter(
+                instance_id="e2e-gateway-0001",
+                reporter=HttpUsageReporter(core_url="http://core", service_token=SERVICE_TOKEN, http_client=self.core),
+            ),
         )
         monkeypatch.setattr(gateway_main, "gateway", self.gateway)
         self.edge = httpx.AsyncClient(transport=httpx.ASGITransport(app=gateway_main.app), base_url="http://gateway")

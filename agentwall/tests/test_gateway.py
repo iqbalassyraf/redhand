@@ -23,6 +23,7 @@ import jwt
 import pytest
 
 from agentwall.src import main as gateway_main
+from agentwall.src.gateway.budget import BudgetMeter
 from agentwall.src.gateway.context import CoreContextClient
 from agentwall.src.gateway.identity import AgentTokenVerifier
 from agentwall.src.gateway.metrics import GatewayMetrics
@@ -48,6 +49,21 @@ ORG = UUID("00000000-0000-0000-0000-000000000010")
 OTHER_ORG = UUID("00000000-0000-0000-0000-0000000000f0")
 SERVICE_TOKEN = "svc-token-for-tests-0123456789"
 UPSTREAM_URL = "https://mcp.example.com/xero"
+
+
+class FakeReporter:
+    """Stands in for core's /internal/v1/usage."""
+
+    def __init__(self) -> None:
+        self.reports: list[list[dict[str, Any]]] = []
+        self.accept = True
+        self.crash = False
+
+    async def send(self, instance_id: str, items: list[dict[str, Any]]) -> bool:
+        if self.crash:
+            raise RuntimeError("reporter exploded")
+        self.reports.append(items)
+        return self.accept
 
 
 class FakeClock:
@@ -139,10 +155,12 @@ class Harness:
         self.upstream = FakeUpstream()
         self.clock = FakeClock()
         self.audit = TamperEvidentAuditLogger()
+        self.reporter = FakeReporter()
+        self.budget = BudgetMeter(instance_id="test-gateway-0001", reporter=self.reporter, clock=self.clock, jitter=lambda: 0.5)
         self.gateway = McpGateway(
             verifier=AgentTokenVerifier(public_key_pem=public_pem, jwks_url=None),
             contexts=CoreContextClient(
-                core_url="http://core", service_token=service_token, ttl_seconds=ttl,
+                core_url="http://core", service_token=service_token, ttl_seconds=ttl, instance_id="test-gateway-0001",
                 http_client=httpx.AsyncClient(transport=httpx.MockTransport(self.core.handler)),
                 clock=self.clock,
             ),
@@ -153,15 +171,21 @@ class Harness:
             firewall=gateway_main.firewall_engine,
             audit_logger=self.audit,
             metrics=GatewayMetrics(),
+            budget=self.budget,
         )
 
     def add_agent(
-        self, scopes: list[dict[str, str]], status: str = "active", org: UUID = ORG, safe_mode: bool = False
+        self, scopes: list[dict[str, str]], status: str = "active", org: UUID = ORG, safe_mode: bool = False,
+        limit: int | None = None, used_by_others: int = 0,
     ) -> UUID:
         agent_id = uuid4()
         self.core.agents[str(agent_id)] = {
             "id": str(agent_id), "organization_id": str(org), "status": status, "version": 1,
             "scopes": scopes, "expires_at": "2099-01-01T00:00:00+00:00", "safe_mode": safe_mode,
+            "budget": {
+                "daily_call_limit": limit, "used_by_other_instances": used_by_others, "day_key": "2026-11-04",
+                "resets_at": "2026-11-04T16:00:00+00:00", "action": "deny",
+            },
         }
         self.core.servers[(str(org), "xero")] = UPSTREAM_URL
         return agent_id
@@ -402,7 +426,7 @@ async def test_freeze_all_blocks_every_agent_of_tenant() -> None:
 
 
 def test_context_ttl_is_capped_to_meet_revocation_slo() -> None:
-    client = CoreContextClient(core_url="http://core", service_token="x", ttl_seconds=60)
+    client = CoreContextClient(core_url="http://core", service_token="x", ttl_seconds=60, instance_id="test-gateway-0001")
     assert client._ttl == 4.0
 
 

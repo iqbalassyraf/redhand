@@ -15,6 +15,13 @@ class GatewayMetrics:
         self._latency_buckets: Counter[float] = Counter()
         self._latency_count = 0
         self._latency_sum_ms = 0.0
+        self._budget_flushes: Counter[str] = Counter()
+        self._budget_unreported = 0
+
+    def record_budget_flush(self, outcome: str, unreported_keys: int) -> None:
+        with self._lock:
+            self._budget_flushes[outcome] += 1
+            self._budget_unreported = unreported_keys
 
     def record(self, *, method: str, outcome: str, reason: str, overhead_ms: float) -> None:
         with self._lock:
@@ -35,6 +42,17 @@ class GatewayMetrics:
                 lines.append(
                     f'redhand_gateway_decisions_total{{method="{method}",outcome="{outcome}",reason="{reason}"}} {count}'
                 )
+            lines += [
+                "# HELP redhand_gateway_budget_reports_total Reports of call counts to core, by outcome.",
+                "# TYPE redhand_gateway_budget_reports_total counter",
+            ]
+            for outcome, count in sorted(self._budget_flushes.items()):
+                lines.append(f'redhand_gateway_budget_reports_total{{outcome="{outcome}"}} {count}')
+            lines += [
+                "# HELP redhand_gateway_budget_unreported_keys Agent/day counters with calls core has not acknowledged.",
+                "# TYPE redhand_gateway_budget_unreported_keys gauge",
+                f"redhand_gateway_budget_unreported_keys {self._budget_unreported}",
+            ]
             lines += [
                 "# HELP redhand_gateway_overhead_ms Gateway-added latency, excluding upstream time.",
                 "# TYPE redhand_gateway_overhead_ms histogram",

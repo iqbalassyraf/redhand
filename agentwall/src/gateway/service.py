@@ -26,6 +26,7 @@ from ..firewall.engine import FirewallPolicyEngine
 from ..telemetry.audit_logger import TamperEvidentAuditLogger
 from .context import AgentUnknownError, ContextUnavailableError, CoreContextClient, GatewayContext
 from .identity import AgentAuthError, AgentIdentity, AgentTokenVerifier, KeyUnavailableError
+from .budget import BudgetMeter
 from .metrics import GatewayMetrics
 from .upstream import DestinationBlockedError, UpstreamError, UpstreamForwarder
 
@@ -79,6 +80,7 @@ class McpGateway:
         firewall: FirewallPolicyEngine,
         audit_logger: TamperEvidentAuditLogger,
         metrics: GatewayMetrics,
+        budget: BudgetMeter,
     ) -> None:
         self.verifier = verifier
         self.contexts = contexts
@@ -86,6 +88,7 @@ class McpGateway:
         self.firewall = firewall
         self.audit = audit_logger
         self.metrics = metrics
+        self.budget = budget
 
     async def handle(
         self,
@@ -170,6 +173,29 @@ class McpGateway:
                 self._record(identity, context, method, message, "BLOCK", violations, 403, tool_name, arguments)
                 return deny(200, JSONRPC_POLICY_VIOLATION, f"PolicyViolation: tool '{tool_name}' blocked by guardrails.",
                             "guardrail", {"tool_name": tool_name, "violations": violations})
+
+            # 4b. Budget Guard: a call that is otherwise allowed consumes one unit of the agent's daily
+            # limit, or is refused. Refused calls above never reach this point, so they never consume.
+            decision = self.budget.try_consume(identity.agent_id, context.budget)
+            if not decision.allowed:
+                limit = context.budget.daily_call_limit
+                resets = context.budget.resets_at.isoformat()
+                if decision.reason == "meter_full":
+                    reasons = ["The gateway cannot track this agent's usage right now; the call was refused."]
+                    text = "PolicyViolation: the gateway cannot track this agent's usage right now."
+                    why = "budget_untracked"
+                else:
+                    reasons = [f"Daily limit of {limit} tool calls reached ({decision.used} used); resets at {resets}."]
+                    text = f"PolicyViolation: daily limit of {limit} tool calls reached; it resets at {resets}."
+                    why = "budget_exceeded"
+                self._record(identity, context, method, message, "BLOCK", reasons, 403, tool_name, arguments)
+                return deny(
+                    200, JSONRPC_POLICY_VIOLATION, text, why,
+                    {"tool_name": tool_name, "daily_call_limit": limit, "used": decision.used, "resets_at": resets},
+                )
+            self.budget.schedule_flush_if_due()
+            if decision.urgent:
+                await self.budget.flush_now()
 
         overhead_ms = (time.perf_counter() - started) * 1000
 
