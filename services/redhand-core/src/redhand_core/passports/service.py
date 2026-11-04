@@ -387,6 +387,61 @@ async def set_agent_budget(
     return PassportView.from_row(updated, now), bool(data["changed"])
 
 
+async def get_org_budget_default(supabase: Any, organization_id: UUID) -> int | None:
+    res = await supabase.table("organizations").select("default_daily_call_limit").eq("id", str(organization_id)).execute()
+    rows = list(res.data or [])
+    raw = rows[0].get("default_daily_call_limit") if len(rows) == 1 else None
+    return raw if isinstance(raw, int) and not isinstance(raw, bool) and raw >= 1 else None
+
+
+@retry_once_on_conflict
+async def set_org_budget_default(
+    supabase: Any, operator: OperatorContext, limit: int | None, reason: str | None, confirm: bool
+) -> tuple[int | None, bool]:
+    """
+    Sets the daily limit that new agents start with. Raising or removing it relaxes the protection of
+    agents registered later, so it needs explicit confirmation (the caller is already an admin).
+    """
+    current = await get_org_budget_default(supabase, operator.organization_id)
+    if current is not None and (limit is None or limit > current):
+        _require_confirmation(confirm, "Raising or removing the default limit")
+    data = await _rpc(
+        supabase,
+        "control_org_budget_default",
+        {
+            "p_org": str(operator.organization_id), "p_actor": str(operator.user_id), "p_limit": limit,
+            "p_reason": reason, "p_expected": current,  # compare-and-set against what the decision used
+        },
+        not_found_detail="Organization not found.",
+        conflict_detail="The default limit conflicted with another change; try again.",
+    )
+    if isinstance(data, dict) and data.get("conflict"):
+        raise StateConflictError
+    return limit, bool(data["changed"])
+
+
+async def apply_default_budget(
+    supabase: Any, operator: OperatorContext, passport: PassportView, now: datetime
+) -> PassportView:
+    """
+    Gives a newly registered agent the organization's default daily limit, if one is set (an audited budget
+    change). Best effort: the agent exists either way, and a failure here is logged and leaves it with no limit,
+    which the dashboard flags. Existing agents are never touched by the default.
+    """
+    try:
+        default = await get_org_budget_default(supabase, operator.organization_id)
+        if default is None:
+            return passport
+        updated, _ = await set_agent_budget(
+            supabase, operator, passport.id, default, passport.budget_action,
+            "Organization default daily limit", False, now,
+        )
+        return updated
+    except Exception as exc:  # noqa: BLE001  registration must not fail because of the default
+        logger.warning("Could not apply the organization default limit: %s", type(exc).__name__)
+        return passport
+
+
 async def get_org_utc_offset(supabase: Any, organization_id: UUID) -> int:
     res = await supabase.table("organizations").select("utc_offset_minutes").eq("id", str(organization_id)).execute()
     rows = list(res.data or [])

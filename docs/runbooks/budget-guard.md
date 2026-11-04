@@ -20,7 +20,15 @@ Design: `docs/adr/0010-budget-guard.md`.
 2. Deploy **core**, then the **gateway** (`deploy.sh core`, then `deploy.sh gateway`, with `DASHBOARD_ORIGIN`
    set). The gateway requires the new `budget` field from core and denies every call without it.
 3. Deploy the dashboard (merge to `main`). It tolerates an older core.
-4. Schedule the cleanup (`select public.purge_usage();`, daily). Usage rows older than 90 days are removed.
+4. Cleanup runs by itself: migration `20261106000100_schedule_purges.sql` schedules `purge_usage()` and `purge_telegram_updates()` daily at 19:17 UTC with pg_cron (usage rows older than 90 days are removed). On a database without pg_cron, schedule them with any scheduler.
+5. Optional: apply `20261106000200_budget_default.sql` (default limit for new agents) before deploying core of the same version.
+
+## Default limit for new agents
+Dashboard -> Passports -> **Default daily limit for new agents** -> **Change (admin)**. Every agent registered
+afterwards starts with that limit (you can still change it per agent). It never changes existing agents, and
+changing it later does not alter agents already registered. Blank means no default. Raising or removing it
+asks for confirmation. If applying it ever fails the agent is still registered, with no limit (the dashboard
+shows "no limit set").
 
 ## Test it on staging (Phase 2 done test 3)
 1. In the dashboard set a limit of **5** on your DeepWiki read agent, action "refuse and alert".

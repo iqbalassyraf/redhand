@@ -3,6 +3,12 @@
 ## Unreleased: Phase 2 (Stop things), in progress
 
 ### Added
+- Organization default daily limit: an admin can set the daily call limit that every newly registered agent
+  starts with (off by default; existing agents are not changed; raising or removing it needs confirmation).
+  New migration `20261106000200_budget_default.sql`; dashboard panel "Default daily limit for new agents".
+- Scheduled cleanup: `purge_usage()` and `purge_telegram_updates()` now run daily at 19:17 UTC through pg_cron
+  (migration `20261106000100_schedule_purges.sql`; a no-op where pg_cron is unavailable).
+- The control audit log shows when a budget change turns auto-freeze on or off.
 - Budget Guard (M3): a daily cap on the tool calls an agent makes through the gateway. Set it per agent in
   the dashboard (**Limit**); over the cap the gateway refuses further calls, linked Telegram chats are alerted
   at 80% and 100%, and the agent can optionally be frozen automatically (recorded as "RedHand Budget Guard").

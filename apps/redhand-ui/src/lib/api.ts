@@ -175,6 +175,13 @@ export const passportsApi = {
       body: { reason: reason || null, confirm: true },
     }),
   usage: (t: string) => apiFetch<UsageSummary>("/v1/usage", t),
+  budgetDefault: (t: string) =>
+    apiFetch<{ default_daily_call_limit: number | null; changed: boolean }>("/v1/organization/budget-default", t),
+  setBudgetDefault: (t: string, limit: number | null, reason: string, confirm: boolean) =>
+    apiFetch<{ default_daily_call_limit: number | null; changed: boolean }>("/v1/organization/budget-default", t, {
+      method: "PUT",
+      body: { default_daily_call_limit: limit, reason: reason || null, confirm },
+    }),
   setBudget: (
     t: string,
     id: string,

@@ -60,6 +60,7 @@ export default function PassportsPage() {
   const [audit, setAudit] = useState<ControlAuditEntry[]>([]);
   const [orgSafeMode, setOrgSafeMode] = useState(false);
   const [usage, setUsage] = useState<UsageSummary | null>(null);
+  const [budgetDefault, setBudgetDefault] = useState<number | null>(null);
   const [budgetEditing, setBudgetEditing] = useState<Passport | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -82,7 +83,7 @@ export default function PassportsPage() {
   const refresh = useCallback(async () => {
     if (!token) return;
     try {
-      const [p, s, a, o, u] = await Promise.all([
+      const [p, s, a, o, u, d] = await Promise.all([
         passportsApi.list(token),
         passportsApi.servers(token),
         passportsApi.audit(token),
@@ -96,12 +97,17 @@ export default function PassportsPage() {
           if (err instanceof ApiError && err.status === 404) return null;
           throw err;
         }),
+        passportsApi.budgetDefault(token).catch((err: unknown) => {
+          if (err instanceof ApiError && err.status === 404) return { default_daily_call_limit: null, changed: false };
+          throw err;
+        }),
       ]);
       setPassports(p);
       setServers(s);
       setAudit(a);
       setOrgSafeMode(o.enabled);
       setUsage(u);
+      setBudgetDefault(d.default_daily_call_limit);
     } catch (err) {
       handleError(err);
     }
@@ -365,6 +371,17 @@ export default function PassportsPage() {
             onCreate={(body) => act(`MCP server ${body.slug} registered.`, () => passportsApi.createServer(token, body))}
           />
         </div>
+
+        <BudgetDefaultPanel
+          current={budgetDefault}
+          busy={busy}
+          onChange={(limit, reason, confirm) =>
+            act(
+              limit === null ? "New agents will start with no limit." : `New agents will start with ${limit} calls per day.`,
+              () => passportsApi.setBudgetDefault(token, limit, reason, confirm)
+            )
+          }
+        />
 
         <TelegramPanel token={token} onChanged={refresh} onError={handleError} />
 
@@ -829,10 +846,14 @@ function AuditPanel(props: { entries: ControlAuditEntry[]; passports: Passport[]
               <span className="font-mono font-semibold">{e.action}</span>{" "}
               {targetLabel(e)}
               {e.reason && <span className="text-[#606060]"> · {e.reason}</span>}
-              {e.action === "passport.budget_changed" && (
+              {(e.action === "passport.budget_changed" || e.action === "organization.budget_default_changed") && (
                 <span className="text-[#606060]">
                   {" "}
-                  · limit {String(e.details?.old_limit ?? "none")} → {String(e.details?.new_limit ?? "none")}
+                  · {e.action === "organization.budget_default_changed" ? "default limit" : "limit"}{" "}
+                  {String(e.details?.old_limit ?? "none")} → {String(e.details?.new_limit ?? "none")}
+                  {e.details?.old_action !== undefined && e.details.old_action !== e.details.new_action
+                    ? ` · at limit: ${String(e.details.old_action)} → ${String(e.details.new_action)}`
+                    : ""}
                 </span>
               )}
               {typeof e.details?.frozen_count === "number" && (
@@ -1078,6 +1099,51 @@ function BudgetEditor(props: {
           </button>
         </div>
       </form>
+    </section>
+  );
+}
+
+/** The daily call limit every NEW agent starts with (existing agents are not changed). */
+function BudgetDefaultPanel(props: {
+  current: number | null;
+  busy: boolean;
+  onChange: (limit: number | null, reason: string, confirm: boolean) => void;
+}) {
+  const { current } = props;
+  const change = () => {
+    const answer = window.prompt(
+      "Daily tool calls that NEW agents start with (blank = no default). Existing agents are not changed.",
+      current === null ? "" : String(current)
+    );
+    if (answer === null) return;
+    const limit = answer.trim() === "" ? null : Number(answer);
+    if (limit !== null && (!Number.isInteger(limit) || limit < 1 || limit > 10_000_000)) {
+      window.alert("Enter a whole number from 1 to 10,000,000, or leave it blank.");
+      return;
+    }
+    const relaxes = current !== null && (limit === null || limit > current);
+    if (relaxes && !window.confirm("This raises or removes the default, so agents registered later start with a weaker limit. Continue?")) return;
+    const reason = window.prompt("Reason (recorded in the audit log):") ?? "";
+    props.onChange(limit, reason, relaxes);
+  };
+  return (
+    <section className="flex flex-wrap items-center justify-between gap-3 rounded-[12px] border border-[#E5E5E5] bg-[#FFFFFF] p-4">
+      <div>
+        <h2 className="text-[15px] font-semibold">Default daily limit for new agents</h2>
+        <p className="mt-1 text-[12px] text-[#606060]">
+          {current === null
+            ? "No default: a new agent starts with no limit and is never stopped until you set one."
+            : `New agents start with a limit of ${current} tool calls per day. You can change it per agent.`}{" "}
+          Counts tool calls through the gateway, not money.
+        </p>
+      </div>
+      <button
+        onClick={change}
+        disabled={props.busy}
+        className="h-[34px] rounded-full border border-[#0F0F0F] px-4 text-[13px] font-semibold hover:bg-[#F2F2F2] disabled:opacity-40"
+      >
+        Change (admin)
+      </button>
     </section>
   );
 }

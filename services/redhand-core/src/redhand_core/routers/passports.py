@@ -68,7 +68,9 @@ async def _alert(
 async def register_agent(
     payload: PassportCreateRequest, operator: SecurityOperatorDep, supabase: SupabaseDep
 ) -> PassportCreateResponse:
-    passport, key = await service.create_passport(supabase, operator, payload, utcnow())
+    now = utcnow()
+    passport, key = await service.create_passport(supabase, operator, payload, now)
+    passport = await service.apply_default_budget(supabase, operator, passport, now)
     return PassportCreateResponse(passport=passport, agent_key=key)
 
 

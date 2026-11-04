@@ -61,3 +61,11 @@ limit set"). Daylight saving is not supported by the day boundary.
 - Deploy order: migration, then core, then gateway. The gateway requires `budget`, and core's context
   lookup needs the new database functions.
 - Rolling back the migration drops usage history and every limit.
+
+## Addendum (2026-11-04): organization default limit
+Agents with no limit are never stopped, and the likeliest mistake is forgetting to set one on a new agent. An
+organization may therefore set `default_daily_call_limit`; every agent registered afterwards starts with it
+(an audited budget change, best effort so registration never fails because of it). Existing agents are not
+changed and a later change of the default does not alter agents already registered. Only an admin may set it;
+raising or removing it needs confirmation. A monthly cap and a per-minute limit were considered and left out:
+the daily cap already stops a runaway loop within the day.

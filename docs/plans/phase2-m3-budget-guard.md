@@ -221,3 +221,44 @@ Ten findings; nine fixed, one documented. Each fix has a regression test that fa
 | `flush_now` swallowed errors with no log (CLAUDE.md 6.2) | Fixed: logged by class |
 | Redundant in-flight state and an unused `action` field | Fixed: removed `_tasks` and `BudgetState.action` (`_flushing` kept as the guard for direct `flush()` calls) |
 | The overshoot test asserted a looser bound than documented | Fixed: asserts the documented bound for 1, 2 and 3 instances (measured 0, 0 and 8 against 0, 7 and 14) |
+
+## 12. Organization default limit (added after the staging test)
+**Decision (the project owner asked for the right-sized feature set for customers):** keep the daily call cap
+as built and add exactly one thing, an **organization default daily limit applied to new agents**.
+
+- **Why:** the realistic failure for a small team is forgetting to set a limit on a new agent, and an agent
+  with no limit is never stopped. One admin-set default closes that gap without per-agent work.
+- **Why not more:** a monthly cap and a per-minute limit add rules and edge cases for little extra protection,
+  because the daily cap already stops a runaway loop within the day. They stay out of v1.
+- **Behaviour:** `organizations.default_daily_call_limit` (null by default, so nothing changes until an admin
+  sets it). Registering an agent applies it as an audited budget change (actor: the person who registered the
+  agent; reason "Organization default daily limit"). Existing agents are never changed by it, and a later change
+  of the default does not alter agents already registered. Applying it is best effort: if it fails the agent is
+  still registered with no limit, a warning is logged, and the dashboard's "no limit set" nudge shows.
+- **Who:** an admin sets it; lowering needs no confirmation; raising or removing it needs an explicit
+  confirmation. The change is compare-and-set, audited and idempotent like the other budget actions.
+- **Where:** migration `20261106000200_budget_default.sql`, `GET` and `PUT /v1/organization/budget-default`,
+  and a "Default daily limit for new agents" panel in the dashboard.
+
+## 13. Staging verification of Budget Guard (2026-11-04)
+Run by the project owner on staging (Cloud Run core and gateway at the merged commit `d8e309d`, Supabase,
+Telegram) with a real agent against DeepWiki. Local times are UTC+8. The database checks were made by reading
+the staging database afterwards.
+
+| Check | Result |
+|---|---|
+| Deploys (core, then gateway) and the smoke test | Passed, 13 of 13 |
+| Limit 5: calls 1 to 5 work, the 6th is refused | Passed. Refused with "daily limit of 5 tool calls reached; it resets at 2026-11-04T16:00:00+00:00" |
+| Alerts at 80% and at 100%, once each | Passed. "has used 4 of its 5 daily tool calls (80%)" and "reached its daily limit of 5", in the right minutes |
+| Raising the limit to 8 (confirmed) lets the agent work again | Passed. Resumed about 4 s after the change |
+| Reaching the new limit alerts again (alert state re-armed by the limit change) | Passed. Second 100% alert at the new limit |
+| Auto-freeze at the limit | Passed. A `passport.frozen` row by the system actor at 23:26:00, reason "Budget Guard: daily limit reached", 3 s after the refusal; the agent shows as frozen; the alert says it was also frozen |
+| Count accuracy with one instance | Passed. The database holds exactly 8 calls for the one gateway instance |
+| Once-per-day alert state | Passed. warned, limit reached and frozen are all recorded |
+| Does the usage report reach core when Cloud Run throttles CPU? | Yes: both alerts arrived on the calls that triggered them. Not measured to the second |
+
+**Not verified:** `/usage` on the phone and the dashboard's usage bar were not reviewed by the maintainer in
+this run; several gateway instances (staging runs one); the daily reset at midnight on staging.
+
+Scheduled cleanup was also added and applied to staging (migration `20261106000100_schedule_purges.sql`): the
+two purge functions run daily at 19:17 UTC through pg_cron.

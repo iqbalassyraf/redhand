@@ -1,11 +1,13 @@
 # Phase 2 plan: "Stop things"
 
-**Status:** Approved 2026-11-03. Milestones are shippable one at a time.
+**Status:** Complete (2026-11-04). All milestones shipped and verified on staging.
 
 **Goal:** an owner can stop agents from their phone, put them into read-only mode, and cap what they
 can do.
 
 ## Done tests
+**All three passed on staging (2026-11-04).** Notes per test are in the milestone files.
+
 1. An owner sends `/freeze_all` in Telegram and every agent is denied within 5 s; the audit log shows
    who and that it came via Telegram.
 2. With Safe Mode on, a read call succeeds and a write call is refused.
@@ -17,8 +19,8 @@ can do.
 | M0 | Restrict core `/metrics`; dashboard polish (scope editor, zero-scope warning, server names in the audit log) | Done |
 | M1 | Telegram panic command and alerts | Done: verified on staging with a real bot and phone |
 | M2 | Safe Mode | Done: verified on staging 2026-11-04 (`docs/plans/phase2-m2-safe-mode.md`) |
-| M3 | Budget Guard (tool-call caps, not LLM spend) | Built and tested locally (core, gateway, Telegram `/usage`, dashboard); reviewed; not yet on staging |
-| M4 | Dashboard, docs, staging verification | Not started |
+| M3 | Budget Guard (tool-call caps, not LLM spend) | Done: verified on staging 2026-11-04; organization default limit added (`docs/plans/phase2-m3-budget-guard.md` sections 12 and 13) |
+| M4 | Dashboard, docs, staging verification | Done: usage view and limit editor shipped with M3; docs and staging results recorded |
 
 ## Decisions taken (defaults, since no answer was given)
 - Telegram first; WhatsApp later only if customers ask.

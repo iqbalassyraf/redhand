@@ -298,6 +298,7 @@ class LocalSupabaseAdapter:
                 "default_hitl_timeout_seconds": 3600,
                 "safe_mode": False,
                 "utc_offset_minutes": 480,
+                "default_daily_call_limit": None,
             }
         ]
 

@@ -1033,6 +1033,70 @@
         "title": "McpServerView",
         "type": "object"
       },
+      "OrgBudgetDefaultRequest": {
+        "additionalProperties": false,
+        "description": "The daily limit new agents of the organization start with (null: no default).",
+        "properties": {
+          "confirm": {
+            "default": false,
+            "description": "Required to raise or remove the default.",
+            "title": "Confirm",
+            "type": "boolean"
+          },
+          "default_daily_call_limit": {
+            "anyOf": [
+              {
+                "maximum": 10000000.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Default Daily Call Limit"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          }
+        },
+        "title": "OrgBudgetDefaultRequest",
+        "type": "object"
+      },
+      "OrgBudgetDefaultResponse": {
+        "properties": {
+          "changed": {
+            "title": "Changed",
+            "type": "boolean"
+          },
+          "default_daily_call_limit": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Default Daily Call Limit"
+          }
+        },
+        "required": [
+          "default_daily_call_limit",
+          "changed"
+        ],
+        "title": "OrgBudgetDefaultResponse",
+        "type": "object"
+      },
       "OrganizationSafeModeResponse": {
         "properties": {
           "changed": {
@@ -3228,6 +3292,145 @@
         "summary": "Deactivate Mcp Server",
         "tags": [
           "Agent Passports & Control Actions"
+        ]
+      }
+    },
+    "/v1/organization/budget-default": {
+      "get": {
+        "operationId": "get_budget_default_v1_organization_budget_default_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-RedHand-Org",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Redhand-Org"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrgBudgetDefaultResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Budget Default",
+        "tags": [
+          "Budget Guard"
+        ]
+      },
+      "put": {
+        "description": "The daily call limit every NEWLY registered agent starts with. Existing agents are not changed.",
+        "operationId": "set_budget_default_v1_organization_budget_default_put",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-RedHand-Org",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Redhand-Org"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OrgBudgetDefaultRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrgBudgetDefaultResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Set Budget Default",
+        "tags": [
+          "Budget Guard"
         ]
       }
     },

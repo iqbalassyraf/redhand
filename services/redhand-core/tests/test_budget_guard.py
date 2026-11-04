@@ -519,3 +519,100 @@ def test_revoked_agents_are_left_out_of_the_usage_view(env: Env) -> None:
     agent_id = _agent(env)
     env.client.post(f"/v1/passports/{agent_id}/revoke", json={"confirm": True}, headers=env.h("admin"))
     assert "Alpha" not in [a["name"] for a in env.client.get("/v1/usage", headers=env.h("viewer")).json()["agents"]]
+
+
+# ---------------------------------------------------------------------------
+# Organization default limit for NEW agents
+# ---------------------------------------------------------------------------
+
+
+def _set_default(env: Env, limit: int | None, user: str = "admin", **extra: Any) -> Any:
+    return env.client.put("/v1/organization/budget-default", json={"default_daily_call_limit": limit, **extra}, headers=env.h(user))
+
+
+def _get_default(env: Env, user: str = "viewer") -> Any:
+    return env.client.get("/v1/organization/budget-default", headers=env.h(user)).json()["default_daily_call_limit"]
+
+
+def test_an_admin_sets_the_default_and_it_is_audited(env: Env) -> None:
+    assert _get_default(env) is None
+    resp = _set_default(env, 200, reason="cap new agents")
+    assert resp.status_code == 200 and resp.json() == {"default_daily_call_limit": 200, "changed": True}
+    assert _get_default(env) == 200
+    entry = env.actions("organization.budget_default_changed")[0]
+    assert entry["target_type"] == "organization" and entry["reason"] == "cap new agents"
+    assert entry["details"] == {"old_limit": None, "new_limit": 200}
+    again = _set_default(env, 200)
+    assert again.json()["changed"] is False and len(env.actions("organization.budget_default_changed")) == 1
+
+
+def test_only_admins_can_change_the_default_and_viewers_can_read_it(env: Env) -> None:
+    assert _set_default(env, 50, user="operator").status_code == 403
+    assert _set_default(env, 50, user="viewer").status_code == 403
+    assert env.client.put("/v1/organization/budget-default", json={"default_daily_call_limit": 50}).status_code == 401
+    assert env.client.get("/v1/organization/budget-default").status_code == 401
+    assert _get_default(env, "viewer") is None and env.actions("organization.budget_default_changed") == []
+
+
+@pytest.mark.parametrize("value", [0, -1, 10_000_001, "5", True, 1.5])
+def test_invalid_defaults_are_rejected(env: Env, value: Any) -> None:
+    assert _set_default(env, value).status_code == 422
+    assert _get_default(env) is None
+
+
+def test_raising_or_removing_the_default_needs_confirmation_lowering_does_not(env: Env) -> None:
+    _set_default(env, 100)
+    assert _set_default(env, 50).status_code == 200  # lowering restricts
+    for relaxing in (200, None):
+        assert _set_default(env, relaxing).status_code == 400
+        assert _set_default(env, relaxing, confirm=False).status_code == 400
+    assert _get_default(env) == 50
+    assert _set_default(env, 200, confirm=True).status_code == 200
+    assert _set_default(env, None, confirm=True).status_code == 200 and _get_default(env) is None
+
+
+def test_the_default_is_per_organization(env: Env) -> None:
+    from uuid import UUID
+
+    from core_helpers import operator_headers
+
+    _set_default(env, 77)
+    other = operator_headers(settings=env.settings, user_id=UUID("00000000-0000-0000-0000-0000000000f3"))
+    assert env.client.get("/v1/organization/budget-default", headers=other).json()["default_daily_call_limit"] is None
+
+
+def test_new_agents_start_with_the_default_limit_and_it_is_audited(env: Env) -> None:
+    _set_default(env, 100)
+    created = env.register("Fresh")
+    assert created["daily_call_limit"] == 100 and created["budget_action"] == "deny"
+    assert env.budget_of(created["id"])["daily_call_limit"] == 100  # the gateway sees it at once
+    entry = next(e for e in env.actions("passport.budget_changed") if e["target_id"] == created["id"])
+    assert entry["reason"] == "Organization default daily limit"
+    assert entry["actor_user_id"] == DEV_OPERATORS["operator"]["id"]  # the person who registered the agent
+    assert entry["details"]["new_limit"] == 100
+
+
+def test_without_a_default_new_agents_have_no_limit(env: Env) -> None:
+    assert env.register("Fresh")["daily_call_limit"] is None
+    assert env.actions("passport.budget_changed") == []
+
+
+def test_the_default_never_changes_existing_agents_or_later_changes_of_the_default(env: Env) -> None:
+    before = env.register("Before")
+    _set_default(env, 100)
+    after = env.register("After")
+    _set_default(env, 40)  # lowering the default later
+    assert env.budget_of(before["id"])["daily_call_limit"] is None  # registered before: untouched
+    assert env.budget_of(after["id"])["daily_call_limit"] == 100  # keeps the value it started with
+
+
+def test_a_failure_applying_the_default_never_blocks_registration(env: Env, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture) -> None:
+    _set_default(env, 100)
+
+    def boom(*_: Any, **__: Any) -> None:
+        raise RuntimeError("database hiccup: password=hunter2")
+
+    monkeypatch.setitem(local_rpc.HANDLERS, "control_agent_budget", boom)
+    created = env.register("Fresh")  # still 201
+    assert created["daily_call_limit"] is None
+    assert "hunter2" not in caplog.text and "Could not apply the organization default limit" in caplog.text

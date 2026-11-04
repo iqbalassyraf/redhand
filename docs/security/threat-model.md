@@ -50,6 +50,7 @@
 | Limits relaxed without authority | Raising or removing a limit, or turning auto-freeze off, needs an admin and confirmation; the change is compare-and-set against the state the decision was made on | None known |
 | Forged or inflated usage reports | `/internal/v1/usage` needs the internal service token; the organization comes from the agents table; counts are monotonic and bounded; at most 1,000 items per report | A compromised service token could inflate counts and block an agent for the day (raise its limit to recover) |
 | Budget silently skipped after a version mismatch | The gateway requires a strictly typed `budget` from core and denies otherwise; a malformed stored limit reads as 0 | An old gateway ignores the field: deploy core first |
+| New agents start unprotected | Optional organization default daily limit applied at registration (audited, best effort); only an admin sets it, and raising or removing it needs confirmation; the dashboard flags agents with no limit | If applying the default fails the agent has no limit until someone sets one; the default is off until an admin turns it on |
 | Core outage | Gateway fails closed (denies) | Availability target 99.9 %; no multi-region yet |
 | Signing key compromise | Ed25519 private key only in core; gateway holds public key | Signing-key rotation not automated |
 | Development shortcuts reach production | core refuses the in-memory store and `/v1/dev/login` outside development; signing key required outside dev/test; no hardcoded secrets | Deployment checklist must set all required secrets |

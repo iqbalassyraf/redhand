@@ -334,6 +334,26 @@ def _control_agent_budget(store: LocalSupabaseAdapter, p: dict[str, Any]) -> dic
     return {"changed": True, "agent_id": agent_id, "daily_call_limit": limit, "budget_action": action}
 
 
+def _control_org_budget_default(store: LocalSupabaseAdapter, p: dict[str, Any]) -> dict[str, Any]:
+    org, actor, limit = str(p["p_org"]), str(p["p_actor"]), p["p_limit"]
+    if limit is not None and (isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= 10_000_000):
+        raise _error("23514", "default_daily_call_limit violates check constraint")
+    row = next((o for o in store.tables.get("organizations", []) if str(o.get("id")) == org), None)
+    if row is None:
+        raise _error("P0002", "organization not found")
+    old = row.get("default_daily_call_limit")
+    if old != p.get("p_expected"):
+        return {"conflict": True}
+    if old == limit:
+        return {"changed": False, "default_daily_call_limit": old}
+    row["default_daily_call_limit"] = limit
+    _append_audit(
+        store, org=org, actor=actor, action="organization.budget_default_changed", target_type="organization",
+        target_id=org, reason=p.get("p_reason"), details={"old_limit": old, "new_limit": limit},
+    )
+    return {"changed": True, "default_daily_call_limit": limit}
+
+
 def _record_usage(store: LocalSupabaseAdapter, p: dict[str, Any]) -> dict[str, Any]:
     instance, items = p["p_instance"], p["p_items"]
     if not isinstance(instance, str) or not 8 <= len(instance) <= 64:
@@ -494,6 +514,7 @@ HANDLERS: dict[str, RpcHandler] = {
     "control_create_passport": _control_create_passport,
     "control_mcp_server": _control_mcp_server,
     "control_agent_budget": _control_agent_budget,
+    "control_org_budget_default": _control_org_budget_default,
     "record_usage": _record_usage,
     "mark_budget_frozen": _mark_budget_frozen,
     "usage_by_others": _usage_by_others,
