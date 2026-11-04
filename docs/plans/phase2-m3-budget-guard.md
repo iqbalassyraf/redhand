@@ -257,8 +257,15 @@ the staging database afterwards.
 | Once-per-day alert state | Passed. warned, limit reached and frozen are all recorded |
 | Does the usage report reach core when Cloud Run throttles CPU? | Yes: both alerts arrived on the calls that triggered them. Not measured to the second |
 
-**Not verified:** `/usage` on the phone and the dashboard's usage bar were not reviewed by the maintainer in
-this run; several gateway instances (staging runs one); the daily reset at midnight on staging.
+**Verified afterwards (2026-11-04 and 2026-11-05):**
+- `/usage` on the phone replied "Tool calls today (2026-11-04, UTC+8): ... 24 calls (no limit)", leaving out an agent
+  with no calls and no limit, as designed.
+- **The daily reset works on staging:** after midnight UTC+8 the same agent showed 0 calls (24 the day before).
+- **Organization default limit** (core `20935a7`, migration `20261106000200` applied and checked object by object):
+  the owner set the default to 100 (audited as `organization.budget_default_changed`, "default limit none -> 100");
+  a newly registered agent started at "0 / 100", and the three existing agents stayed at "no limit set".
+
+**Not verified:** several gateway instances (staging runs one).
 
 Scheduled cleanup was also added and applied to staging (migration `20261106000100_schedule_purges.sql`): the
 two purge functions run daily at 19:17 UTC through pg_cron.
