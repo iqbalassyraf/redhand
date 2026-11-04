@@ -393,7 +393,7 @@ function PassportTable(props: {
                     {p.status}
                   </span>
                   {p.status_reason && <div className="mt-1 text-[11px] text-[#606060]">{p.status_reason}</div>}
-                  {(p.safe_mode || props.orgSafeMode) && (
+                  {p.status !== "revoked" && (p.safe_mode || props.orgSafeMode) && (
                     <div className="mt-1">
                       <span className="rounded-full bg-[#FFF4E5] px-2 py-0.5 text-[11px] font-semibold text-[#8A4B00]">
                         safe mode{props.orgSafeMode && !p.safe_mode ? " (all)" : ""}
@@ -414,10 +414,10 @@ function PassportTable(props: {
                       <span
                         key={`${s.server}/${s.tool}/${s.access}`}
                         className={`rounded-[6px] bg-[#F2F2F2] px-1.5 py-0.5 font-mono text-[11px] ${
-                          (p.safe_mode || props.orgSafeMode) && s.access === "write" ? "line-through opacity-60" : ""
+                          p.status !== "revoked" && (p.safe_mode || props.orgSafeMode) && s.access === "write" ? "line-through opacity-60" : ""
                         }`}
                         title={
-                          (p.safe_mode || props.orgSafeMode) && s.access === "write"
+                          p.status !== "revoked" && (p.safe_mode || props.orgSafeMode) && s.access === "write"
                             ? "Suspended: Safe Mode is on and this scope is declared write"
                             : undefined
                         }
