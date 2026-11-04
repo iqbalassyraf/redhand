@@ -11,7 +11,7 @@ DROP FUNCTION IF EXISTS public.org_usage(uuid, date);
 DROP FUNCTION IF EXISTS public.usage_by_others(uuid, uuid, date, text);
 DROP FUNCTION IF EXISTS public.mark_budget_frozen(uuid, date);
 DROP FUNCTION IF EXISTS public.record_usage(text, jsonb);
-DROP FUNCTION IF EXISTS public.control_agent_budget(uuid, uuid, uuid, integer, text, text);
+DROP FUNCTION IF EXISTS public.control_agent_budget(uuid, uuid, uuid, integer, text, text, integer, text);
 
 DROP TABLE IF EXISTS public.agent_budget_state;
 DROP TABLE IF EXISTS public.agent_usage_daily;

@@ -65,9 +65,15 @@ ALTER TABLE public.control_audit_log ADD CONSTRAINT control_audit_log_action_che
 -- -----------------------------------------------------------------------------
 -- Change an agent's limit and action, with the audit row, in one transaction.
 -- NULL p_limit removes the limit. Idempotent (no change, no audit row).
+-- Compare-and-set: the caller passes the limit and action it based its decision on; if either has
+-- changed meanwhile the function returns {conflict: true} and changes nothing, so an authorization
+-- decision (raising a limit needs an admin) can never be applied to a state it was not made for.
+-- A changed limit also resets today's and yesterday's once-per-day alert state, so reaching the NEW
+-- limit alerts (and auto-freezes) again.
 -- -----------------------------------------------------------------------------
 CREATE OR REPLACE FUNCTION public.control_agent_budget(
-    p_org uuid, p_agent uuid, p_actor uuid, p_limit integer, p_action text, p_reason text
+    p_org uuid, p_agent uuid, p_actor uuid, p_limit integer, p_action text, p_reason text,
+    p_expected_limit integer, p_expected_action text
 ) RETURNS jsonb
 LANGUAGE plpgsql
 SET search_path = public, pg_temp
@@ -79,12 +85,19 @@ BEGIN
     IF NOT FOUND THEN
         RAISE EXCEPTION 'agent not found' USING ERRCODE = 'no_data_found';
     END IF;
+    IF v_agent.daily_call_limit IS DISTINCT FROM p_expected_limit OR v_agent.budget_action IS DISTINCT FROM p_expected_action THEN
+        RETURN jsonb_build_object('conflict', true);
+    END IF;
     IF v_agent.daily_call_limit IS NOT DISTINCT FROM p_limit AND v_agent.budget_action = p_action THEN
         RETURN jsonb_build_object('changed', false, 'agent_id', v_agent.id,
                                   'daily_call_limit', v_agent.daily_call_limit, 'budget_action', v_agent.budget_action);
     END IF;
 
     UPDATE public.agents SET daily_call_limit = p_limit, budget_action = p_action WHERE id = v_agent.id;
+    IF v_agent.daily_call_limit IS DISTINCT FROM p_limit THEN
+        UPDATE public.agent_budget_state SET warned_at = NULL, limit_reached_at = NULL, frozen_at = NULL
+        WHERE agent_id = v_agent.id AND day_key >= (now() AT TIME ZONE 'utc')::date - 1;
+    END IF;
     INSERT INTO public.control_audit_log (organization_id, actor_user_id, action, target_type, target_id, reason, details)
     VALUES (p_org, p_actor, 'passport.budget_changed', 'agent', v_agent.id, p_reason,
             jsonb_build_object('old_limit', v_agent.daily_call_limit, 'new_limit', p_limit,
@@ -125,7 +138,10 @@ BEGIN
         RAISE EXCEPTION 'items must be an array of at most 1000 entries' USING ERRCODE = 'invalid_parameter_value';
     END IF;
 
-    FOR v_item IN SELECT * FROM jsonb_array_elements(p_items) LOOP
+    -- Items are processed in agent order and each agent row is locked before its total is summed, so
+    -- two reports for the same agent are serialised (the second sees the first's rows and cannot both
+    -- miss a threshold) and two reports can never deadlock on each other.
+    FOR v_item IN SELECT value FROM jsonb_array_elements(p_items) ORDER BY value ->> 'agent_id' LOOP
         BEGIN
             v_day := (v_item ->> 'day_key')::date;
             v_calls := (v_item ->> 'calls')::bigint;
@@ -139,7 +155,7 @@ BEGIN
             CONTINUE;
         END IF;
         BEGIN
-            SELECT * INTO v_agent FROM public.agents WHERE id = (v_item ->> 'agent_id')::uuid;
+            SELECT * INTO v_agent FROM public.agents WHERE id = (v_item ->> 'agent_id')::uuid FOR UPDATE;
         EXCEPTION WHEN OTHERS THEN
             v_rejected := v_rejected + 1;
             CONTINUE;
@@ -250,13 +266,13 @@ BEGIN
 END;
 $$;
 
-REVOKE EXECUTE ON FUNCTION public.control_agent_budget(uuid, uuid, uuid, integer, text, text) FROM PUBLIC, anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.control_agent_budget(uuid, uuid, uuid, integer, text, text, integer, text) FROM PUBLIC, anon, authenticated;
 REVOKE EXECUTE ON FUNCTION public.record_usage(text, jsonb) FROM PUBLIC, anon, authenticated;
 REVOKE EXECUTE ON FUNCTION public.mark_budget_frozen(uuid, date) FROM PUBLIC, anon, authenticated;
 REVOKE EXECUTE ON FUNCTION public.usage_by_others(uuid, uuid, date, text) FROM PUBLIC, anon, authenticated;
 REVOKE EXECUTE ON FUNCTION public.org_usage(uuid, date) FROM PUBLIC, anon, authenticated;
 REVOKE EXECUTE ON FUNCTION public.purge_usage() FROM PUBLIC, anon, authenticated;
-GRANT EXECUTE ON FUNCTION public.control_agent_budget(uuid, uuid, uuid, integer, text, text) TO service_role;
+GRANT EXECUTE ON FUNCTION public.control_agent_budget(uuid, uuid, uuid, integer, text, text, integer, text) TO service_role;
 GRANT EXECUTE ON FUNCTION public.record_usage(text, jsonb) TO service_role;
 GRANT EXECUTE ON FUNCTION public.mark_budget_frozen(uuid, date) TO service_role;
 GRANT EXECUTE ON FUNCTION public.usage_by_others(uuid, uuid, date, text) TO service_role;

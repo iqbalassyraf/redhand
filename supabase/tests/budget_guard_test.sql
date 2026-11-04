@@ -52,7 +52,7 @@ DO $$
 DECLARE r jsonb;
 BEGIN
     r := public.control_agent_budget('00000000-0000-0000-0000-0000a0a00008', '00000000-0000-0000-0000-0000a0a0000a',
-                                     '00000000-0000-0000-0000-0000a0a00001', 10, 'deny', 'cap it');
+                                     '00000000-0000-0000-0000-0000a0a00001', 10, 'deny', 'cap it', NULL, 'deny');
     PERFORM pg_temp.check((r->>'changed')::boolean AND (r->>'daily_call_limit')::int = 10, 'limit set to 10');
     PERFORM pg_temp.check(
         (SELECT count(*) FROM public.control_audit_log
@@ -61,25 +61,25 @@ BEGIN
         'the change is audited with old and new values');
 
     r := public.control_agent_budget('00000000-0000-0000-0000-0000a0a00008', '00000000-0000-0000-0000-0000a0a0000a',
-                                     '00000000-0000-0000-0000-0000a0a00001', 10, 'deny', NULL);
+                                     '00000000-0000-0000-0000-0000a0a00001', 10, 'deny', NULL, 10, 'deny');
     PERFORM pg_temp.check(NOT (r->>'changed')::boolean, 'repeating the same limit changes nothing');
     PERFORM pg_temp.check((SELECT count(*) FROM public.control_audit_log WHERE action = 'passport.budget_changed') = 1,
                           'repeating writes no second audit row');
 
     r := public.control_agent_budget('00000000-0000-0000-0000-0000a0a00008', '00000000-0000-0000-0000-0000a0a0000c',
-                                     '00000000-0000-0000-0000-0000a0a00001', 100, 'freeze', NULL);
+                                     '00000000-0000-0000-0000-0000a0a00001', 100, 'freeze', NULL, NULL, 'deny');
     PERFORM pg_temp.check((r->>'budget_action') = 'freeze', 'the action can be set to freeze');
     r := public.control_agent_budget('00000000-0000-0000-0000-0000a0a00008', '00000000-0000-0000-0000-0000a0a0000c',
-                                     '00000000-0000-0000-0000-0000a0a00001', NULL, 'deny', NULL);
+                                     '00000000-0000-0000-0000-0000a0a00001', NULL, 'deny', NULL, 100, 'freeze');
     PERFORM pg_temp.check((r->>'changed')::boolean AND (r->'daily_call_limit') = 'null'::jsonb, 'a limit can be removed');
 END $$;
 SELECT pg_temp.expect_error(
     $$SELECT public.control_agent_budget('00000000-0000-0000-0000-0000a0a00009', '00000000-0000-0000-0000-0000a0a0000a',
-                                         '00000000-0000-0000-0000-0000a0a00001', 5, 'deny', NULL)$$,
+                                         '00000000-0000-0000-0000-0000a0a00001', 5, 'deny', NULL, NULL, 'deny')$$,
     'P0002', 'another organization cannot change the limit');
 SELECT pg_temp.expect_error(
     $$SELECT public.control_agent_budget('00000000-0000-0000-0000-0000a0a00008', '00000000-0000-0000-0000-0000a0a0000a',
-                                         '00000000-0000-0000-0000-0000a0a00001', 0, 'deny', NULL)$$,
+                                         '00000000-0000-0000-0000-0000a0a00001', 0, 'deny', NULL, 10, 'deny')$$,
     '23514', 'an invalid limit through the function is refused');
 SELECT pg_temp.check((SELECT daily_call_limit FROM public.agents WHERE id = '00000000-0000-0000-0000-0000a0a0000a') = 10,
                      'refused calls changed nothing');
@@ -136,10 +136,45 @@ BEGIN
     PERFORM pg_temp.check((SELECT count(*) FROM public.agent_budget_state WHERE agent_id = '00000000-0000-0000-0000-0000a0a0000c') = 0,
         'no alert state is kept for an agent with no limit');
     PERFORM public.control_agent_budget('00000000-0000-0000-0000-0000a0a00008', '00000000-0000-0000-0000-0000a0a0000c',
-                                        '00000000-0000-0000-0000-0000a0a00001', 40, 'freeze', NULL);
+                                        '00000000-0000-0000-0000-0000a0a00001', 40, 'freeze', NULL, NULL, 'deny');
     r := pg_temp.report('instance-aaaa', '00000000-0000-0000-0000-0000a0a0000c', 60);
     PERFORM pg_temp.check(jsonb_array_length(r->'events') = 1 AND r->'events'->0->>'kind' = 'limit'
         AND r->'events'->0->>'budget_action' = 'freeze', 'passing the limit in one jump raises a single limit alert');
+END $$;
+
+-- 3b. Compare-and-set and the once-per-day alert state ---------------------------------------------------
+DO $$
+DECLARE
+    bot1 uuid := '00000000-0000-0000-0000-0000a0a0000a';
+    r jsonb;
+BEGIN
+    r := public.control_agent_budget('00000000-0000-0000-0000-0000a0a00008', bot1, '00000000-0000-0000-0000-0000a0a00001',
+                                     500, 'deny', NULL, 7, 'deny');  -- the caller thought the limit was 7; it is 10
+    PERFORM pg_temp.check((r->>'conflict')::boolean, 'a stale expectation returns a conflict');
+    PERFORM pg_temp.check((SELECT daily_call_limit FROM public.agents WHERE id = bot1) = 10, 'and changes nothing');
+    PERFORM pg_temp.check((SELECT count(*) FROM public.control_audit_log WHERE action = 'passport.budget_changed' AND target_id = bot1) = 1,
+        'and writes no audit row');
+    r := public.control_agent_budget('00000000-0000-0000-0000-0000a0a00008', bot1, '00000000-0000-0000-0000-0000a0a00001',
+                                     500, 'deny', NULL, 10, 'freeze');  -- right limit, wrong action
+    PERFORM pg_temp.check((r->>'conflict')::boolean, 'a stale expected action also returns a conflict');
+
+    PERFORM pg_temp.check((SELECT limit_reached_at IS NOT NULL FROM public.agent_budget_state
+                           WHERE agent_id = bot1 AND day_key = (now() AT TIME ZONE 'utc')::date), 'the limit alert had been raised');
+    r := public.control_agent_budget('00000000-0000-0000-0000-0000a0a00008', bot1, '00000000-0000-0000-0000-0000a0a00001',
+                                     50, 'deny', 'raised', 10, 'deny');
+    PERFORM pg_temp.check((r->>'changed')::boolean, 'the limit is raised');
+    PERFORM pg_temp.check((SELECT warned_at IS NULL AND limit_reached_at IS NULL AND frozen_at IS NULL FROM public.agent_budget_state
+                           WHERE agent_id = bot1 AND day_key = (now() AT TIME ZONE 'utc')::date),
+        'changing the limit resets the alert state, so the NEW limit alerts again');
+    r := pg_temp.report('instance-aaaa', bot1, 40);  -- 40 + 3 from the other instance = 43 of 50
+    PERFORM pg_temp.check(r->'events'->0->>'kind' = 'warn' AND (r->'events'->0->>'daily_call_limit')::int = 50, 'reaching 80% of the new limit alerts again');
+    r := pg_temp.report('instance-aaaa', bot1, 47);
+    PERFORM pg_temp.check(r->'events'->0->>'kind' = 'limit', 'reaching the new limit alerts again');
+    r := public.control_agent_budget('00000000-0000-0000-0000-0000a0a00008', bot1, '00000000-0000-0000-0000-0000a0a00001',
+                                     50, 'freeze', NULL, 50, 'deny');  -- only the action changes
+    PERFORM pg_temp.check((r->>'changed')::boolean AND (SELECT limit_reached_at IS NOT NULL FROM public.agent_budget_state
+                           WHERE agent_id = bot1 AND day_key = (now() AT TIME ZONE 'utc')::date),
+        'changing only the action keeps the alert state (no repeated alert)');
 END $$;
 
 -- 4. Dashboard totals, tenancy, input validation -------------------------------------------------------
@@ -189,7 +224,7 @@ CREATE TRIGGER zz_budget_fail_audit BEFORE INSERT ON public.control_audit_log
     FOR EACH ROW EXECUTE FUNCTION public.zz_budget_fail_audit();
 SELECT pg_temp.expect_error(
     $$SELECT public.control_agent_budget('00000000-0000-0000-0000-0000a0a00009', '00000000-0000-0000-0000-0000a0a0000b',
-                                         '00000000-0000-0000-0000-0000a0a00001', 7, 'freeze', NULL)$$,
+                                         '00000000-0000-0000-0000-0000a0a00001', 7, 'freeze', NULL, NULL, 'deny')$$,
     'P0001', 'atomic: a failing audit aborts the limit change');
 SELECT pg_temp.check((SELECT daily_call_limit IS NULL AND budget_action = 'deny' FROM public.agents WHERE id = '00000000-0000-0000-0000-0000a0a0000b'),
     'atomic: the agent is unchanged after the failed audit');
@@ -201,7 +236,7 @@ DO $$
 DECLARE f text;
 BEGIN
     FOREACH f IN ARRAY ARRAY[
-        'control_agent_budget(uuid,uuid,uuid,integer,text,text)', 'record_usage(text,jsonb)', 'mark_budget_frozen(uuid,date)',
+        'control_agent_budget(uuid,uuid,uuid,integer,text,text,integer,text)', 'record_usage(text,jsonb)', 'mark_budget_frozen(uuid,date)',
         'usage_by_others(uuid,uuid,date,text)', 'org_usage(uuid,date)', 'purge_usage()'
     ] LOOP
         PERFORM pg_temp.check(NOT has_function_privilege('anon', 'public.' || f, 'EXECUTE')

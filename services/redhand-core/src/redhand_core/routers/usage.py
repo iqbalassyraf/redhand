@@ -10,6 +10,7 @@ Counts are calls the gateway forwards. RedHand does not see LLM tokens or money.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from datetime import date, datetime
 from typing import Annotated, Any
@@ -38,6 +39,7 @@ SupabaseDep = Annotated[Any, Depends(get_supabase_service_client)]
 MAX_REPORT_ITEMS = 1000
 INSTANCE_ID_PATTERN = r"^[A-Za-z0-9-]{8,64}$"
 FREEZE_REASON = "Budget Guard: daily call limit reached"
+EVENTS_TIMEOUT_SECONDS = 10.0
 
 
 class UsageItem(BaseModel):
@@ -130,8 +132,16 @@ async def report_usage(report: UsageReport, supabase: SupabaseDep, telegram: Opt
         logger.error("Usage report failed: %s", type(exc).__name__)
         raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "Usage could not be recorded.") from None
     data = response.data
-    for event in list(data.get("events") or []):
-        await _handle_event(supabase, telegram, event)
+    events = list(data.get("events") or [])
+    if events:
+        # Concurrently and bounded: one slow Telegram call must not hold the whole report (and the
+        # gateway waiting on it) for minutes. _handle_event never raises.
+        try:
+            await asyncio.wait_for(
+                asyncio.gather(*(_handle_event(supabase, telegram, e) for e in events)), EVENTS_TIMEOUT_SECONDS
+            )
+        except asyncio.TimeoutError:
+            logger.warning("Budget event handling timed out for %d events", len(events))
     return UsageReportResponse(accepted=int(data["accepted"]), rejected=int(data["rejected"]))
 
 

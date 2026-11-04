@@ -39,6 +39,7 @@ MAX_ITEMS_PER_REPORT = 1000  # core accepts at most this many items per report
 REPORT_TIMEOUT_SECONDS = 5.0
 URGENT_WAIT_SECONDS = 1.0  # how long a call that crosses 80% or 100% may wait for its report
 MAX_BACKOFF_SECONDS = 60.0
+MAX_BACKOFF_EXPONENT = 10
 KEEP_DAYS = 2  # counters older than this (relative to the newest day seen) are dropped once reported
 
 Key = tuple[UUID, str]
@@ -52,7 +53,6 @@ class BudgetState:
     used_by_other_instances: int
     day_key: str
     resets_at: datetime
-    action: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -120,7 +120,6 @@ class BudgetMeter:
         self._failures = 0
         self._next_flush_at = 0.0
         self._flush_task: asyncio.Task[bool] | None = None  # the one report in flight, joined by every caller
-        self._tasks: set[asyncio.Task[Any]] = set()
         self._loop_task: asyncio.Task[None] | None = None
 
     # -- the decision path: synchronous, no I/O --------------------------------------------------
@@ -177,8 +176,10 @@ class BudgetMeter:
                 if remaining <= 0:
                     return
                 await asyncio.wait_for(asyncio.shield(task), remaining)
-        except (asyncio.TimeoutError, Exception):  # noqa: BLE001  failures are logged and retried inside flush()
-            return
+        except asyncio.TimeoutError:
+            return  # expected: the report carries on in the background
+        except Exception as exc:  # noqa: BLE001  never break the call that asked, but leave a trace
+            logger.warning("Urgent usage report failed", error_type=type(exc).__name__)
 
     def _report_in_flight(self) -> bool:
         return self._flush_task is not None and not self._flush_task.done()
@@ -187,8 +188,6 @@ class BudgetMeter:
         """The single report task: callers join it instead of racing a second one."""
         if self._flush_task is None or self._flush_task.done():
             task = asyncio.get_running_loop().create_task(self.flush())
-            self._tasks.add(task)
-            task.add_done_callback(self._tasks.discard)
             self._flush_task = task
         return self._flush_task
 
@@ -228,7 +227,9 @@ class BudgetMeter:
             self._prune()
         else:
             self._failures += 1
-            backoff = min(MAX_BACKOFF_SECONDS, self._interval * (2**self._failures))
+            # The exponent is capped before it is used: an unbounded 2**failures overflows a float after
+            # about a thousand failures and would switch the backoff off.
+            backoff = min(MAX_BACKOFF_SECONDS, self._interval * (2 ** min(self._failures, MAX_BACKOFF_EXPONENT)))
             self._next_flush_at = now + backoff * (0.5 + self._jitter() / 2)
         if self._metrics is not None:
             self._metrics.record_budget_flush("ok" if ok else "failed", len(self._dirty))

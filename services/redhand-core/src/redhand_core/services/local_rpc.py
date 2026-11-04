@@ -13,7 +13,7 @@ Used only by the in-memory store, which redhand-core refuses to run outside deve
 from __future__ import annotations
 
 import copy
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from typing import Any, Callable
 from uuid import UUID, uuid4
 
@@ -316,9 +316,16 @@ def _control_agent_budget(store: LocalSupabaseAdapter, p: dict[str, Any]) -> dic
     if agent is None:
         raise _error("P0002", "agent not found")
     old_limit, old_action = agent.get("daily_call_limit"), agent.get("budget_action") or "deny"
+    if old_limit != p.get("p_expected_limit") or old_action != p.get("p_expected_action"):
+        return {"conflict": True}  # the caller decided against a state that has since changed
     if old_limit == limit and old_action == action:
         return {"changed": False, "agent_id": agent_id, "daily_call_limit": old_limit, "budget_action": old_action}
     agent["daily_call_limit"], agent["budget_action"] = limit, action
+    if old_limit != limit:  # a new limit alerts (and auto-freezes) afresh
+        cutoff = (_utc_today() - timedelta(days=1)).isoformat()
+        for st in store.tables.get("agent_budget_state", []):
+            if st["agent_id"] == agent_id and st["day_key"] >= cutoff:
+                st["warned_at"] = st["limit_reached_at"] = st["frozen_at"] = None
     _append_audit(
         store, org=org, actor=actor, action="passport.budget_changed", target_type="agent", target_id=agent_id,
         reason=p.get("p_reason"),

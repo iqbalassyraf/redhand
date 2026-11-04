@@ -202,6 +202,69 @@ def test_a_failed_audit_write_leaves_the_limit_unchanged(env: Env, monkeypatch: 
     assert env.budget_of(agent_id)["daily_call_limit"] is None
 
 
+def test_a_concurrent_change_cannot_turn_a_lowering_into_an_unauthorised_relaxation(env: Env, monkeypatch: pytest.MonkeyPatch) -> None:
+    """
+    Regression (found in review): the role and confirmation decision was made against a pre-read, then
+    applied as an absolute write. The write is now compare-and-set against what the decision was made on.
+    """
+    from redhand_core.passports import service
+
+    agent_id = _agent(env)
+    env.set_budget(agent_id, 500)
+    real_get = service.get_passport_row
+    stale = dict(next(a for a in env.store.tables["agents"] if a["id"] == agent_id))  # what the operator saw: limit 500
+
+    async def stale_read(supabase: Any, operator: Any, agent: Any) -> dict[str, Any]:
+        row = await real_get(supabase, operator, agent)
+        return {**row, "daily_call_limit": stale["daily_call_limit"]}  # the operator "saw" 500
+
+    # meanwhile an admin lowered it to 50
+    next(a for a in env.store.tables["agents"] if a["id"] == agent_id)["daily_call_limit"] = 50
+    monkeypatch.setattr(service, "get_passport_row", stale_read)
+    resp = env.set_budget(agent_id, 100, user="operator")  # a lowering relative to what the operator saw (500)
+    assert resp.status_code == 409  # refused: the state changed under the decision
+    assert next(a for a in env.store.tables["agents"] if a["id"] == agent_id)["daily_call_limit"] == 50
+    assert [e["details"]["new_limit"] for e in env.actions("passport.budget_changed")] == [500]
+
+
+def test_changing_the_limit_makes_the_new_limit_alert_and_freeze_again(env: Env) -> None:
+    agent_id = _agent(env)
+    env.set_budget(agent_id, 5, "freeze")
+    env.link()
+    env.report(agent_id, 6)  # limit alert and auto-freeze
+    assert env.statuses()["Alpha"] == "frozen"
+    env.client.post(f"/v1/passports/{agent_id}/unfreeze", json={"confirm": True}, headers=env.h("operator"))
+    assert env.set_budget(agent_id, 10, "freeze", user="admin", confirm=True).status_code == 200
+    env.report(agent_id, 9)
+    assert "(80%)" in _budget_alerts(env, 1001)[-1]  # 80% of the NEW limit
+    env.report(agent_id, 12)
+    assert env.statuses()["Alpha"] == "frozen"  # frozen again at the new limit
+    assert len(env.actions("passport.frozen")) == 2
+    assert "reached its daily limit of 10" in _budget_alerts(env, 1001)[-1]
+
+
+def test_changing_only_the_action_does_not_repeat_alerts(env: Env) -> None:
+    agent_id = _agent(env)
+    env.set_budget(agent_id, 5)
+    env.link()
+    env.report(agent_id, 6)
+    before = len(_budget_alerts(env, 1001))
+    env.set_budget(agent_id, 5, "freeze")
+    env.report(agent_id, 7)
+    assert len(_budget_alerts(env, 1001)) == before
+
+
+def test_many_events_in_one_report_are_handled_together(env: Env) -> None:
+    ids = [_agent(env, f"Bot {i}") for i in range(12)]
+    for agent_id in ids:
+        env.set_budget(agent_id, 5)
+    env.link()
+    body = {"instance_id": INSTANCE, "items": [{"agent_id": i, "day_key": env.today().isoformat(), "calls": 9} for i in ids]}
+    resp = env.client.post("/internal/v1/usage", json=body, headers={"Authorization": f"Bearer {SERVICE_TOKEN}"})
+    assert resp.status_code == 200 and resp.json()["accepted"] == 12
+    assert len(_budget_alerts(env, 1001)) == 12
+
+
 # ---------------------------------------------------------------------------
 # What the gateway is told
 # ---------------------------------------------------------------------------

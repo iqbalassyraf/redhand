@@ -25,7 +25,7 @@ READ_ANY = [{"server": "xero", "tool": "*", "access": "read"}]
 
 
 def state(limit: int | None, others: int = 0, day: str = DAY) -> BudgetState:
-    return BudgetState(daily_call_limit=limit, used_by_other_instances=others, day_key=day, resets_at=RESETS, action="deny")
+    return BudgetState(daily_call_limit=limit, used_by_other_instances=others, day_key=day, resets_at=RESETS)
 
 
 def meter(**kwargs: Any) -> tuple[BudgetMeter, FakeReporter]:
@@ -505,13 +505,15 @@ async def test_the_periodic_loop_and_shutdown_report_what_is_left() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_two_instances_overshoot_by_at_most_the_documented_bound() -> None:
+@pytest.mark.parametrize("instances", [1, 2, 3])
+def test_several_instances_overshoot_by_at_most_the_documented_bound(instances: int) -> None:
     """
     Each tick every instance makes one call. Every instance reports its running total every FLUSH ticks
     (immediately visible to core) and refreshes "usage by others" every CACHE ticks. The plan documents
-    that the cap can be exceeded by at most (instances - 1) x calls per tick x (CACHE + FLUSH) ticks.
+    that the cap can be exceeded by at most (instances - 1) x calls per tick x (CACHE + FLUSH) ticks. The
+    assertion below is exactly that documented bound (the simulation measures 0, 0 and 8 against 0, 7 and 14).
     """
-    limit, flush_ticks, cache_ticks, instances = 100, 5, 2, 2
+    limit, flush_ticks, cache_ticks = 100, 5, 2
     agent = uuid4()
     meters = [meter()[0] for _ in range(instances)]
     reported = [0] * instances  # what core has from each instance
@@ -529,10 +531,58 @@ def test_two_instances_overshoot_by_at_most_the_documented_bound() -> None:
                 seen_others[i] = sum(reported) - reported[i]
     bound = (instances - 1) * 1 * (cache_ticks + flush_ticks)
     assert allowed_total >= limit  # the cap does bite
-    assert allowed_total <= limit + bound * instances  # each instance can overshoot by the others' lag
+    assert allowed_total <= limit + bound  # the documented overshoot bound, not a looser one
 
 
 def test_a_single_instance_never_overshoots() -> None:
     m, _ = meter()
     agent = uuid4()
     assert sum(m.try_consume(agent, state(100)).allowed for _ in range(1000)) == 100
+
+
+@pytest.mark.asyncio
+async def test_the_backoff_survives_thousands_of_consecutive_failures() -> None:
+    """Regression: 2**failures overflowed a float after ~1,000 failures and switched the backoff off."""
+    clock = [0.0]
+    m, reporter = meter(clock=lambda: clock[0], flush_interval=5.0)
+    agent = uuid4()
+    m.try_consume(agent, state(None))
+    reporter.accept = False
+    for _ in range(1500):
+        clock[0] += 3600.0
+        assert await m.flush() is False  # must not raise OverflowError
+    assert 30.0 <= m._next_flush_at - clock[0] <= 60.0  # still a bounded, jittered backoff
+    assert m.unreported_keys == 1
+
+
+@pytest.mark.asyncio
+async def test_repeated_refusals_over_the_limit_are_audited_once_a_minute_but_always_counted() -> None:
+    h = Harness()
+    agent = h.add_agent(INVOICES_READ, limit=1)
+    token = h.token(agent)
+    await h.call(token, params=tool("list_invoices"))
+    for _ in range(50):  # a runaway agent retrying in a loop
+        assert "error" in (await h.call(token, params=tool("list_invoices"))).body
+    blocks = [r for r in h.audit.get_recent(100) if r["firewall_decision"] == "BLOCK"]
+    assert len(blocks) == 1  # one record, not fifty
+    assert 'redhand_gateway_decisions_total{method="tools/call",outcome="deny",reason="budget_exceeded"} 50' in h.gateway.metrics.render()
+    h.gateway._budget_refusal_logged[next(iter(h.gateway._budget_refusal_logged))] -= 61.0  # a minute passes
+    await h.call(token, params=tool("list_invoices"))
+    assert len([r for r in h.audit.get_recent(100) if r["firewall_decision"] == "BLOCK"]) == 2
+
+
+@pytest.mark.asyncio
+async def test_an_unexpected_error_in_the_urgent_report_path_is_logged_not_swallowed(monkeypatch: pytest.MonkeyPatch) -> None:
+    import structlog
+
+    m, _ = meter()
+    agent = uuid4()
+    m.try_consume(agent, state(None))
+
+    def boom() -> Any:
+        raise RuntimeError("unexpected")
+
+    monkeypatch.setattr(m, "_start_report", boom)
+    with structlog.testing.capture_logs() as logs:
+        await m.flush_now(timeout=0.5)  # does not raise to the caller...
+    assert any(entry.get("event") == "Urgent usage report failed" and entry.get("error_type") == "RuntimeError" for entry in logs)  # ...but leaves a trace

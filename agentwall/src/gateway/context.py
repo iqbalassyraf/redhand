@@ -196,6 +196,5 @@ class CoreContextClient:
                 used_by_other_instances=payload.agent.budget.used_by_other_instances,
                 day_key=payload.agent.budget.day_key,
                 resets_at=payload.agent.budget.resets_at,
-                action=payload.agent.budget.action,
             ),
         )

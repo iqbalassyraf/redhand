@@ -342,6 +342,7 @@ async def set_agent_safe_mode(
     return PassportView.from_row(row, now), bool(data["changed"])
 
 
+@retry_once_on_conflict
 async def set_agent_budget(
     supabase: Any,
     operator: OperatorContext,
@@ -374,10 +375,14 @@ async def set_agent_budget(
         {
             "p_org": str(operator.organization_id), "p_agent": str(agent_id), "p_actor": str(operator.user_id),
             "p_limit": daily_call_limit, "p_action": action, "p_reason": reason,
+            # Compare-and-set: the role and confirmation decision above was made against these values.
+            "p_expected_limit": current.daily_call_limit, "p_expected_action": current.budget_action,
         },
         not_found_detail="Agent passport not found.",
         conflict_detail="Budget change conflicted with another change; try again.",
     )
+    if isinstance(data, dict) and data.get("conflict"):
+        raise StateConflictError
     updated = await get_passport_row(supabase, operator, agent_id)
     return PassportView.from_row(updated, now), bool(data["changed"])
 

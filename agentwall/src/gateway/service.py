@@ -18,7 +18,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 import time
 from typing import Any
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import structlog
 
@@ -44,6 +44,8 @@ ALLOWED_METHODS = frozenset(
         "notifications/cancelled",
     }
 )
+
+BUDGET_REFUSAL_LOG_INTERVAL_SECONDS = 60.0
 
 JSONRPC_INVALID_REQUEST = -32600
 JSONRPC_METHOD_NOT_FOUND = -32601
@@ -89,6 +91,22 @@ class McpGateway:
         self.audit = audit_logger
         self.metrics = metrics
         self.budget = budget
+        self._budget_refusal_logged: dict[UUID, float] = {}
+
+    def _record_budget_refusal(
+        self, identity: AgentIdentity, context: GatewayContext, method: str | None, message: Any,
+        reasons: list[str], tool_name: str, arguments: dict[str, Any],
+    ) -> None:
+        """
+        One audit record per agent per minute for repeated refusals over the limit: a runaway agent retrying
+        in a loop must not flood the ledger and the logs. Every refusal is still counted in the metrics.
+        """
+        now = time.monotonic()
+        last = self._budget_refusal_logged.get(identity.agent_id)
+        if last is not None and now - last < BUDGET_REFUSAL_LOG_INTERVAL_SECONDS:
+            return
+        self._budget_refusal_logged[identity.agent_id] = now
+        self._record(identity, context, method, message, "BLOCK", reasons, 403, tool_name, arguments)
 
     async def handle(
         self,
@@ -188,7 +206,7 @@ class McpGateway:
                     reasons = [f"Daily limit of {limit} tool calls reached ({decision.used} used); resets at {resets}."]
                     text = f"PolicyViolation: daily limit of {limit} tool calls reached; it resets at {resets}."
                     why = "budget_exceeded"
-                self._record(identity, context, method, message, "BLOCK", reasons, 403, tool_name, arguments)
+                self._record_budget_refusal(identity, context, method, message, reasons, tool_name, arguments)
                 return deny(
                     200, JSONRPC_POLICY_VIOLATION, text, why,
                     {"tool_name": tool_name, "daily_call_limit": limit, "used": decision.used, "resets_at": resets},

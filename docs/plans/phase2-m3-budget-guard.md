@@ -1,6 +1,7 @@
 # Phase 2 M3 plan: Budget Guard
 
-**Status:** Proposed 2026-11-04. Awaiting approval. No code has been written.
+**Status:** Approved 2026-11-04 (all ten decisions). M3a and M3b built; independent code review done and its
+findings fixed (see the end of this file). Telegram, dashboard and staging verification still to do.
 **Phase "done" test served:** Phase 2 done test 3: *an agent over its daily limit is refused and the
 owner is alerted.*
 
@@ -34,6 +35,12 @@ Only a `tools/call` that the gateway **forwards upstream** (an ALLOW decision) c
 Calls refused for scope, Safe Mode, guardrails, status or budget do **not**: otherwise a looping agent
 that is being refused would keep digging itself deeper, and refusals are not what costs money. Upstream
 failures still count (the work may have been done). `tools/list`, `initialize` and `ping` never count.
+
+**Known edge (decided, not a bug):** a call is counted once it has passed every policy check and *before*
+it is sent, so a call that the destination check then refuses (an MCP server registered at a private
+address) also consumes budget although nothing left the gateway. That only happens when a server is
+misconfigured, the agent is refused every time anyway, and un-counting would conflict with core's
+monotonic cumulative totals. We chose the simpler rule; the repeated refusals are audited once a minute.
 
 ### 3.2 Where the counter lives
 A small **in-memory meter inside the gateway**, one counter per (agent, day). The check and the increment
@@ -197,3 +204,20 @@ once-per-day state, the role check and the fail-closed parsing; each must make t
   gateway diff before merging.
 - **M3c:** Telegram `/usage`, minimal dashboard (limit editor and usage bar).
 - **M3d:** staging verification of done test 3 and docs. Dashboard polish continues in M4.
+
+
+## 11. Independent code review (M3a and M3b), 2026-11-04
+Ten findings; nine fixed, one documented. Each fix has a regression test that fails without it.
+
+| Finding | Outcome |
+|---|---|
+| Changing a limit did not reset the once-per-day alert and auto-freeze state, so the new limit never alerted | Fixed: a changed limit resets today's and yesterday's state (SQL and local emulation) |
+| Backoff exponent overflowed a float after about 1,000 failures and disabled the backoff | Fixed: exponent capped |
+| Raising a limit was authorised against a pre-read, then written as an absolute value (check-then-act) | Fixed: the SQL function is compare-and-set; a conflict retries once, then answers 409 |
+| Calls refused by the destination check still counted | Documented as a known edge (section 3.1) |
+| Two concurrent reports could both miss a threshold crossing | Fixed: agent rows are locked, in agent order, before totals are summed |
+| Alerts were handled one after another, each with its own 3 s wait | Fixed: handled concurrently with a 10 s bound |
+| Every refusal over the limit wrote an audit record | Fixed: one record per agent per minute; metrics still count every refusal |
+| `flush_now` swallowed errors with no log (CLAUDE.md 6.2) | Fixed: logged by class |
+| Redundant in-flight state and an unused `action` field | Fixed: removed `_tasks` and `BudgetState.action` (`_flushing` kept as the guard for direct `flush()` calls) |
+| The overshoot test asserted a looser bound than documented | Fixed: asserts the documented bound for 1, 2 and 3 instances (measured 0, 0 and 8 against 0, 7 and 14) |
