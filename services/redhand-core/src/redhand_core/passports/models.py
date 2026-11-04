@@ -200,6 +200,21 @@ class BudgetUpdateRequest(BaseModel):
     confirm: StrictBool = Field(default=False, description="Required to raise or remove a limit.")
 
 
+class OrgBudgetDefaultRequest(BaseModel):
+    """The daily limit new agents of the organization start with (null: no default)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    default_daily_call_limit: StrictInt | None = Field(default=None, ge=1, le=10_000_000)
+    reason: str | None = Field(default=None, max_length=MAX_REASON_LENGTH)
+    confirm: StrictBool = Field(default=False, description="Required to raise or remove the default.")
+
+
+class OrgBudgetDefaultResponse(BaseModel):
+    default_daily_call_limit: int | None
+    changed: bool
+
+
 class AgentBudgetResponse(BaseModel):
     passport: PassportView
     changed: bool

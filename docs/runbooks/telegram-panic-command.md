@@ -63,6 +63,6 @@ It prints `webhook set`, the URL, and the number of pending updates. Check anyti
 | First command after a quiet period is slow | Cloud Run cold start (min instances 0); expect a few seconds. |
 
 ## Maintenance
-Schedule `select public.purge_telegram_updates();` daily (Supabase → Database → Cron, or any scheduler
-with the service role): it removes update ids older than 7 days and used or expired link codes. Without it
+`select public.purge_telegram_updates();` runs daily by itself where pg_cron is available (migration
+`20261106000100_schedule_purges.sql`); elsewhere schedule it with any scheduler using the service role. It removes update ids older than 7 days and used or expired link codes. Without it
 the tables only grow slowly (one small row per command).

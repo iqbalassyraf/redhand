@@ -19,10 +19,17 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, ConfigDict, Field
 
-from redhand_core.auth.operator import OperatorContext, Role, SecurityOperatorDep, ViewerDep
+from redhand_core.auth.operator import AdminDep, OperatorContext, Role, SecurityOperatorDep, ViewerDep
 from redhand_core.passports import budget as budget_rules
 from redhand_core.passports import service
-from redhand_core.passports.models import AgentBudgetResponse, BudgetUpdateRequest, PassportView, utcnow
+from redhand_core.passports.models import (
+    AgentBudgetResponse,
+    BudgetUpdateRequest,
+    OrgBudgetDefaultRequest,
+    OrgBudgetDefaultResponse,
+    PassportView,
+    utcnow,
+)
 from redhand_core.routers.agent_auth import require_internal_service
 from redhand_core.routers.telegram import OptionalClientDep
 from redhand_core.routers.telemetry import get_supabase_service_client
@@ -153,6 +160,24 @@ async def set_agent_budget(
         supabase, operator, agent_id, payload.daily_call_limit, payload.action, payload.reason, payload.confirm, utcnow()
     )
     return AgentBudgetResponse(passport=passport, changed=changed)
+
+
+@router.get("/v1/organization/budget-default", response_model=OrgBudgetDefaultResponse)
+async def get_budget_default(operator: ViewerDep, supabase: SupabaseDep) -> OrgBudgetDefaultResponse:
+    return OrgBudgetDefaultResponse(
+        default_daily_call_limit=await service.get_org_budget_default(supabase, operator.organization_id), changed=False
+    )
+
+
+@router.put("/v1/organization/budget-default", response_model=OrgBudgetDefaultResponse)
+async def set_budget_default(
+    payload: OrgBudgetDefaultRequest, operator: AdminDep, supabase: SupabaseDep
+) -> OrgBudgetDefaultResponse:
+    """The daily call limit every NEWLY registered agent starts with. Existing agents are not changed."""
+    limit, changed = await service.set_org_budget_default(
+        supabase, operator, payload.default_daily_call_limit, payload.reason, payload.confirm
+    )
+    return OrgBudgetDefaultResponse(default_daily_call_limit=limit, changed=changed)
 
 
 @router.get("/v1/usage", response_model=UsageSummary)
