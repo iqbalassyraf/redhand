@@ -3,6 +3,13 @@
 ## Unreleased: Phase 2 (Stop things), in progress
 
 ### Added
+- Budget Guard (M3): a daily cap on the tool calls an agent makes through the gateway. Set it per agent in
+  the dashboard (**Limit**); over the cap the gateway refuses further calls, linked Telegram chats are alerted
+  at 80% and 100%, and the agent can optionally be frozen automatically (recorded as "RedHand Budget Guard").
+  `/usage` on Telegram and a **Calls today** column show usage. Counts calls, not money or LLM tokens. New
+  migration `20261105000000_budget_guard.sql`. **Deploy order: migration, core, then the gateway**: the gateway
+  now requires core to send `budget` and denies every call otherwise (`docs/runbooks/budget-guard.md`,
+  ADR 0010). Raising or removing a limit needs an admin and a confirmation.
 - Safe Mode (M2): put one agent, or all agents, into read-only mode. The gateway then allows only
   tools declared `read` in the agent's scopes and hides the rest from `tools/list`. Turn it on from the
   dashboard or with `/safemode on [agent]` in Telegram; turning it off needs an admin in the dashboard.

@@ -31,6 +31,7 @@ from postgrest.exceptions import APIError
 
 from redhand_core.auth.operator import OperatorContext, Role
 from redhand_core.config import Settings
+from redhand_core.passports import budget as budget_rules
 from redhand_core.passports import service
 from redhand_core.passports.models import PassportView, utcnow
 from redhand_core.routers.agent_auth import SlidingWindowLimiter
@@ -59,6 +60,7 @@ HELP_TEXT = (
     "/freeze_all [reason] - stop every active agent now\n"
     "/freeze <agent name> - stop one agent\n"
     "/safemode on [agent name] - read-only mode for all agents, or one\n"
+    "/usage - today's tool calls against each agent's daily limit\n"
     "Unfreezing, revoking and turning Safe Mode off are done in the dashboard."
 )
 NOT_LINKED_TEXT = (
@@ -184,6 +186,27 @@ async def _cmd_freeze(
     return f"Froze {target.name}.", f"{target.name} was frozen from Telegram."
 
 
+async def _cmd_usage(supabase: Any, operator: OperatorContext, now: datetime) -> str:
+    """Today's tool calls through the gateway against each agent's daily limit (calls, never money)."""
+    offset = await service.get_org_utc_offset(supabase, operator.organization_id)
+    day = budget_rules.local_day(now, offset)
+    calls = await service.get_org_usage(supabase, operator.organization_id, day)
+    views = [PassportView.from_row(r, now) for r in await service.list_passport_rows(supabase, operator)]
+    lines = []
+    for view in views:
+        if view.status == "revoked":
+            continue
+        used = calls.get(view.id, 0)
+        if view.daily_call_limit is not None:
+            lines.append(f"{view.name}: {used} of {view.daily_call_limit} calls ({used * 100 // view.daily_call_limit}%)")
+        elif used:
+            lines.append(f"{view.name}: {used} calls (no limit)")
+    shown = lines[:15]
+    extra = f"\n...and {len(lines) - 15} more." if len(lines) > 15 else ""
+    header = f"Tool calls today ({day.isoformat()}, {budget_rules.format_offset(offset)}):"
+    return header + ("\n" + "\n".join(shown) if shown else "\nNo calls yet.") + extra
+
+
 async def _cmd_safemode(
     supabase: Any, operator: OperatorContext, args: str, now: datetime
 ) -> tuple[str, str | None]:
@@ -269,7 +292,7 @@ async def handle_update(
     command = parse_command(message.text, settings.TELEGRAM_BOT_USERNAME)
     if command is None:
         command = Command("help", "")
-    name = command.name if command.name in {"start", "help", "link", "status", "freeze_all", "freeze", "safemode"} else "other"
+    name = command.name if command.name in {"start", "help", "link", "status", "freeze_all", "freeze", "safemode", "usage"} else "other"
 
     try:
         claim = await supabase.rpc("telegram_claim_update", {"p_update_id": update.update_id}).execute()
@@ -324,6 +347,8 @@ async def _dispatch(
     if command.name == "freeze":
         reply, alert = await _cmd_freeze(supabase, operator, command.args, now)
         return reply, alert, operator
+    if command.name == "usage":
+        return await _cmd_usage(supabase, operator, now), None, operator
     if command.name == "safemode":
         reply, alert = await _cmd_safemode(supabase, operator, command.args, now)
         return reply, alert, operator

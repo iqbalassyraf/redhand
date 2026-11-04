@@ -17,7 +17,7 @@ can do.
 | M0 | Restrict core `/metrics`; dashboard polish (scope editor, zero-scope warning, server names in the audit log) | Done |
 | M1 | Telegram panic command and alerts | Done: verified on staging with a real bot and phone |
 | M2 | Safe Mode | Done: verified on staging 2026-11-04 (`docs/plans/phase2-m2-safe-mode.md`) |
-| M3 | Budget Guard (tool-call caps, not LLM spend) | Not started |
+| M3 | Budget Guard (tool-call caps, not LLM spend) | Built and tested locally (core, gateway, Telegram `/usage`, dashboard); reviewed; not yet on staging |
 | M4 | Dashboard, docs, staging verification | Not started |
 
 ## Decisions taken (defaults, since no answer was given)
