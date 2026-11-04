@@ -231,6 +231,8 @@ def apply_insert_defaults(table: str, row: dict[str, Any]) -> None:
         )
         row.setdefault("allowed_tools", [])
         row.setdefault("safe_mode", False)
+        row.setdefault("daily_call_limit", None)
+        row.setdefault("budget_action", "deny")
 
 
 def _apply_update_triggers(table: str, before: dict[str, Any], after: dict[str, Any]) -> None:
@@ -295,6 +297,7 @@ class LocalSupabaseAdapter:
                 "siem_webhook_url": None,
                 "default_hitl_timeout_seconds": 3600,
                 "safe_mode": False,
+                "utc_offset_minutes": 480,
             }
         ]
 

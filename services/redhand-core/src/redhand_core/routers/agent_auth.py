@@ -11,12 +11,12 @@ Agent authentication.
 from __future__ import annotations
 
 from collections import deque
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 import hashlib
 import hmac
 import logging
 import time
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
@@ -24,6 +24,7 @@ from pydantic import BaseModel
 
 from redhand_core.auth import bearer_token
 from redhand_core.config import Settings, get_settings
+from redhand_core.passports import budget as budget_rules
 from redhand_core.passports.credentials import AgentTokenSigner, hash_agent_key, looks_like_agent_key
 from redhand_core.passports.models import (
     SERVER_SLUG_PATTERN,
@@ -220,6 +221,18 @@ class GatewayAgentContext(BaseModel):
     scopes: list[Scope]
     expires_at: datetime
     safe_mode: bool
+    budget: GatewayBudgetContext
+
+
+class GatewayBudgetContext(BaseModel):
+    """Budget Guard state for the gateway. Usage by the CALLER's own instance is not included: the
+    gateway adds its own exact local count, so own calls are never double-counted or delayed."""
+
+    daily_call_limit: int | None
+    used_by_other_instances: int
+    day_key: date
+    resets_at: datetime
+    action: Literal["deny", "freeze"]
 
 
 class GatewayServerContext(BaseModel):
@@ -243,6 +256,7 @@ async def gateway_context(
     agent_id: UUID,
     organization_id: UUID,
     server: Annotated[str, Query(pattern=SERVER_SLUG_PATTERN)],
+    instance_id: Annotated[str | None, Query(pattern=r"^[A-Za-z0-9-]{8,64}$")] = None,
 ) -> GatewayContextResponse:
     """
     Everything the gateway needs to authorize one call: the passport's current status,
@@ -291,6 +305,33 @@ async def gateway_context(
         agent.get("safe_mode") is False and org_row is not None and org_row.get("safe_mode") is False
     )
 
+    offset = budget_rules.normalize_offset(org_row.get("utc_offset_minutes") if org_row else None)
+    raw_limit = agent.get("daily_call_limit")
+    if raw_limit is None:
+        limit: int | None = None
+    elif isinstance(raw_limit, int) and not isinstance(raw_limit, bool) and raw_limit >= 1:
+        limit = raw_limit
+    else:
+        limit = 0  # malformed stored limit: the restrictive reading is "nothing is allowed"
+    day = budget_rules.local_day(now, offset)
+    try:
+        others_res = await supabase.rpc(
+            "usage_by_others",
+            {"p_org": str(organization_id), "p_agent": str(agent_id), "p_day": day.isoformat(),
+             "p_instance": instance_id or "unidentified-caller"},
+        ).execute()
+        used_by_others = int(others_res.data or 0)
+    except Exception as exc:  # noqa: BLE001  without usage the gateway cannot decide, so it denies
+        logger.error("Usage lookup failed: %s", type(exc).__name__)
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "Usage lookup failed.") from None
+    budget = GatewayBudgetContext(
+        daily_call_limit=limit,
+        used_by_other_instances=used_by_others,
+        day_key=day,
+        resets_at=budget_rules.next_reset_utc(now, offset),
+        action="freeze" if agent.get("budget_action") == "freeze" else "deny",
+    )
+
     await (
         supabase.table("agents")
         .update({"last_seen_at": now.isoformat()})
@@ -308,6 +349,7 @@ async def gateway_context(
             scopes=scopes,
             expires_at=expires_at,
             safe_mode=safe_mode,
+            budget=budget,
         ),
         server=GatewayServerContext(slug=server_row["slug"], url=server_row["url"]) if server_row else None,
     )

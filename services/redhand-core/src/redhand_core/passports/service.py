@@ -18,7 +18,7 @@ with 409.
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 import functools
 import logging
 from typing import Any, ParamSpec, TypeVar
@@ -27,7 +27,8 @@ from uuid import UUID, uuid4
 from fastapi import HTTPException, status
 from postgrest.exceptions import APIError
 
-from redhand_core.auth.operator import OperatorContext
+from redhand_core.auth.operator import OperatorContext, Role
+from redhand_core.passports import budget as budget_rules
 from redhand_core.passports.credentials import generate_agent_key
 from redhand_core.passports.models import (
     ControlAuditEntry,
@@ -339,6 +340,64 @@ async def set_agent_safe_mode(
     )
     row = await get_passport_row(supabase, operator, agent_id)
     return PassportView.from_row(row, now), bool(data["changed"])
+
+
+async def set_agent_budget(
+    supabase: Any,
+    operator: OperatorContext,
+    agent_id: UUID,
+    daily_call_limit: int | None,
+    action: str,
+    reason: str | None,
+    confirm: bool,
+    now: datetime,
+) -> tuple[PassportView, bool]:
+    """
+    Sets an agent's daily call limit and what happens at the limit. Lowering a limit (or setting one)
+    only restricts, so any security operator may. Raising or removing a limit, or turning auto-freeze
+    off, relaxes the restriction: it needs an admin and explicit confirmation.
+    """
+    row = await get_passport_row(supabase, operator, agent_id)
+    if row["status"] == "revoked":
+        raise _conflict("A revoked passport cannot be changed.")
+    current = PassportView.from_row(row, now)
+    if budget_rules.is_relaxation(current.daily_call_limit, daily_call_limit, current.budget_action, action):
+        if operator.role < Role.ADMIN:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Raising or removing a limit, or turning auto-freeze off, requires the 'admin' role or higher.",
+            )
+        _require_confirmation(confirm, "Raising or removing a limit")
+    data = await _rpc(
+        supabase,
+        "control_agent_budget",
+        {
+            "p_org": str(operator.organization_id), "p_agent": str(agent_id), "p_actor": str(operator.user_id),
+            "p_limit": daily_call_limit, "p_action": action, "p_reason": reason,
+        },
+        not_found_detail="Agent passport not found.",
+        conflict_detail="Budget change conflicted with another change; try again.",
+    )
+    updated = await get_passport_row(supabase, operator, agent_id)
+    return PassportView.from_row(updated, now), bool(data["changed"])
+
+
+async def get_org_utc_offset(supabase: Any, organization_id: UUID) -> int:
+    res = await supabase.table("organizations").select("utc_offset_minutes").eq("id", str(organization_id)).execute()
+    rows = list(res.data or [])
+    return budget_rules.normalize_offset(rows[0].get("utc_offset_minutes") if len(rows) == 1 else None)
+
+
+async def get_org_usage(supabase: Any, organization_id: UUID, day: date) -> dict[UUID, int]:
+    """Calls so far on `day` for each agent of the organization that reported any."""
+    data = await _rpc(
+        supabase,
+        "org_usage",
+        {"p_org": str(organization_id), "p_day": day.isoformat()},
+        not_found_detail="Organization not found.",
+        conflict_detail="Usage lookup conflicted; try again.",
+    )
+    return {UUID(str(item["agent_id"])): int(item["calls"]) for item in (data or [])}
 
 
 async def get_org_safe_mode(supabase: Any, organization_id: UUID) -> bool:

@@ -13,9 +13,9 @@ Used only by the in-memory store, which redhand-core refuses to run outside deve
 from __future__ import annotations
 
 import copy
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from typing import Any, Callable
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from postgrest.exceptions import APIError
 
@@ -301,6 +301,120 @@ def _control_org_safe_mode(store: LocalSupabaseAdapter, p: dict[str, Any]) -> di
     return {"changed": True, "enabled": enabled}
 
 
+def _utc_today() -> date:
+    return datetime.now(timezone.utc).date()
+
+
+def _control_agent_budget(store: LocalSupabaseAdapter, p: dict[str, Any]) -> dict[str, Any]:
+    org, agent_id, actor = str(p["p_org"]), str(p["p_agent"]), str(p["p_actor"])
+    limit, action = p["p_limit"], p["p_action"]
+    if limit is not None and (isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= 10_000_000):
+        raise _error("23514", "daily_call_limit violates check constraint")
+    if action not in ("deny", "freeze"):
+        raise _error("23514", "budget_action violates check constraint")
+    agent = _find(store, "agents", org, agent_id)
+    if agent is None:
+        raise _error("P0002", "agent not found")
+    old_limit, old_action = agent.get("daily_call_limit"), agent.get("budget_action") or "deny"
+    if old_limit == limit and old_action == action:
+        return {"changed": False, "agent_id": agent_id, "daily_call_limit": old_limit, "budget_action": old_action}
+    agent["daily_call_limit"], agent["budget_action"] = limit, action
+    _append_audit(
+        store, org=org, actor=actor, action="passport.budget_changed", target_type="agent", target_id=agent_id,
+        reason=p.get("p_reason"),
+        details={"old_limit": old_limit, "new_limit": limit, "old_action": old_action, "new_action": action},
+    )
+    return {"changed": True, "agent_id": agent_id, "daily_call_limit": limit, "budget_action": action}
+
+
+def _record_usage(store: LocalSupabaseAdapter, p: dict[str, Any]) -> dict[str, Any]:
+    instance, items = p["p_instance"], p["p_items"]
+    if not isinstance(instance, str) or not 8 <= len(instance) <= 64:
+        raise _error("22023", "invalid instance id")
+    if not isinstance(items, list) or len(items) > 1000:
+        raise _error("22023", "items must be an array of at most 1000 entries")
+    usage = store.tables.setdefault("agent_usage_daily", [])
+    state = store.tables.setdefault("agent_budget_state", [])
+    today = _utc_today()
+    accepted = rejected = 0
+    events: list[dict[str, Any]] = []
+    for item in items:
+        try:
+            day = date.fromisoformat(str(item["day_key"]))
+            calls = item["calls"]
+            agent_id = str(UUID(str(item["agent_id"])))
+        except (KeyError, ValueError, TypeError):
+            rejected += 1
+            continue
+        if isinstance(calls, bool) or not isinstance(calls, int) or not 0 <= calls <= 10**12 or abs((day - today).days) > 2:
+            rejected += 1
+            continue
+        agent = next((a for a in store.tables.get("agents", []) if str(a.get("id")) == agent_id), None)
+        if agent is None:
+            rejected += 1
+            continue
+        row = next(
+            (u for u in usage if u["agent_id"] == agent_id and u["day_key"] == day.isoformat() and u["instance_id"] == instance),
+            None,
+        )
+        if row is None:
+            usage.append({"agent_id": agent_id, "organization_id": str(agent["organization_id"]),
+                          "day_key": day.isoformat(), "instance_id": instance, "calls": calls})
+        else:
+            row["calls"] = max(int(row["calls"]), calls)
+        accepted += 1
+
+        limit = agent.get("daily_call_limit")
+        if limit is None:
+            continue
+        total = sum(int(u["calls"]) for u in usage if u["agent_id"] == agent_id and u["day_key"] == day.isoformat())
+        st = next((s for s in state if s["agent_id"] == agent_id and s["day_key"] == day.isoformat()), None)
+        if st is None:
+            st = {"agent_id": agent_id, "day_key": day.isoformat(), "warned_at": None, "limit_reached_at": None, "frozen_at": None}
+            state.append(st)
+        kind = None
+        if total >= limit:
+            if st["limit_reached_at"] is None:
+                st["limit_reached_at"] = _now()
+                st["warned_at"] = st["warned_at"] or _now()
+                kind = "limit"
+        elif total * 100 >= int(limit) * 80 and st["warned_at"] is None:
+            st["warned_at"] = _now()
+            kind = "warn"
+        if kind:
+            org = next((o for o in store.tables.get("organizations", []) if str(o.get("id")) == str(agent["organization_id"])), {})
+            events.append({
+                "kind": kind, "agent_id": agent_id, "organization_id": str(agent["organization_id"]),
+                "name": agent["name"], "day_key": day.isoformat(), "used": total, "daily_call_limit": limit,
+                "budget_action": agent.get("budget_action") or "deny", "utc_offset_minutes": org.get("utc_offset_minutes", 480),
+            })
+    return {"accepted": accepted, "rejected": rejected, "events": events}
+
+
+def _mark_budget_frozen(store: LocalSupabaseAdapter, p: dict[str, Any]) -> bool:
+    for s in store.tables.get("agent_budget_state", []):
+        if s["agent_id"] == str(p["p_agent"]) and s["day_key"] == str(p["p_day"]) and s["frozen_at"] is None:
+            s["frozen_at"] = _now()
+            return True
+    return False
+
+
+def _usage_by_others(store: LocalSupabaseAdapter, p: dict[str, Any]) -> int:
+    return sum(
+        int(u["calls"]) for u in store.tables.get("agent_usage_daily", [])
+        if u["organization_id"] == str(p["p_org"]) and u["agent_id"] == str(p["p_agent"])
+        and u["day_key"] == str(p["p_day"]) and u["instance_id"] != p["p_instance"]
+    )
+
+
+def _org_usage(store: LocalSupabaseAdapter, p: dict[str, Any]) -> list[dict[str, Any]]:
+    totals: dict[str, int] = {}
+    for u in store.tables.get("agent_usage_daily", []):
+        if u["organization_id"] == str(p["p_org"]) and u["day_key"] == str(p["p_day"]):
+            totals[u["agent_id"]] = totals.get(u["agent_id"], 0) + int(u["calls"])
+    return [{"agent_id": a, "calls": c} for a, c in totals.items()]
+
+
 def _telegram_link_chat(store: LocalSupabaseAdapter, p: dict[str, Any]) -> dict[str, Any]:
     code_hash, chat_id = str(p["p_code_hash"]), int(p["p_chat_id"])
     code = next(
@@ -372,6 +486,11 @@ HANDLERS: dict[str, RpcHandler] = {
     "control_freeze_all": _control_freeze_all,
     "control_create_passport": _control_create_passport,
     "control_mcp_server": _control_mcp_server,
+    "control_agent_budget": _control_agent_budget,
+    "record_usage": _record_usage,
+    "mark_budget_frozen": _mark_budget_frozen,
+    "usage_by_others": _usage_by_others,
+    "org_usage": _org_usage,
     "control_agent_safe_mode": _control_agent_safe_mode,
     "control_org_safe_mode": _control_org_safe_mode,
     "telegram_link_chat": _telegram_link_chat,
