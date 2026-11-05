@@ -20,6 +20,7 @@ class GatewayMetrics:
         self._event_flushes: Counter[str] = Counter()
         self._events_buffered = 0
         self._events_dropped_total = 0
+        self._events_rejected_total = 0
 
     def record_budget_flush(self, outcome: str, unreported_keys: int) -> None:
         with self._lock:
@@ -34,6 +35,10 @@ class GatewayMetrics:
     def record_event_dropped(self, count: int = 1) -> None:
         with self._lock:
             self._events_dropped_total += count
+
+    def record_events_rejected(self, count: int) -> None:
+        with self._lock:
+            self._events_rejected_total += count
 
     def record(self, *, method: str, outcome: str, reason: str, overhead_ms: float) -> None:
         with self._lock:
@@ -78,6 +83,9 @@ class GatewayMetrics:
                 "# HELP redhand_gateway_events_dropped_total Events dropped because the recorder buffer was full.",
                 "# TYPE redhand_gateway_events_dropped_total counter",
                 f"redhand_gateway_events_dropped_total {self._events_dropped_total}",
+                "# HELP redhand_gateway_events_rejected_total Events core acknowledged but refused to store.",
+                "# TYPE redhand_gateway_events_rejected_total counter",
+                f"redhand_gateway_events_rejected_total {self._events_rejected_total}",
             ]
             lines += [
                 "# HELP redhand_gateway_overhead_ms Gateway-added latency, excluding upstream time.",

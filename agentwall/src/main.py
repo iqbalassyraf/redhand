@@ -75,7 +75,7 @@ def build_gateway(settings: Settings, firewall: FirewallPolicyEngine, audit: Tam
         ),
         recorder=EventRecorder(
             instance_id=instance_id,
-            reporter=HttpEventReporter(core_url=core, service_token=token),
+            reporter=HttpEventReporter(core_url=core, service_token=token, metrics=metrics),
             flush_interval=settings.RECORDER_FLUSH_INTERVAL_SECONDS,
             max_buffered=settings.RECORDER_MAX_BUFFERED_EVENTS,
             max_batch_size=settings.RECORDER_MAX_BATCH_SIZE,

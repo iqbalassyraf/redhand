@@ -1,9 +1,8 @@
 # Phase 3 plan: "See things"
 
-**Status:** Approved (2026-11-05). M1 (Black Box core) built 2026-11-05: migration, gateway recorder,
-core ingest/timeline/verify, dashboard page. 294 (redhand-core) + 174 (agentwall) tests pass, plus 25
-SQL tests; `tsc --noEmit` and `npm run build` clean. Staging verification of done tests 1, 2 and 6 not
-yet run (tracked below). M2 to M4 not started.
+**Status:** Approved (2026-11-05). M1 (Black Box core) built and deployed to staging 2026-11-05; done
+tests 1 and 2 verified on staging, done test 6 verified by the local suite only (section 9.1). M2 is next;
+M3 and M4 not started.
 
 **Goal:** an owner can see everything an agent did through RedHand, prove the record was not altered,
 and learn within seconds when an agent touches bait it should never touch.
@@ -268,12 +267,38 @@ editor per agent, payload capture toggle in organization settings; `src/lib/api.
 
 | | Milestone | Contents |
 |---|---|---|
-| M1 | Black Box core | **Built (2026-11-05), not yet staging-verified.** Migration, ingest, gateway recorder, timeline page, verify. Done tests 1, 2, 6. |
+| M1 | Black Box core | **Done (2026-11-05).** Migration, ingest, gateway recorder, timeline page, verify. Done tests 1, 2 on staging; 6 locally (9.1). |
 | M2 | Retention, export, payload capture | Purge with anchor, export, opt-in capture with redaction and its retention. Done test 3. |
 | M3 | Honeytokens | Migration 2, generator, context digests, scanner, trips with alert and freeze, dashboard. Done test 4. |
 | M4 | Honey tools, docs, staging | Honey tools, ADRs, runbooks, threat model, staging verification of all six done tests. Done test 5. |
 
 Each milestone is its own PR with tests and a staging check, like Phase 2.
+
+### 9.1 M1 staging verification (2026-11-05)
+
+Core and gateway at `37c88ad` on Cloud Run (`redhand-core-00012-bqv`, `redhand-gateway-00007-2hm`); smoke
+test 13/13.
+
+- **Found on the first run: no event was stored.** The `search_path` pin on `_blackbox_event_hash` hid
+  pgcrypto's `digest()` (Supabase installs it in the `extensions` schema). `record_events()` counted every
+  item as rejected and core still answered 200, so nothing showed it. Fixed in PR #9 (migration
+  `20261110000100`, and the original migration so it applies on a fresh Supabase database); the SQL test
+  shim now mirrors Supabase's `extensions` schema, and CI runs the SQL harness. Rejected items are now
+  logged by core and counted by the gateway (`redhand_gateway_events_rejected_total`).
+- **Done test 1: pass.** `scripts/staging_agent.py run` (one allowed, one out-of-scope call) produced two
+  events in the agent's timeline, 0.1–0.2 s after the call, with decision, reason, upstream status
+  (200 / 403) and latency (811 ms upstream call / 1.25 ms refusal). Only argument names are stored; the
+  payload columns are empty.
+- **Done test 2: pass.** `verify_events` reports the untouched chain intact. A direct `UPDATE` is refused
+  (`agent_events is append-only`). With the trigger disabled inside a transaction that was then rolled back,
+  changing one stored event made `verify_events` report `hash_mismatch` at that exact seq; afterwards the
+  data, the trigger and a clean verify were confirmed unchanged.
+- **Done test 6: local only.** The gateway uses one service token and one core for passport checks and event
+  reports, so no staging-safe way exists to fail only the event endpoint. Covered by
+  `agentwall/tests/test_recorder.py` and the e2e suite (runbook step 5).
+- **Not measured:** gateway latency with the recorder on (ADR 0011). Reason codes are free-text sentences
+  rather than the fixed codes in section 3.1; follow-up.
+- **Not checked:** the production dashboard's Black Box page.
 
 ## 10. Risks and open questions
 

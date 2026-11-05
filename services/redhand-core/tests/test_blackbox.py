@@ -5,10 +5,12 @@ timeline and verify endpoints, tenant isolation, and the hash chain's tamper det
 
 from __future__ import annotations
 
+import logging
 from datetime import datetime, timedelta, timezone
 from typing import Any
 from uuid import UUID, uuid4
 
+import pytest
 from pydantic import SecretStr
 
 from redhand_core.services.local_store import DEFAULT_ORG_ID, LocalSupabaseAdapter
@@ -111,6 +113,23 @@ def test_unknown_or_cross_tenant_agent_is_rejected_not_the_whole_batch() -> None
     resp = env.ingest([_event(unknown), _event(FINOPS_AGENT_ID)], org=DEFAULT_ORG_ID)
     assert resp.status_code == 200
     assert resp.json() == {"accepted": 1, "rejected": 1}
+
+
+def test_rejected_items_are_logged(caplog: pytest.LogCaptureFixture) -> None:
+    """Regression: record_events() once rejected every item (a database fault) while ingest still
+    answered 200, and core logged nothing."""
+    env = Env()
+    with caplog.at_level(logging.WARNING, logger="redhand.core.blackbox"):
+        resp = env.ingest([_event(str(uuid4())), _event(FINOPS_AGENT_ID)], org=DEFAULT_ORG_ID)
+    assert resp.json() == {"accepted": 1, "rejected": 1}
+    assert any("partly rejected" in r.getMessage() and "rejected=1" in r.getMessage() for r in caplog.records)
+
+
+def test_a_fully_accepted_batch_logs_no_rejection(caplog: pytest.LogCaptureFixture) -> None:
+    env = Env()
+    with caplog.at_level(logging.WARNING, logger="redhand.core.blackbox"):
+        env.ingest([_event(FINOPS_AGENT_ID)], org=DEFAULT_ORG_ID)
+    assert not any("partly rejected" in r.getMessage() for r in caplog.records)
 
 
 def test_duplicate_batch_id_is_a_noop() -> None:

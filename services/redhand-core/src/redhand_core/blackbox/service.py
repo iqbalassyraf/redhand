@@ -57,7 +57,15 @@ async def ingest_events(
         logger.error("Event batch could not be recorded: sqlstate=%s", exc.code)
         raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "Events could not be recorded.") from None
     data = response.data
-    return int(data["accepted"]), int(data["rejected"])
+    accepted, rejected = int(data["accepted"]), int(data["rejected"])
+    if rejected:
+        # record_events() refuses bad items one by one instead of failing the batch, so a rejection is
+        # otherwise invisible; a database fault once made it reject every event without any error.
+        logger.warning(
+            "Event batch partly rejected: organization=%s instance=%s accepted=%d rejected=%d",
+            organization_id, instance_id, accepted, rejected,
+        )
+    return accepted, rejected
 
 
 async def list_events(
