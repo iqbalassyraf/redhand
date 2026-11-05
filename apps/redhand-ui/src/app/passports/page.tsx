@@ -177,6 +177,9 @@ export default function PassportsPage() {
             <Link href="/passports" className="rounded-full bg-[#0F0F0F] px-3 py-1.5 font-semibold text-[#FFFFFF]">
               Passports
             </Link>
+            <Link href="/blackbox" className="rounded-full px-3 py-1.5 font-medium text-[#606060] hover:bg-[#F2F2F2]">
+              Black Box
+            </Link>
             <Link href="/" className="rounded-full px-3 py-1.5 font-medium text-[#606060] hover:bg-[#F2F2F2]">
               Command center (demo)
             </Link>

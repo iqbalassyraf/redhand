@@ -244,6 +244,52 @@ export interface TelegramLink {
   created_at: string;
 }
 
+export type BlackBoxDecision = "ALLOW" | "BLOCK" | "ERROR";
+
+export interface BlackBoxEvent {
+  seq: number;
+  agent_id: string;
+  agent_name: string | null;
+  occurred_at: string;
+  server: string;
+  method: string;
+  tool_name: string;
+  decision: BlackBoxDecision;
+  reasons: string[];
+  upstream_status: number | null;
+  latency_ms: number | null;
+  argument_keys: string[];
+}
+
+export interface BlackBoxTimeline {
+  events: BlackBoxEvent[];
+  next_before_seq: number | null;
+}
+
+export interface VerifyResult {
+  ok: boolean;
+  checked: number;
+  broken_seq: number | null;
+  reason: string | null;
+}
+
+export const blackboxApi = {
+  events: (
+    t: string,
+    params: { agent_id?: string; decision?: BlackBoxDecision; before_seq?: number; limit?: number } = {}
+  ) => {
+    const query = new URLSearchParams();
+    if (params.agent_id) query.set("agent_id", params.agent_id);
+    if (params.decision) query.set("decision", params.decision);
+    if (params.before_seq) query.set("before_seq", String(params.before_seq));
+    if (params.limit) query.set("limit", String(params.limit));
+    const qs = query.toString();
+    return apiFetch<BlackBoxTimeline>(`/v1/blackbox/events${qs ? `?${qs}` : ""}`, t);
+  },
+  verify: (t: string, fromSeq: number, toSeq: number) =>
+    apiFetch<VerifyResult>(`/v1/blackbox/verify?from_seq=${fromSeq}&to_seq=${toSeq}`, t),
+};
+
 export const telegramApi = {
   createCode: (t: string) => apiFetch<TelegramLinkCode>("/v1/telegram/link-code", t, { method: "POST" }),
   links: (t: string) => apiFetch<TelegramLink[]>("/v1/telegram/links", t),
