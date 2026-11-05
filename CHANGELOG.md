@@ -16,6 +16,12 @@
   the gateway's `/metrics` has `redhand_gateway_events_rejected_total`. CI now applies every migration,
   runs the SQL tests and rolls them back on PostgreSQL 16.
 
+- Black Box retention (M2a): a daily purge deletes events older than the organization's retention
+  (default 30 days, 7–90) and clears captured payloads after theirs (default 7, 1–30), without breaking
+  "Verify chain" (it starts from a retention anchor). New endpoints `GET /v1/blackbox/settings` and
+  `PUT /v1/blackbox/retention` (admin, confirmation required, audited). New migration
+  `20261111000000_blackbox_retention.sql`. Deploy order: migration, then core.
+
 ### Fixed
 - The Black Box stored no events on Supabase: the event hash helper could not find pgcrypto's `digest()`
   (installed in the `extensions` schema), and the original migration could not be applied on a fresh

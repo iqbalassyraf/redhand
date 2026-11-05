@@ -11,7 +11,9 @@ from datetime import datetime
 from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictInt
+
+from redhand_core.passports.models import MAX_REASON_LENGTH
 
 Decision = Literal["ALLOW", "BLOCK", "ERROR"]
 
@@ -99,3 +101,32 @@ class VerifyResponse(BaseModel):
     checked: int = 0
     broken_seq: int | None = None
     reason: str | None = None
+
+
+MIN_RETENTION_DAYS, MAX_RETENTION_DAYS = 7, 90
+MIN_PAYLOAD_RETENTION_DAYS, MAX_PAYLOAD_RETENTION_DAYS = 1, 30
+
+
+class BlackBoxSettingsResponse(BaseModel):
+    """The organization's Black Box settings. payload_capture_enabled is read-only until payload capture
+    ships (Phase 3 M2b); it is always false today."""
+
+    retention_days: int
+    payload_retention_days: int
+    payload_capture_enabled: bool
+    changed: bool
+
+
+class BlackBoxRetentionRequest(BaseModel):
+    """New retention periods, in days. Both are required so the request states the full intent."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    retention_days: StrictInt = Field(ge=MIN_RETENTION_DAYS, le=MAX_RETENTION_DAYS)
+    payload_retention_days: StrictInt = Field(ge=MIN_PAYLOAD_RETENTION_DAYS, le=MAX_PAYLOAD_RETENTION_DAYS)
+    reason: str | None = Field(default=None, max_length=MAX_REASON_LENGTH)
+    confirm: StrictBool = Field(
+        default=False,
+        description="Required for any change: a shorter retention deletes events at the next daily purge, "
+        "a longer one keeps more data.",
+    )

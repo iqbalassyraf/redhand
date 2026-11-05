@@ -356,6 +356,29 @@ def _control_org_budget_default(store: LocalSupabaseAdapter, p: dict[str, Any]) 
     return {"changed": True, "default_daily_call_limit": limit}
 
 
+def _control_blackbox_retention(store: LocalSupabaseAdapter, p: dict[str, Any]) -> dict[str, Any]:
+    org, actor = str(p["p_org"]), str(p["p_actor"])
+    days, payload_days = p["p_retention_days"], p["p_payload_retention_days"]
+    if not (isinstance(days, int) and 7 <= days <= 90 and isinstance(payload_days, int) and 1 <= payload_days <= 30):
+        raise _error("23514", "retention violates check constraint")
+    row = next((o for o in store.tables.get("organizations", []) if str(o.get("id")) == org), None)
+    if row is None:
+        raise _error("P0002", "organization not found")
+    old_days, old_payload = row.get("blackbox_retention_days", 30), row.get("payload_retention_days", 7)
+    if old_days != p.get("p_expected_retention_days") or old_payload != p.get("p_expected_payload_retention_days"):
+        return {"conflict": True}
+    if old_days == days and old_payload == payload_days:
+        return {"changed": False, "retention_days": days, "payload_retention_days": payload_days}
+    row["blackbox_retention_days"], row["payload_retention_days"] = days, payload_days
+    _append_audit(
+        store, org=org, actor=actor, action="organization.blackbox_retention_changed", target_type="organization",
+        target_id=org, reason=p.get("p_reason"),
+        details={"old_retention_days": old_days, "new_retention_days": days,
+                 "old_payload_retention_days": old_payload, "new_payload_retention_days": payload_days},
+    )
+    return {"changed": True, "retention_days": days, "payload_retention_days": payload_days}
+
+
 def _record_usage(store: LocalSupabaseAdapter, p: dict[str, Any]) -> dict[str, Any]:
     instance, items = p["p_instance"], p["p_items"]
     if not isinstance(instance, str) or not 8 <= len(instance) <= 64:
@@ -668,6 +691,7 @@ HANDLERS: dict[str, RpcHandler] = {
     "control_mcp_server": _control_mcp_server,
     "control_agent_budget": _control_agent_budget,
     "control_org_budget_default": _control_org_budget_default,
+    "control_blackbox_retention": _control_blackbox_retention,
     "record_usage": _record_usage,
     "mark_budget_frozen": _mark_budget_frozen,
     "usage_by_others": _usage_by_others,

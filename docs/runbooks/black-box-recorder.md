@@ -5,6 +5,14 @@ A durable, tamper-evident record of every tool call the gateway allowed, refused
 Design: `docs/adr/0011-black-box-recorder.md`.
 
 ## Use it
+- **Retention:** events are deleted after the organization's retention (default 30 days, 7–90) by the daily
+  purge (`purge_events()`, pg_cron at 19:17 UTC); captured payloads (M2b) are cleared after their own
+  retention (default 7 days, 1–30). An admin changes both with `PUT /v1/blackbox/retention` and
+  `"confirm": true`; **a shorter retention deletes events at the next purge and cannot be undone.** Every
+  purge that deletes something writes an `organization.blackbox_purged` audit row (old and new anchor,
+  count). After a purge, "Verify chain" starts from the anchor; events before it are gone by design.
+- **Check the purge is scheduled (Supabase SQL editor):** `SELECT jobname, schedule FROM cron.job;` should list
+  `redhand-purge-events`. To run it now: `SELECT public.purge_events();`.
 - **Dashboard -> Black Box:** a timeline (newest first), filterable by decision (All / ALLOW / BLOCK /
   ERROR), paginated with "Load older events".
 - **Verify chain:** recomputes the hash chain from seq 1 to the newest event currently shown and reports
