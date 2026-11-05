@@ -304,7 +304,7 @@ class McpGateway:
             server=context.server_slug,
             method=str(method or ""),
             tool_name=tool_name,
-            decision=decision,  # type: ignore[arg-type]  # validated Literal by the caller
+            decision=decision,
             reasons=reasons[:10],
             upstream_status=status,
             latency_ms=round((time.perf_counter() - started) * 1000, 2),

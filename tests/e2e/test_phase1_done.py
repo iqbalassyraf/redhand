@@ -30,6 +30,7 @@ from agentwall.src.gateway.budget import BudgetMeter, HttpUsageReporter
 from agentwall.src.gateway.context import CoreContextClient
 from agentwall.src.gateway.identity import AgentTokenVerifier
 from agentwall.src.gateway.metrics import GatewayMetrics
+from agentwall.src.gateway.recorder import EventRecorder, HttpEventReporter
 from agentwall.src.gateway.service import McpGateway
 from agentwall.src.gateway.upstream import UpstreamForwarder
 from agentwall.src.telemetry.audit_logger import TamperEvidentAuditLogger
@@ -85,6 +86,10 @@ class Stack:
             budget=BudgetMeter(
                 instance_id="e2e-gateway-0001",
                 reporter=HttpUsageReporter(core_url="http://core", service_token=SERVICE_TOKEN, http_client=self.core),
+            ),
+            recorder=EventRecorder(
+                instance_id="e2e-gateway-0001",
+                reporter=HttpEventReporter(core_url="http://core", service_token=SERVICE_TOKEN, http_client=self.core),
             ),
         )
         monkeypatch.setattr(gateway_main, "gateway", self.gateway)
