@@ -97,6 +97,7 @@ ALTER TABLE public.event_batches ENABLE ROW LEVEL SECURITY;
 CREATE OR REPLACE FUNCTION public._forbid_event_mutation()
 RETURNS TRIGGER
 LANGUAGE plpgsql
+SET search_path = public, pg_temp
 AS $$
 BEGIN
     RAISE EXCEPTION 'agent_events is append-only' USING ERRCODE = 'insufficient_privilege';
@@ -128,6 +129,7 @@ CREATE OR REPLACE FUNCTION public._blackbox_event_hash(
 ) RETURNS text
 LANGUAGE sql
 IMMUTABLE
+SET search_path = public, pg_temp
 AS $$
     SELECT encode(digest(
         p_prev_hash || chr(31) || p_org::text || chr(31) || p_agent::text || chr(31) || p_seq::text
