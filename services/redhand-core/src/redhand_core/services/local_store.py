@@ -28,6 +28,28 @@ if TYPE_CHECKING:
 logger = logging.getLogger("redhand.core.local_store")
 
 DEFAULT_ORG_ID = "00000000-0000-0000-0000-000000000010"
+
+
+def _sort_key(value: Any) -> Any:
+    """Numeric columns (e.g. seq) sort by value, not lexically ("10" < "2"); everything else by text."""
+    try:
+        return (0, float(value))
+    except (TypeError, ValueError):
+        return (1, str(value or ""))
+
+
+def _matches_filters(row: dict[str, Any], filters: list[tuple[str, str, Any]]) -> bool:
+    for column, op, value in filters:
+        current: Any = row.get(column)
+        if op == "lt":
+            try:
+                if not float(current) < float(value):
+                    return False
+            except (TypeError, ValueError):
+                return False
+        elif str(current) != str(value):
+            return False
+    return True
 DEFAULT_DEV_API_KEY = "rh_dev_local_key"
 
 # Development operators for the local store. They exist only in the in-memory store,
@@ -58,7 +80,7 @@ class LocalTableQueryBuilder:
         self._operation: str = "select"
         self._payload: Any = None
         self._on_conflict: str | None = None
-        self._filters: list[tuple[str, Any]] = []
+        self._filters: list[tuple[str, str, Any]] = []  # (column, op, value); op is "eq" or "lt"
         self._maybe_single: bool = False
         self._order: tuple[str, bool] | None = None
         self._limit: int | None = None
@@ -88,7 +110,11 @@ class LocalTableQueryBuilder:
         return self
 
     def eq(self, column: str, value: Any) -> LocalTableQueryBuilder:
-        self._filters.append((column, value))
+        self._filters.append((column, "eq", value))
+        return self
+
+    def lt(self, column: str, value: Any) -> LocalTableQueryBuilder:
+        self._filters.append((column, "lt", value))
         return self
 
     def maybe_single(self) -> LocalTableQueryBuilder:
@@ -107,14 +133,10 @@ class LocalTableQueryBuilder:
         rows = self._store.tables.setdefault(self._table_name, [])
 
         if self._operation == "select":
-            matched = [
-                dict(r)
-                for r in rows
-                if all(str(r.get(col)) == str(val) for col, val in self._filters)
-            ]
+            matched = [dict(r) for r in rows if _matches_filters(r, self._filters)]
             if self._order is not None:
                 column, desc = self._order
-                matched.sort(key=lambda r: str(r.get(column) or ""), reverse=desc)
+                matched.sort(key=lambda r: _sort_key(r.get(column)), reverse=desc)
             if self._limit is not None:
                 matched = matched[: self._limit]
             if self._maybe_single:
@@ -177,9 +199,7 @@ class LocalTableQueryBuilder:
         if self._operation == "update":
             if self._table_name in APPEND_ONLY_TABLES:
                 raise LocalStoreConstraintError(f"{self._table_name} is append-only")
-            targets = [
-                r for r in rows if all(str(r.get(col)) == str(val) for col, val in self._filters)
-            ]
+            targets = [r for r in rows if _matches_filters(r, self._filters)]
             # Validate every row first so a rejected update changes nothing, like a
             # single SQL statement would.
             for r in targets:
@@ -233,6 +253,10 @@ def apply_insert_defaults(table: str, row: dict[str, Any]) -> None:
         row.setdefault("safe_mode", False)
         row.setdefault("daily_call_limit", None)
         row.setdefault("budget_action", "deny")
+    elif table == "organizations":
+        row.setdefault("blackbox_retention_days", 30)
+        row.setdefault("payload_capture_enabled", False)
+        row.setdefault("payload_retention_days", 7)
 
 
 def _apply_update_triggers(table: str, before: dict[str, Any], after: dict[str, Any]) -> None:
@@ -299,6 +323,9 @@ class LocalSupabaseAdapter:
                 "safe_mode": False,
                 "utc_offset_minutes": 480,
                 "default_daily_call_limit": None,
+                "blackbox_retention_days": 30,
+                "payload_capture_enabled": False,
+                "payload_retention_days": 7,
             }
         ]
 
@@ -426,6 +453,9 @@ class LocalSupabaseAdapter:
 
         self.tables["execution_traces"] = []
         self.tables["security_events"] = []
+        self.tables["agent_events"] = []
+        self.tables["event_chain_heads"] = []
+        self.tables["event_batches"] = []
 
         # Passport fields for the seeded demo agents (owned by the dev owner).
         owner_id = DEV_OPERATORS["owner"]["id"]

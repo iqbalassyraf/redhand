@@ -13,7 +13,9 @@ Used only by the in-memory store, which redhand-core refuses to run outside deve
 from __future__ import annotations
 
 import copy
+import hashlib
 from datetime import date, datetime, timedelta, timezone
+from decimal import Decimal, InvalidOperation
 from typing import Any, Callable
 from uuid import UUID, uuid4
 
@@ -442,6 +444,157 @@ def _org_usage(store: LocalSupabaseAdapter, p: dict[str, Any]) -> list[dict[str,
     return [{"agent_id": a, "calls": c} for a, c in totals.items()]
 
 
+# ---------------------------------------------------------------------------------------------------
+# Black Box Recorder (Phase 3, M1): an in-memory emulation of the per-organization hash chain in
+# supabase/migrations/20261110000000_blackbox.sql. The hash here need not match the real SQL
+# function byte for byte (different stores compute it independently); it only needs to be internally
+# consistent, so a value stored at _record_events time always recomputes the same way at
+# _verify_events time.
+# ---------------------------------------------------------------------------------------------------
+
+BLACKBOX_GENESIS_HASH = "GENESIS_BLOCK_AGENT_EVENTS_V1"
+MAX_EVENTS_PER_BATCH = 500
+MAX_VERIFY_RANGE = 50_000
+
+
+def _event_hash(
+    prev_hash: str, org: str, agent_id: str, seq: int, occurred_at: str, instance: str, server: str,
+    method: str, tool: str, decision: str, reasons: list[str], upstream_status: Any, latency_ms: Any,
+    argument_keys: list[str], arguments_sha256: str, result_size: Any, redaction_count: int, credential_jti: Any,
+) -> str:
+    try:
+        latency_text = "" if latency_ms is None else str(Decimal(str(latency_ms)).quantize(Decimal("0.01")))
+    except InvalidOperation:
+        latency_text = ""
+    parts = [
+        prev_hash, org, agent_id, str(seq), str(occurred_at), instance, server, method, tool, decision,
+        ",".join(reasons), "" if upstream_status is None else str(upstream_status), latency_text,
+        ",".join(argument_keys), arguments_sha256 or "", "" if result_size is None else str(result_size),
+        str(redaction_count), credential_jti or "",
+    ]
+    return hashlib.sha256("\x1f".join(parts).encode("utf-8")).hexdigest()
+
+
+def _record_events(store: LocalSupabaseAdapter, p: dict[str, Any]) -> dict[str, Any]:
+    instance, batch_id, org, items = str(p["p_instance"]), str(p["p_batch_id"]), str(p["p_org"]), p["p_items"]
+    if not 8 <= len(instance) <= 64:
+        raise _error("22023", "invalid instance id")
+    if not isinstance(items, list) or not 1 <= len(items) <= MAX_EVENTS_PER_BATCH:
+        raise _error("22023", f"items must be an array of 1 to {MAX_EVENTS_PER_BATCH} entries")
+
+    batches = store.tables.setdefault("event_batches", [])
+    existing = next((b for b in batches if b["batch_id"] == batch_id), None)
+    if existing is not None:
+        return {
+            "accepted": existing["item_count"], "rejected": existing["rejected_count"],
+            "first_seq": existing["first_seq"], "last_seq": existing["last_seq"], "duplicate": True,
+        }
+
+    heads = store.tables.setdefault("event_chain_heads", [])
+    head = next((h for h in heads if h["organization_id"] == org), None)
+    if head is None:
+        head = {
+            "organization_id": org, "last_seq": 0, "last_hash": BLACKBOX_GENESIS_HASH,
+            "anchor_seq": 0, "anchor_prev_hash": BLACKBOX_GENESIS_HASH,
+        }
+        heads.append(head)
+
+    events = store.tables.setdefault("agent_events", [])
+    seq, prev = head["last_seq"], head["last_hash"]
+    accepted = rejected = 0
+    first_seq: int | None = None
+    last_seq: int | None = None
+
+    for item in items:
+        try:
+            agent_id = str(UUID(str(item["agent_id"])))
+        except (KeyError, ValueError, TypeError):
+            rejected += 1
+            continue
+        agent = next((a for a in store.tables.get("agents", []) if str(a.get("id")) == agent_id), None)
+        if agent is None or str(agent.get("organization_id")) != org:
+            rejected += 1
+            continue
+        decision, method = item.get("decision"), item.get("method") or ""
+        gateway_instance = item.get("gateway_instance") or ""
+        if decision not in ("ALLOW", "BLOCK", "ERROR") or not method or len(method) > 64 or not 1 <= len(gateway_instance) <= 64:
+            rejected += 1
+            continue
+
+        reasons, argument_keys = list(item.get("reasons") or []), list(item.get("argument_keys") or [])
+        occurred_at = item.get("occurred_at") or _now()
+        server, tool_name = item.get("server") or "", item.get("tool_name") or ""
+        upstream_status, latency_ms = item.get("upstream_status"), item.get("latency_ms")
+        arguments_sha256, result_size = item.get("arguments_sha256") or "", item.get("result_size_bytes")
+        redaction_count, credential_jti = int(item.get("redaction_count") or 0), item.get("credential_jti")
+        seq += 1
+        h = _event_hash(
+            prev, org, agent_id, seq, occurred_at, gateway_instance, server, method, tool_name, decision,
+            reasons, upstream_status, latency_ms, argument_keys, arguments_sha256, result_size,
+            redaction_count, credential_jti,
+        )
+        events.append({
+            "id": str(uuid4()), "organization_id": org, "agent_id": agent_id, "seq": seq,
+            "occurred_at": occurred_at, "gateway_instance": gateway_instance, "server": server,
+            "method": method, "tool_name": tool_name, "decision": decision, "reasons": reasons,
+            "upstream_status": upstream_status, "latency_ms": latency_ms, "argument_keys": argument_keys,
+            "arguments_sha256": arguments_sha256, "result_size_bytes": result_size,
+            "redaction_count": redaction_count, "credential_jti": credential_jti,
+            "prev_hash": prev, "hash": h, "batch_id": batch_id,
+        })
+        prev = h
+        accepted += 1
+        first_seq = seq if first_seq is None else first_seq
+        last_seq = seq
+
+    head["last_seq"], head["last_hash"] = seq, prev
+    batches.append({
+        "batch_id": batch_id, "organization_id": org, "instance_id": instance,
+        "item_count": accepted, "rejected_count": rejected, "first_seq": first_seq, "last_seq": last_seq,
+    })
+    return {"accepted": accepted, "rejected": rejected, "first_seq": first_seq, "last_seq": last_seq, "duplicate": False}
+
+
+def _verify_events(store: LocalSupabaseAdapter, p: dict[str, Any]) -> dict[str, Any]:
+    org, from_seq, to_seq = str(p["p_org"]), int(p["p_from_seq"]), int(p["p_to_seq"])
+    head = next((h for h in store.tables.get("event_chain_heads", []) if h["organization_id"] == org), None)
+    if head is None:
+        return {"ok": True, "checked": 0}
+    if to_seq < from_seq or to_seq - from_seq >= MAX_VERIFY_RANGE:
+        raise _error("22023", f"range must cover at most {MAX_VERIFY_RANGE} events")
+    if from_seq <= head["anchor_seq"]:
+        raise _error("22023", f"range starts at or before the retained anchor (seq {head['anchor_seq']})")
+
+    all_events = store.tables.get("agent_events", [])
+    if from_seq == head["anchor_seq"] + 1:
+        expected_prev = head["anchor_prev_hash"]
+    else:
+        predecessor = next((e for e in all_events if e["organization_id"] == org and e["seq"] == from_seq - 1), None)
+        if predecessor is None:
+            raise _error("22023", f"predecessor of seq {from_seq} is missing")
+        expected_prev = predecessor["hash"]
+
+    rows = sorted(
+        (e for e in all_events if e["organization_id"] == org and from_seq <= e["seq"] <= to_seq),
+        key=lambda e: e["seq"],
+    )
+    checked = 0
+    for row in rows:
+        if row["prev_hash"] != expected_prev:
+            return {"ok": False, "broken_seq": row["seq"], "reason": "prev_hash_mismatch"}
+        recomputed = _event_hash(
+            row["prev_hash"], row["organization_id"], row["agent_id"], row["seq"], row["occurred_at"],
+            row["gateway_instance"], row["server"], row["method"], row["tool_name"], row["decision"],
+            row["reasons"], row["upstream_status"], row["latency_ms"], row["argument_keys"],
+            row["arguments_sha256"], row["result_size_bytes"], row["redaction_count"], row["credential_jti"],
+        )
+        if recomputed != row["hash"]:
+            return {"ok": False, "broken_seq": row["seq"], "reason": "hash_mismatch"}
+        expected_prev = row["hash"]
+        checked += 1
+    return {"ok": True, "checked": checked}
+
+
 def _telegram_link_chat(store: LocalSupabaseAdapter, p: dict[str, Any]) -> dict[str, Any]:
     code_hash, chat_id = str(p["p_code_hash"]), int(p["p_chat_id"])
     code = next(
@@ -524,6 +677,8 @@ HANDLERS: dict[str, RpcHandler] = {
     "telegram_link_chat": _telegram_link_chat,
     "telegram_unlink": _telegram_unlink,
     "telegram_claim_update": _telegram_claim_update,
+    "record_events": _record_events,
+    "verify_events": _verify_events,
 }
 
 

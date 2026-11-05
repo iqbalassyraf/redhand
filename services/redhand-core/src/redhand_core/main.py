@@ -26,6 +26,8 @@ from redhand_core.routers.passports import router as passports_router
 from redhand_core.routers.iam_broker import get_sts_downscoper, router as iam_broker_router
 from redhand_core.routers.scim import router as scim_router
 from redhand_core.routers.state import router as state_router
+from redhand_core.routers.blackbox import router as blackbox_router
+from redhand_core.routers.events import router as events_router
 from redhand_core.routers.telegram import router as telegram_router
 from redhand_core.routers.usage import router as usage_router
 from redhand_core.routers.telemetry import (
@@ -132,6 +134,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(agent_auth_router)
     app.include_router(telegram_router)
     app.include_router(usage_router)
+    app.include_router(events_router)
+    app.include_router(blackbox_router)
     if (
         active_settings.ENVIRONMENT == "development"
         and active_settings.uses_local_store

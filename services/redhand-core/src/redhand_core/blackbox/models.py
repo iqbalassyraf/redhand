@@ -1,0 +1,101 @@
+"""
+Pydantic models for the Black Box Recorder: the gateway's ingest batch, and what the dashboard reads
+back. Argument values and tool results are never part of these models in Phase 3 M1 (payload capture
+ships in M2); only metadata the gateway's existing audit record already carries
+(agentwall/src/telemetry/audit_logger.py) crosses this boundary.
+"""
+
+from __future__ import annotations
+
+from datetime import datetime
+from typing import Literal
+from uuid import UUID
+
+from pydantic import BaseModel, ConfigDict, Field
+
+Decision = Literal["ALLOW", "BLOCK", "ERROR"]
+
+MAX_ITEMS_PER_BATCH = 500
+INSTANCE_ID_PATTERN = r"^[A-Za-z0-9-]{8,64}$"
+MAX_REASONS = 10
+MAX_ARGUMENT_KEYS = 50
+
+
+class GatewayEventItem(BaseModel):
+    """One tool call the gateway allowed, refused or failed to forward. Mirrors
+    agentwall.telemetry.audit_logger.AuditRecord, minus raw content."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    agent_id: UUID
+    occurred_at: datetime
+    gateway_instance: str = Field(min_length=1, max_length=64)
+    server: str = Field(default="", max_length=128)
+    method: str = Field(min_length=1, max_length=64)
+    tool_name: str = Field(default="", max_length=128)
+    decision: Decision
+    reasons: list[str] = Field(default_factory=list, max_length=MAX_REASONS)
+    upstream_status: int | None = None
+    latency_ms: float | None = None
+    argument_keys: list[str] = Field(default_factory=list, max_length=MAX_ARGUMENT_KEYS)
+    arguments_sha256: str = ""
+    result_size_bytes: int | None = None
+    redaction_count: int = 0
+    credential_jti: str | None = None
+
+
+class EventIngestRequest(BaseModel):
+    """One batch is one organization: the chain is per-organization and each append locks that
+    organization's chain head, so the gateway's recorder groups its buffer by organization before
+    flushing (agentwall/src/gateway/recorder.py) rather than mixing tenants in one call. The
+    organization claimed here is still re-checked per item against the agent's real organization
+    inside record_events(): a wrong or stale value here only causes rejections, never a cross-tenant
+    write."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    instance_id: str = Field(pattern=INSTANCE_ID_PATTERN)
+    batch_id: UUID
+    organization_id: UUID
+    items: list[GatewayEventItem] = Field(min_length=1, max_length=MAX_ITEMS_PER_BATCH)
+
+
+class EventIngestResponse(BaseModel):
+    accepted: int
+    rejected: int
+
+
+class BlackBoxEventView(BaseModel):
+    seq: int
+    agent_id: UUID
+    agent_name: str | None = None
+    occurred_at: datetime
+    server: str
+    method: str
+    tool_name: str
+    decision: Decision
+    reasons: list[str]
+    upstream_status: int | None
+    latency_ms: float | None
+    argument_keys: list[str]
+
+
+class BlackBoxTimelineResponse(BaseModel):
+    events: list[BlackBoxEventView]
+    next_before_seq: int | None = Field(
+        default=None, description="Pass as `before_seq` to fetch the next, older page; null on the last page."
+    )
+
+
+class VerifyRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    from_seq: int = Field(ge=1)
+    to_seq: int = Field(ge=1)
+
+
+class VerifyResponse(BaseModel):
+    ok: bool
+    checked: int = 0
+    broken_seq: int | None = None
+    reason: str | None = None
