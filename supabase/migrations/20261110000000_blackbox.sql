@@ -129,7 +129,9 @@ CREATE OR REPLACE FUNCTION public._blackbox_event_hash(
 ) RETURNS text
 LANGUAGE sql
 IMMUTABLE
-SET search_path = public, pg_temp
+-- "extensions" is where Supabase installs pgcrypto; without it digest() cannot be resolved and this
+-- function cannot even be created. See 20261110000100_blackbox_hash_search_path.sql.
+SET search_path = public, extensions, pg_temp
 AS $$
     SELECT encode(digest(
         p_prev_hash || chr(31) || p_org::text || chr(31) || p_agent::text || chr(31) || p_seq::text

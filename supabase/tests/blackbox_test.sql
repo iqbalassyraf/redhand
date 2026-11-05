@@ -178,4 +178,17 @@ BEGIN
         'the new tables are protected by row level security');
 END $$;
 
+-- 9. The hash helper resolves digest() with pgcrypto in the "extensions" schema (as on Supabase) -----------
+-- Regression: with search_path = public, pg_temp the helper raised "function digest does not exist",
+-- record_events() counted every event as rejected and stored nothing.
+SELECT pg_temp.check(
+    public._blackbox_event_hash('', '00000000-0000-0000-0000-0000c0c00008'::uuid,
+        '00000000-0000-0000-0000-0000c0c0000a'::uuid, 1, now(), 'instance-aaaa', 'fs', 'tools/call',
+        'read_file', 'ALLOW', '{}'::text[], 200, 1.5, '{}'::text[], '', 0, 0, NULL) ~ '^[0-9a-f]{64}$',
+    'the event hash helper resolves digest() from the extensions schema');
+SELECT pg_temp.check(
+    (SELECT proconfig @> ARRAY['search_path=public, extensions, pg_temp'] FROM pg_proc
+     WHERE proname = '_blackbox_event_hash' AND pronamespace = 'public'::regnamespace),
+    'the hash helper keeps a pinned search_path that includes extensions');
+
 DO $$ BEGIN RAISE NOTICE 'ALL SQL TESTS PASSED (blackbox)'; END $$;
