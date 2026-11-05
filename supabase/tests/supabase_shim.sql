@@ -1,5 +1,9 @@
 -- Minimal stand-in for the parts of Supabase the migrations depend on, so they can be
 -- tested on plain PostgreSQL. Never applied to a real Supabase project.
+-- Supabase installs pgcrypto in the "extensions" schema, not "public". Mirror that so a function whose
+-- pinned search_path leaves it out fails here as it does in production (the Black Box hash helper did).
+CREATE SCHEMA IF NOT EXISTS extensions;
+CREATE EXTENSION IF NOT EXISTS pgcrypto WITH SCHEMA extensions;
 CREATE SCHEMA IF NOT EXISTS auth;
 CREATE TABLE IF NOT EXISTS auth.users (id UUID PRIMARY KEY);
 CREATE OR REPLACE FUNCTION auth.uid() RETURNS UUID LANGUAGE sql STABLE AS $$ SELECT NULL::uuid $$;
