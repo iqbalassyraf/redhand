@@ -1,6 +1,19 @@
 # Changelog
 
-## Unreleased: Phase 2 (Stop things), in progress
+## Unreleased: Phase 3 (See things), in progress
+
+### Added
+- Black Box Recorder (M1): a durable, tamper-evident, per-organization record of every tool call the
+  gateway allowed, refused or failed to forward. Dashboard -> **Black Box**: a timeline (filterable by
+  decision, paginated) and a **Verify chain** button that recomputes the hash chain and reports the exact
+  event if it was ever altered. Metadata only in M1 (no raw arguments or results); payload capture is a
+  separate, opt-in M2 feature. New migration `20261110000000_blackbox.sql`; new core endpoints
+  `/internal/v1/events` (gateway -> core), `/v1/blackbox/events`, `/v1/blackbox/verify`. **Deploy order:
+  migration, core, then the gateway.** The gateway's recorder degrades gracefully against an older core
+  (events buffer and retry; enforcement is never affected) (`docs/runbooks/black-box-recorder.md`,
+  ADR 0011).
+
+## Phase 2 (Stop things): complete (2026-11-04)
 
 ### Added
 - Organization default daily limit: an admin can set the daily call limit that every newly registered agent

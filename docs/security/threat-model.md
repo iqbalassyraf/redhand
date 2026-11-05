@@ -1,6 +1,6 @@
-# Threat model: Phases 1 and 2 (Identity and control; Stop things)
+# Threat model: Phases 1 through 3 (Identity and control; Stop things; See things)
 
-**Last updated:** 2026-11-03. Update this file whenever a trust boundary changes (CLAUDE.md §5.1).
+**Last updated:** 2026-11-05. Update this file whenever a trust boundary changes (CLAUDE.md §5.1).
 
 ## 1. Components and trust boundaries
 
@@ -22,6 +22,8 @@
 | 4 | Agent → gateway | Ed25519 access token, 10 min, verified with public key | Plus per-call passport status check (≤ 2 s cache) |
 | 5 | Gateway → MCP server | Optional upstream credential supplied by the agent | Destination check per request: https, public IPs, no redirects |
 | 6 | Telegram → core webhook | Secret header (constant-time compare), then the chat must be linked to an operator whose role is re-read on every command | Public endpoint by necessity; private chats only; stop-only commands (ADR 0008) |
+| 7 | Gateway → core (`/internal/v1/events`) | Shared service token, constant-time compare (same boundary as #3) | Each batch claims one organization; every item's agent is re-checked against that organization inside `record_events()` (ADR 0011) |
+| 8 | Operator → core (`/v1/blackbox/*`) | Same as #1 | Timeline, verify and (M2) export all filtered by the caller's organization_id in SQL |
 
 ## 2. Threats and mitigations
 
@@ -56,6 +58,12 @@
 | Development shortcuts reach production | core refuses the in-memory store and `/v1/dev/login` outside development; signing key required outside dev/test; no hardcoded secrets | Deployment checklist must set all required secrets |
 | Supply chain | Locked dependencies (`uv.lock`, `package-lock.json`); no new packages added in Phase 1 (pyjwt was already locked) | No automated vulnerability scan in CI yet |
 
+| Recorded event forged or injected into another tenant's chain | `record_events()` derives each item's organization from the agents table, never from the gateway's claim; a mismatch is rejected, not written | A compromised gateway instance with a valid service token could still write junk events into its own tenant's chain (visible as odd entries, not a cross-tenant leak) |
+| Black Box events read by the wrong tenant | `/v1/blackbox/events` and `/v1/blackbox/verify` scope every query by the authenticated operator's `organization_id`; tested for cross-tenant timeline and verify | None known |
+| Stored event tampered with after the fact (e.g. direct database access) | Append-only trigger refuses UPDATE/DELETE outside the purge path; `verify_events()` recomputes the chain and reports the first seq that does not match | Someone with database superuser access could still rewrite the whole chain; external anchoring of the chain head is a tracked follow-up (Phase 3 plan, decision D4) |
+| Recorder outage or flood used to hide activity | Buffer overflow drops the newest events (not silently): a `recorder.gap` marker is recorded once flushing resumes, and `redhand_gateway_events_dropped_total` is a metric | A sustained flood that keeps the buffer full could delay gap reporting; Budget Guard already caps an agent's own call rate |
+| Black Box recorder outage affects enforcement | `EventRecorder.record()` does no I/O and never raises into the decision path; flush failures only grow the buffer | None known |
+
 ## 3. Out of scope so far
 Local stdio MCP servers, non-MCP REST APIs, LLM API spend (Budget Guard, Phase 2), recording of
-payloads (Black Box, Phase 3), MCP server reputation (Phase 4).
+payloads (Black Box M2), honeytokens and honey tools (Black Box M3), MCP server reputation (Phase 4).
