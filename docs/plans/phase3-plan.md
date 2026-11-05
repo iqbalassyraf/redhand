@@ -300,6 +300,26 @@ test 13/13.
   rather than the fixed codes in section 3.1; follow-up.
 - **Not checked:** the production dashboard's Black Box page.
 
+### 9.2 M2a staging verification (2026-11-05)
+
+Migration `20261111000000_blackbox_retention.sql` applied to staging (as `redhand_blackbox_retention`), then core
+at `7816e96` (`redhand-core-00013-9r8`); smoke test 13/13. The gateway was not redeployed (unchanged).
+
+- **Objects:** the three new functions have a pinned `search_path` and are executable by `service_role` only;
+  both triggers are enabled; the audit constraint allows the two new actions; the existing events and chain are
+  untouched (2 events, `verify_events` ok).
+- **Schedule:** `redhand-purge-events` is in `cron.job` (`17 19 * * *`, active) next to the two older purges.
+  Whether it actually runs at 19:17 UTC is not yet observed.
+- **Purge on real Supabase:** a manual `purge_events()` deleted nothing (no event is old enough), as expected.
+  Then, inside a block that always raised an error at the end (so everything rolled back), event 1 was aged to
+  40 days: a direct `DELETE` of event 2 was refused ("only events behind the retention anchor can be deleted"),
+  the purge deleted 1 event, moved the anchor to 1, wrote one audit row, and `verify_events` over the kept event
+  reported ok. Afterwards the events, anchor 0, zero purge audit rows and both triggers were confirmed unchanged.
+- **Core:** `GET /v1/blackbox/settings` and `PUT /v1/blackbox/retention` return 401 without a login.
+- **Not verified on staging:** the settings endpoints with an operator login (no dashboard control until M2c),
+  a real unattended purge run, and purge timing on a large table.
+
+
 ## 10. Risks and open questions
 
 - **Cloud Run CPU throttling** can delay background flushes between requests. Mitigation: flush is
