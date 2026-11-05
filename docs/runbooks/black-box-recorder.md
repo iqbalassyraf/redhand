@@ -34,16 +34,18 @@ Design: `docs/adr/0011-black-box-recorder.md`.
    `UPDATE agent_events SET tool_name = 'x' WHERE seq = <some seq>` -- expect it to be refused
    (`agent_events is append-only`), proving the trigger. There is no supported way to tamper with a stored
    event through the application; this only proves the guard exists.
-5. **Recorder outage:** temporarily point the gateway's `AGENTWALL_CORE_SERVICE_TOKEN` at a wrong value (or
-   stop core) and make a few more calls. **Expected:** the calls are still allowed/refused exactly as
-   before; `redhand_gateway_events_dropped_total` and `redhand_gateway_event_reports_total{outcome="failed"}`
-   go up on `/metrics`. Restore the token/core and confirm the buffered events arrive within one flush
-   interval, with a `recorder.gap` row if the buffer had filled while it was down.
+5. **Recorder outage (done test 6): proven by the local end-to-end suite, not on staging.** Do **not** break
+   `AGENTWALL_CORE_SERVICE_TOKEN` or stop core to test this: the gateway uses the same token and the same core
+   for every passport check, so either makes it deny **every** call (correct fail-closed behaviour, but it
+   tests the passport path, not the recorder). There is no supported way to fail only the event endpoint,
+   and a switch for it would be a debug path in the gateway (CLAUDE.md §16). The behaviour is covered by
+   `agentwall/tests/test_recorder.py` (reporter failures, crashes, backoff, gaps) and `tests/e2e/`.
 
 ## Troubleshooting
 | Symptom | Likely cause |
 |---|---|
 | The Black Box page is empty but agents are being called | Check `redhand_gateway_events_buffered` and `redhand_gateway_event_reports_total{outcome="failed"}` on the gateway's `/metrics`: the recorder cannot reach core (wrong or missing service token, core down, or core is older than this gateway and has no `/internal/v1/events`). |
+| Calls appear in gateway logs but not in the Black Box, and `redhand_gateway_events_rejected_total` goes up | Core acknowledged the batches but `record_events()` refused the items. Core logs "Event batch partly rejected" with the counts. Run `SELECT public._blackbox_event_hash(...)` by hand to surface a database fault (this is how a missing `extensions` search path was found), and check that each agent belongs to the organization the batch claims. |
 | A `recorder.gap` row appears | The gateway's buffer filled (`RECORDER_MAX_BUFFERED_EVENTS`, default 10,000) before it could flush; some events in that window were not recorded. Enforcement itself was not affected. Raise the buffer size or flush interval if this recurs. |
 | "Verify chain" fails with `hash_mismatch` or `prev_hash_mismatch` | A stored event was altered or deleted outside the application (e.g. direct database access with elevated privileges). This is exactly what Verify is for: report it as a security incident. |
 | Verify returns a 400 "range starts at or before the retained anchor" | The range asked for starts before what retention has purged (M2). Pick a `from_seq` after the organization's anchor. |

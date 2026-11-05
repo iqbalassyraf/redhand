@@ -79,10 +79,18 @@ class EventReporter(Protocol):
 
 
 class HttpEventReporter:
-    def __init__(self, *, core_url: str, service_token: str | None, http_client: httpx.AsyncClient | None = None) -> None:
+    def __init__(
+        self,
+        *,
+        core_url: str,
+        service_token: str | None,
+        http_client: httpx.AsyncClient | None = None,
+        metrics: GatewayMetrics | None = None,
+    ) -> None:
         self._url = core_url.rstrip("/") + "/internal/v1/events"
         self._token = service_token
         self._http = http_client or httpx.AsyncClient(timeout=httpx.Timeout(REPORT_TIMEOUT_SECONDS, connect=2.0))
+        self._metrics = metrics
 
     async def send(self, instance_id: str, batch_id: str, organization_id: UUID, items: list[dict[str, Any]]) -> bool:
         if not self._token:
@@ -102,7 +110,24 @@ class HttpEventReporter:
         if response.status_code != 200:
             logger.warning("Event report refused", status=response.status_code)
             return False
+        self._note_rejections(response)
         return True
+
+    def _note_rejections(self, response: httpx.Response) -> None:
+        """Core acknowledges a batch even when it refuses to store some items (wrong tenant, invalid
+        field, or a database fault). Those items are not retried, since resending cannot fix them, so
+        they must at least be visible: one such fault once dropped every event silently."""
+        try:
+            body = response.json()
+            rejected = int(body["rejected"])
+            accepted = int(body["accepted"])
+        except (ValueError, KeyError, TypeError):
+            logger.warning("Event report acknowledged with an unreadable body")
+            return
+        if rejected > 0:
+            logger.warning("Event batch partly rejected by core", accepted=accepted, rejected=rejected)
+            if self._metrics is not None:
+                self._metrics.record_events_rejected(rejected)
 
 
 class EventRecorder:

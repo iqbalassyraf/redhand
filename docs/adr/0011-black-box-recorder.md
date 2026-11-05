@@ -62,8 +62,8 @@ tamper-evident record.
 - **Storage:** about 0.5 KB per event with indexes; roughly 15 MB per agent per month at 1,000 calls/day.
   The Supabase free tier (500 MB) holds on the order of 25–30 such agents before the paid tier is needed.
 - **Latency:** `record()` is an in-memory append (microseconds); the scanner work added in later milestones
-  is bounded. Measured gateway overhead with the recorder enabled is reported in the M1 staging verification
-  (`docs/plans/phase2-m3-budget-guard.md`-style section to be added to the Phase 3 plan's milestone notes).
+  is bounded. Gateway overhead with the recorder enabled has **not yet been measured**; the M1 staging
+  verification (`docs/plans/phase3-plan.md` section 9.1) records this as open.
 - **Cloud Run CPU throttling** can delay background flushes between requests, same as Budget Guard; the
   flush is also started from inside request handling (`schedule_flush_if_due()`), not only from the
   periodic loop.

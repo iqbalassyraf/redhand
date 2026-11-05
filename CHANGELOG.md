@@ -12,6 +12,14 @@
   migration, core, then the gateway.** The gateway's recorder degrades gracefully against an older core
   (events buffer and retry; enforcement is never affected) (`docs/runbooks/black-box-recorder.md`,
   ADR 0011).
+- Rejected Black Box events are now visible: core logs "Event batch partly rejected" with the counts, and
+  the gateway's `/metrics` has `redhand_gateway_events_rejected_total`. CI now applies every migration,
+  runs the SQL tests and rolls them back on PostgreSQL 16.
+
+### Fixed
+- The Black Box stored no events on Supabase: the event hash helper could not find pgcrypto's `digest()`
+  (installed in the `extensions` schema), and the original migration could not be applied on a fresh
+  Supabase database. Migration `20261110000100_blackbox_hash_search_path.sql` (PR #9).
 
 ## Phase 2 (Stop things): complete (2026-11-04)
 

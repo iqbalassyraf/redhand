@@ -43,6 +43,37 @@ jobs:
       - name: Tests (unit, integration and Phase 1 end-to-end)
         run: uv run --frozen pytest -q
 
+  sql:
+    name: SQL migrations (apply, tests, rollback)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # A throwaway PostgreSQL that exists only for this job. scripts/test_migrations.sh applies every
+    # migration over a Supabase shim (pgcrypto in an "extensions" schema, as on Supabase), runs the SQL
+    # tests, then rolls every migration back and re-applies it. It once caught a migration that could not
+    # be applied on a fresh Supabase database.
+    services:
+      postgres:
+        image: postgres:16.4
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      PGHOST: localhost
+      PGPORT: "5432"
+      PGUSER: postgres
+      PGPASSWORD: postgres
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Apply migrations, run SQL tests, roll back and re-apply
+        run: scripts/test_migrations.sh
+
   dashboard:
     name: Dashboard (tsc, next build)
     runs-on: ubuntu-latest

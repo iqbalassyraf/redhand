@@ -9,9 +9,11 @@ from __future__ import annotations
 import asyncio
 from uuid import UUID, uuid4
 
+import httpx
 import pytest
 
-from agentwall.src.gateway.recorder import EventRecorder, GatewayEvent
+from agentwall.src.gateway.metrics import GatewayMetrics
+from agentwall.src.gateway.recorder import EventRecorder, GatewayEvent, HttpEventReporter
 
 from test_gateway import INVOICES_READ, Harness, tool
 
@@ -115,6 +117,37 @@ def test_a_crashing_reporter_never_raises_out_of_flush() -> None:
     rec.record(event())
     assert asyncio.run(rec.flush()) is False
     assert rec.buffered_count == 1
+
+
+def _reporter_answering(body: object, metrics: GatewayMetrics) -> HttpEventReporter:
+    transport = httpx.MockTransport(lambda request: httpx.Response(200, json=body))
+    return HttpEventReporter(
+        core_url="http://core", service_token="token", http_client=httpx.AsyncClient(transport=transport),
+        metrics=metrics,
+    )
+
+
+def test_items_core_refuses_to_store_are_counted_not_hidden() -> None:
+    """Regression: a database fault once made core reject every item while still answering 200, and
+    nothing in the gateway showed it."""
+    metrics = GatewayMetrics()
+    reporter = _reporter_answering({"accepted": 1, "rejected": 2}, metrics)
+    assert asyncio.run(reporter.send("gw-1", "b1", ORG, [{}])) is True  # acknowledged: never resent
+    assert "redhand_gateway_events_rejected_total 2" in metrics.render()
+
+
+def test_a_fully_accepted_batch_counts_no_rejections() -> None:
+    metrics = GatewayMetrics()
+    reporter = _reporter_answering({"accepted": 3, "rejected": 0}, metrics)
+    assert asyncio.run(reporter.send("gw-1", "b1", ORG, [{}])) is True
+    assert "redhand_gateway_events_rejected_total 0" in metrics.render()
+
+
+def test_an_unreadable_acknowledgement_is_still_an_acknowledgement() -> None:
+    metrics = GatewayMetrics()
+    reporter = _reporter_answering({"unexpected": True}, metrics)
+    assert asyncio.run(reporter.send("gw-1", "b1", ORG, [{}])) is True
+    assert "redhand_gateway_events_rejected_total 0" in metrics.render()
 
 
 def test_concurrent_flushes_join_the_one_in_flight() -> None:
