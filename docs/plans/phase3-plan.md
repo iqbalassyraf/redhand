@@ -268,7 +268,7 @@ editor per agent, payload capture toggle in organization settings; `src/lib/api.
 | | Milestone | Contents |
 |---|---|---|
 | M1 | Black Box core | **Done (2026-11-05).** Migration, ingest, gateway recorder, timeline page, verify. Done tests 1, 2 on staging; 6 locally (9.1). |
-| M2 | Retention, export, payload capture | Purge with anchor, export, opt-in capture with redaction and its retention. Done test 3. **M2a (retention purge, anchor guard, retention settings) built 2026-11-05**; **M2b (payload capture with redaction incl. personal data, decision D2) built 2026-11-05, not yet on staging**; M2c (export, dashboard) next. |
+| M2 | Retention, export, payload capture | Purge with anchor, export, opt-in capture with redaction and its retention. Done test 3. **M2a (retention purge, anchor guard, retention settings) built 2026-11-05**; **M2b (payload capture with redaction incl. personal data, decision D2) done 2026-11-05** (9.3); M2c (export, dashboard) next. |
 | M3 | Honeytokens | Migration 2, generator, context digests, scanner, trips with alert and freeze, dashboard. Done test 4. |
 | M4 | Honey tools, docs, staging | Honey tools, ADRs, runbooks, threat model, staging verification of all six done tests. Done test 5. |
 
@@ -344,3 +344,30 @@ at `7816e96` (`redhand-core-00013-9r8`); smoke test 13/13. The gateway was not r
 | D5 | Canary URLs that detect use *outside* RedHand (public endpoint) | Not in Phase 3; revisit with customers |
 | D6 | Include honey tools | Yes, small and high value |
 | D7 | Per-organization ingest cap of 200,000 events/day | Yes |
+
+### 9.3 M2b staging verification (2026-11-05)
+
+Migration `20261112000000_blackbox_payload_capture.sql` applied to staging (as `redhand_blackbox_payload_capture`),
+then core at `7f1429c` (`redhand-core-00014-w7j`), then the gateway (`redhand-gateway-00008-q2r`), in that order;
+smoke test 13/13 after each. The M2a purge job (`redhand-purge-events`) ran for the first time at 19:17 UTC and
+succeeded (it deleted nothing: no event was old enough).
+
+- **Capture off (default), real agent runs:** the new gateway and core work together (the required
+  `payload_capture` context field is accepted; no call was denied). Events were recorded within seconds with
+  no payload, no rejections and no raw values in any row, including when the call carried an email and an NRIC
+  as arguments (only the argument names are stored).
+- **Capture on, one run:** turned on through the audited `control_payload_capture` function as the system actor
+  (core's role and confirmation rules were not exercised on staging: they need an admin login, and the dashboard
+  control is M2c; they are covered by unit and end-to-end tests). With `{"repoName": ..., "contact":
+  "<email>", "ic": "<NRIC>"}` the stored argument excerpt was `{"repoName":"facebook/react","contact":
+  "[REDACTED:EMAIL]","ic":"[REDACTED:NRIC]"}`; the allowed call also stored a 539-byte result excerpt, the
+  refused call stored arguments only; stored payloads were 119 to 612 bytes (limit 2 KB text, 16 KB JSON); the
+  raw email and NRIC appeared in no row and in no gateway or core log line (200 and 300 recent lines); every
+  batch was fully accepted; `verify_events` reported the chain intact over 12 events.
+- **The result excerpt redacts values an upstream echoes:** the test server's validation error repeated the
+  real email and the excerpt shows `[REDACTED:EMAIL]`. Checked locally that the gateway forwards the original
+  arguments unchanged, so this is the excerpt, not the request.
+- **Switched back off** through the same function: the audit trail shows true then false, both under the system
+  actor with reasons. Captured payloads remain until the payload retention (7 days) clears them.
+- **Not verified:** core's capture rules on staging (above); behavior under load or on Cloud Run's CPU
+  throttling; the hot-path cost on Cloud Run (measured locally only: ADR 0011 addendum); the dashboard (M2c).
