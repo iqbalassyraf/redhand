@@ -30,6 +30,7 @@ from .context import AgentUnknownError, ContextUnavailableError, CoreContextClie
 from .identity import AgentAuthError, AgentIdentity, AgentTokenVerifier, KeyUnavailableError
 from .budget import BudgetMeter
 from .metrics import GatewayMetrics
+from .capture import build_excerpt
 from .recorder import EventRecorder, GatewayEvent
 from .upstream import DestinationBlockedError, UpstreamError, UpstreamForwarder
 
@@ -247,6 +248,7 @@ class McpGateway:
         body = result.message
         findings: list[str] = []
         result_size_bytes: int | None = None
+        captured_result: Any = None
         if body is not None and "result" in body:
             if method == "tools/list":
                 body = self._filter_tool_list(body, context)
@@ -255,6 +257,7 @@ class McpGateway:
                 if findings:
                     logger.warning("Secrets redacted from tool result", count=len(findings), tool=tool_name)
                 body = {**body, "result": redacted}
+                captured_result = redacted
                 try:
                     result_size_bytes = len(json.dumps(redacted, default=str))
                 except (TypeError, ValueError):
@@ -263,7 +266,7 @@ class McpGateway:
         if method == "tools/call":
             self._record(
                 identity, context, method, message, "ALLOW", [], result.status_code, tool_name, arguments, started,
-                result_size_bytes=result_size_bytes, redaction_count=len(findings),
+                result_size_bytes=result_size_bytes, redaction_count=len(findings), result=captured_result,
             )
         self.metrics.record(method=method_label, outcome="allow", reason="ok", overhead_ms=overhead_ms)
         if body is None:
@@ -329,6 +332,7 @@ class McpGateway:
         *,
         result_size_bytes: int | None = None,
         redaction_count: int = 0,
+        result: Any = None,
     ) -> None:
         record_obj = self.audit.record(
             trace_id=uuid4().hex,
@@ -353,4 +357,21 @@ class McpGateway:
             # Reuse the ledger record's own digest: raw arguments are never stored (CLAUDE.md §10),
             # and the audit logger already computed the name list and the SHA-256 the same way.
             event = replace(event, argument_keys=record_obj.argument_keys, arguments_sha256=record_obj.arguments_sha256)
+            if context.payload_capture:
+                event = self._with_payloads(event, arguments, result)
             self.recorder.record(event)
+
+    def _with_payloads(self, event: GatewayEvent, arguments: dict[str, Any] | None, result: Any) -> GatewayEvent:
+        """Adds redacted, size-capped excerpts of the arguments and the (already secret-scrubbed) result.
+        Only called when the organization turned payload capture on. Never raises into the decision path:
+        a failure only means this event is recorded without a payload, and the failure is counted, not
+        logged with values (CLAUDE.md §5.2)."""
+        try:
+            args_excerpt = build_excerpt(arguments).as_dict() if arguments else None
+            result_excerpt = build_excerpt(result).as_dict() if result is not None else None
+        except Exception as exc:  # noqa: BLE001  capture is a side effect and must not affect enforcement
+            logger.warning("Payload capture failed", error_type=type(exc).__name__)
+            self.metrics.record_payload_capture("failed")
+            return event
+        self.metrics.record_payload_capture("ok")
+        return replace(event, arguments_redacted=args_excerpt, result_excerpt=result_excerpt)

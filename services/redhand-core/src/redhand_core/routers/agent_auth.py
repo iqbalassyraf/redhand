@@ -221,6 +221,8 @@ class GatewayAgentContext(BaseModel):
     scopes: list[Scope]
     expires_at: datetime
     safe_mode: bool
+    # Whether the gateway should build Black Box payload excerpts. Anything but an explicit true is false.
+    payload_capture: bool
     budget: GatewayBudgetContext
 
 
@@ -298,13 +300,14 @@ async def gateway_context(
     # Safe Mode is on when the agent's flag OR the organization's flag is on. Anything that is not
     # an explicit false (a missing row, null, a non-boolean) counts as ON: the restrictive reading.
     org_res = await (
-        supabase.table("organizations").select("safe_mode").eq("id", str(organization_id)).maybe_single().execute()
+        supabase.table("organizations").select("safe_mode, payload_capture_enabled").eq("id", str(organization_id)).maybe_single().execute()
     )
     org_row = org_res.data if org_res else None
     safe_mode = not (
         agent.get("safe_mode") is False and org_row is not None and org_row.get("safe_mode") is False
     )
 
+    payload_capture = org_row is not None and org_row.get("payload_capture_enabled") is True
     offset = budget_rules.normalize_offset(org_row.get("utc_offset_minutes") if org_row else None)
     raw_limit = agent.get("daily_call_limit")
     if raw_limit is None:
@@ -349,6 +352,7 @@ async def gateway_context(
             scopes=scopes,
             expires_at=expires_at,
             safe_mode=safe_mode,
+            payload_capture=payload_capture,
             budget=budget,
         ),
         server=GatewayServerContext(slug=server_row["slug"], url=server_row["url"]) if server_row else None,

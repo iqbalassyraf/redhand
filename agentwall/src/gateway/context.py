@@ -57,6 +57,10 @@ class _AgentPayload(BaseModel):
     # Required, with no default: a core that does not send the flag (an older version) makes the
     # lookup fail and the gateway deny, rather than silently skipping Safe Mode.
     safe_mode: StrictBool
+    # Required, with no default, for the same reason: a core that does not send it (an older version) makes the
+    # lookup fail and the gateway deny, rather than capturing payloads the organization never agreed to, or
+    # silently not capturing ones it did. Deploy core before the gateway.
+    payload_capture: StrictBool
     # Also required with no default, for the same reason: an older core that sends no budget makes the
     # lookup fail and the call is denied rather than running with no limit.
     budget: _BudgetPayload
@@ -87,6 +91,7 @@ class GatewayContext:
     server_url: str | None
     safe_mode: bool
     budget: BudgetState
+    payload_capture: bool
 
     def covers_tool(self, tool: str) -> bool:
         """True when any scope covers the tool, ignoring Safe Mode."""
@@ -197,4 +202,5 @@ class CoreContextClient:
                 day_key=payload.agent.budget.day_key,
                 resets_at=payload.agent.budget.resets_at,
             ),
+            payload_capture=payload.agent.payload_capture,
         )

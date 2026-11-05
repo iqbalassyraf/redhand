@@ -94,13 +94,15 @@ DECLARE
     bot2 uuid := '00000000-0000-0000-0000-0000c0c0000b';  -- belongs to org 2
     r jsonb;
     bad jsonb;
+    mixed_batch uuid := gen_random_uuid();
 BEGIN
     bad := pg_temp.evt(bot1) - 'decision' || jsonb_build_object('decision', 'MAYBE');
-    r := public.record_events('instance-aaaa', gen_random_uuid(), '00000000-0000-0000-0000-0000c0c00008',
+    r := public.record_events('instance-aaaa', mixed_batch, '00000000-0000-0000-0000-0000c0c00008',
         jsonb_build_array(pg_temp.evt(bot2), pg_temp.evt('11111111-1111-1111-1111-111111111111'::uuid), bad, pg_temp.evt(bot1)));
     PERFORM pg_temp.check((r->>'accepted')::int = 1 AND (r->>'rejected')::int = 3,
         'an agent from another org, an unknown agent and an invalid decision are all rejected; the valid item still goes through');
-    PERFORM pg_temp.check((SELECT organization_id FROM public.agent_events WHERE seq = (r->>'last_seq')::bigint) = '00000000-0000-0000-0000-0000c0c00008',
+    -- Looked up by batch: seq is only unique within an organization, so other tests' events can share it.
+    PERFORM pg_temp.check((SELECT organization_id FROM public.agent_events WHERE batch_id = mixed_batch AND seq = (r->>'last_seq')::bigint) = '00000000-0000-0000-0000-0000c0c00008',
         'the accepted event is stored under the correct organization, not whatever the item claimed');
 END $$;
 SELECT pg_temp.expect_error($$SELECT public.record_events('short', gen_random_uuid(), '00000000-0000-0000-0000-0000c0c00008', '[]'::jsonb)$$, '22023', 'a too-short instance id is refused');

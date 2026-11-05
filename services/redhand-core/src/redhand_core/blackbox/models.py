@@ -23,6 +23,21 @@ MAX_REASONS = 10
 MAX_ARGUMENT_KEYS = 50
 
 
+MAX_EXCERPT_CHARS = 2048
+
+
+class PayloadExcerpt(BaseModel):
+    """A redacted, size-capped excerpt of a tool call's arguments or result, built by the gateway (never by
+    a client): compact JSON text, cut to at most 2 KB AFTER redaction. Only stored when the organization
+    turned payload capture on (record_events() decides that, not the gateway)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    text: str = Field(max_length=MAX_EXCERPT_CHARS)
+    truncated: StrictBool
+    original_bytes: int = Field(ge=0, le=100_000_000)
+
+
 class GatewayEventItem(BaseModel):
     """One tool call the gateway allowed, refused or failed to forward. Mirrors
     agentwall.telemetry.audit_logger.AuditRecord, minus raw content."""
@@ -44,6 +59,8 @@ class GatewayEventItem(BaseModel):
     result_size_bytes: int | None = None
     redaction_count: int = 0
     credential_jti: str | None = None
+    arguments_redacted: PayloadExcerpt | None = None
+    result_excerpt: PayloadExcerpt | None = None
 
 
 class EventIngestRequest(BaseModel):
@@ -129,4 +146,18 @@ class BlackBoxRetentionRequest(BaseModel):
         default=False,
         description="Required for any change: a shorter retention deletes events at the next daily purge, "
         "a longer one keeps more data.",
+    )
+
+
+class PayloadCaptureRequest(BaseModel):
+    """Turn payload capture on or off for the organization."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    enabled: StrictBool
+    reason: str | None = Field(default=None, max_length=MAX_REASON_LENGTH)
+    confirm: StrictBool = Field(
+        default=False,
+        description="Required to turn capture ON: from then on redacted excerpts of tool call arguments "
+        "and results are stored. Turning it off needs no confirmation.",
     )

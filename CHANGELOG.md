@@ -22,6 +22,14 @@
   `PUT /v1/blackbox/retention` (admin, confirmation required, audited). New migration
   `20261111000000_blackbox_retention.sql`. Deploy order: migration, then core.
 
+- Black Box payload capture (M2b), opt-in and off by default: an admin can turn on storing a redacted, 2 KB
+  excerpt of each tool call's arguments and result. Redaction covers secrets, email addresses, Malaysian
+  NRIC numbers, card numbers, phone numbers and sensitive field names, and runs before the excerpt is cut. It
+  does not detect names, addresses or free text. Turning it on needs the admin role and confirmation; turning it
+  off needs a security operator. New endpoint `PUT /v1/blackbox/payload-capture`; new migration
+  `20261112000000_blackbox_payload_capture.sql`. **Deploy order: migration, core, then gateway** (the gateway now
+  requires a new `payload_capture` field from core). Payloads are not shown in the dashboard yet.
+
 ### Fixed
 - The Black Box stored no events on Supabase: the event hash helper could not find pgcrypto's `digest()`
   (installed in the `extensions` schema), and the original migration could not be applied on a fresh
