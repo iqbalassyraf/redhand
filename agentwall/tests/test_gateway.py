@@ -199,12 +199,13 @@ class Harness:
 
     def add_agent(
         self, scopes: list[dict[str, str]], status: str = "active", org: UUID = ORG, safe_mode: bool = False,
-        limit: int | None = None, used_by_others: int = 0,
+        limit: int | None = None, used_by_others: int = 0, payload_capture: bool = False,
     ) -> UUID:
         agent_id = uuid4()
         self.core.agents[str(agent_id)] = {
             "id": str(agent_id), "organization_id": str(org), "status": status, "version": 1,
             "scopes": scopes, "expires_at": "2099-01-01T00:00:00+00:00", "safe_mode": safe_mode,
+            "payload_capture": payload_capture,
             "budget": {
                 "daily_call_limit": limit, "used_by_other_instances": used_by_others, "day_key": "2026-11-04",
                 "resets_at": "2026-11-04T16:00:00+00:00", "action": "deny",

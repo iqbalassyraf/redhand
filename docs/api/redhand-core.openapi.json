@@ -1578,6 +1578,39 @@
         "title": "PassportView",
         "type": "object"
       },
+      "PayloadCaptureRequest": {
+        "additionalProperties": false,
+        "description": "Turn payload capture on or off for the organization.",
+        "properties": {
+          "confirm": {
+            "default": false,
+            "description": "Required to turn capture ON: from then on redacted excerpts of tool call arguments and results are stored. Turning it off needs no confirmation.",
+            "title": "Confirm",
+            "type": "boolean"
+          },
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          }
+        },
+        "required": [
+          "enabled"
+        ],
+        "title": "PayloadCaptureRequest",
+        "type": "object"
+      },
       "RenewRequest": {
         "additionalProperties": false,
         "properties": {
@@ -3173,6 +3206,82 @@
           }
         },
         "summary": "Get Events",
+        "tags": [
+          "Black Box Recorder"
+        ]
+      }
+    },
+    "/v1/blackbox/payload-capture": {
+      "put": {
+        "description": "Payload capture stores redacted excerpts of tool call arguments and results. Turning it ON needs the\nadmin role and \"confirm\": true; turning it OFF needs the security operator role. Off by default.",
+        "operationId": "set_payload_capture_v1_blackbox_payload_capture_put",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-RedHand-Org",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Redhand-Org"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PayloadCaptureRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BlackBoxSettingsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Set Payload Capture",
         "tags": [
           "Black Box Recorder"
         ]

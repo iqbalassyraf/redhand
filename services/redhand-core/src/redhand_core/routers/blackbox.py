@@ -5,6 +5,7 @@ GET /v1/blackbox/events    the organization's timeline, newest first, paginated 
 GET /v1/blackbox/verify    recomputes a seq range's hash chain and reports the first mismatch, if any
 GET /v1/blackbox/settings  retention periods and whether payload capture is on
 PUT /v1/blackbox/retention changes the retention periods (admin, with confirmation, audited)
+PUT /v1/blackbox/payload-capture turns payload capture on (admin, confirmation) or off (security operator)
 
 Every read is scoped to the caller's organization (never a client-supplied tenant id).
 """
@@ -16,12 +17,13 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query
 
-from redhand_core.auth.operator import AdminDep, ViewerDep
+from redhand_core.auth.operator import AdminDep, SecurityOperatorDep, ViewerDep
 from redhand_core.blackbox import service as blackbox_service
 from redhand_core.blackbox.models import (
     BlackBoxRetentionRequest,
     BlackBoxSettingsResponse,
     BlackBoxTimelineResponse,
+    PayloadCaptureRequest,
     VerifyResponse,
 )
 from redhand_core.routers.telemetry import get_supabase_service_client
@@ -65,3 +67,12 @@ async def set_retention(
     """How long events and captured payloads are kept. A shorter retention deletes events at the next daily
     purge and cannot be undone, so every change needs "confirm": true."""
     return await blackbox_service.set_retention(supabase, operator, payload)
+
+
+@router.put("/v1/blackbox/payload-capture", response_model=BlackBoxSettingsResponse)
+async def set_payload_capture(
+    payload: PayloadCaptureRequest, operator: SecurityOperatorDep, supabase: SupabaseDep
+) -> BlackBoxSettingsResponse:
+    """Payload capture stores redacted excerpts of tool call arguments and results. Turning it ON needs the
+    admin role and "confirm": true; turning it OFF needs the security operator role. Off by default."""
+    return await blackbox_service.set_payload_capture(supabase, operator, payload)

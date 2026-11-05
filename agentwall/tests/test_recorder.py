@@ -264,3 +264,146 @@ async def test_recorder_outage_never_blocks_enforcement() -> None:
     assert resp.status_code == 200  # the call still went through
     await h.recorder.flush()
     assert h.recorder.buffered_count == 1  # the event is still waiting, not lost silently or crashed
+
+
+# ---------------------------------------------------------------------------
+# Payload capture through the gateway (Phase 3 M2b)
+# ---------------------------------------------------------------------------
+
+EMAIL = "ali.bin.abu@example.com.my"
+LEAKY = [{"server": "xero", "tool": "leaky", "access": "read"}]
+
+
+async def _flushed(h: Harness) -> list[dict[str, object]]:
+    await h.recorder.flush()
+    return h.event_reporter.events
+
+
+@pytest.mark.asyncio
+async def test_no_payload_is_built_while_capture_is_off() -> None:
+    h = Harness()
+    agent = h.add_agent(INVOICES_READ)  # payload_capture defaults to False
+    await h.call(h.token(agent), params=tool("list_invoices", contact=EMAIL))
+    (item,) = await _flushed(h)
+    assert item["arguments_redacted"] is None and item["result_excerpt"] is None
+    assert EMAIL not in str(item)
+
+
+@pytest.mark.asyncio
+async def test_an_allowed_call_carries_redacted_argument_and_result_excerpts_when_capture_is_on() -> None:
+    h = Harness()
+    agent = h.add_agent(INVOICES_READ, payload_capture=True)
+    await h.call(h.token(agent), params=tool("list_invoices", contact=EMAIL, invoice_id="INV-1"))
+    (item,) = await _flushed(h)
+    args = item["arguments_redacted"]
+    assert isinstance(args, dict) and set(args) == {"text", "truncated", "original_bytes"}
+    assert "INV-1" in args["text"]  # ordinary values are kept
+    assert EMAIL not in str(item) and "[REDACTED:EMAIL]" in args["text"]  # PII is not
+    result = item["result_excerpt"]
+    assert isinstance(result, dict) and set(result) == {"text", "truncated", "original_bytes"} and result["text"]
+
+
+@pytest.mark.asyncio
+async def test_a_refused_call_keeps_a_redacted_argument_excerpt_and_no_result() -> None:
+    h = Harness()
+    agent = h.add_agent(INVOICES_READ, payload_capture=True)
+    await h.call(h.token(agent), params=tool("delete_invoice", invoice_id="INV-9", contact=EMAIL))
+    (item,) = await _flushed(h)
+    assert item["decision"] == "BLOCK"
+    assert isinstance(item["arguments_redacted"], dict) and "INV-9" in item["arguments_redacted"]["text"]  # type: ignore[index]
+    assert EMAIL not in str(item)
+    assert item["result_excerpt"] is None
+
+
+@pytest.mark.asyncio
+async def test_secrets_in_a_result_never_reach_the_stored_excerpt() -> None:
+    h = Harness()
+    agent = h.add_agent(LEAKY, payload_capture=True)
+    await h.call(h.token(agent), params=tool("leaky"))
+    (item,) = await _flushed(h)
+    assert "AKIAIOSFODNN7EXAMPLE" not in str(item)
+    assert item["result_excerpt"] is not None
+
+
+@pytest.mark.asyncio
+async def test_a_call_without_arguments_has_no_argument_excerpt() -> None:
+    h = Harness()
+    agent = h.add_agent(INVOICES_READ, payload_capture=True)
+    await h.call(h.token(agent), params=tool("list_invoices"))
+    (item,) = await _flushed(h)
+    assert item["arguments_redacted"] is None and item["result_excerpt"] is not None
+
+
+@pytest.mark.asyncio
+async def test_non_tool_calls_never_carry_payloads() -> None:
+    h = Harness()
+    agent = h.add_agent(INVOICES_READ, payload_capture=True)
+    await h.call(h.token(agent), method="tools/list", params={})
+    assert await _flushed(h) == []  # only tools/call is recorded at all
+
+
+@pytest.mark.asyncio
+async def test_a_capture_failure_never_changes_the_decision_and_is_counted(monkeypatch: pytest.MonkeyPatch) -> None:
+    from agentwall.src.gateway import service
+
+    def boom(_value: object) -> object:
+        raise RuntimeError(f"boom with {EMAIL}")
+
+    monkeypatch.setattr(service, "build_excerpt", boom)
+    h = Harness()
+    agent = h.add_agent(INVOICES_READ, payload_capture=True)
+    resp = await h.call(h.token(agent), params=tool("list_invoices", contact=EMAIL))
+    assert resp.status_code == 200 and h.upstream.received  # still allowed and forwarded
+    (item,) = await _flushed(h)
+    assert item["decision"] == "ALLOW" and item["arguments_redacted"] is None  # recorded, without a payload
+    assert 'redhand_gateway_payload_captures_total{outcome="failed"} 1' in h.gateway.metrics.render()
+
+
+@pytest.mark.asyncio
+async def test_successful_captures_are_counted() -> None:
+    h = Harness()
+    agent = h.add_agent(INVOICES_READ, payload_capture=True)
+    await h.call(h.token(agent), params=tool("list_invoices", invoice_id="INV-1"))
+    assert 'redhand_gateway_payload_captures_total{outcome="ok"} 1' in h.gateway.metrics.render()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("bad", ["missing", "true", 1, None, "yes"])
+async def test_a_missing_or_malformed_capture_flag_denies_the_call(bad: object) -> None:
+    """Same rule as safe_mode and budget: a context core did not fully state is not trusted, so an older core
+    that sends no flag makes the gateway deny rather than guess whether capture is on."""
+    h = Harness()
+    agent = h.add_agent(INVOICES_READ)
+    if bad == "missing":
+        del h.core.agents[str(agent)]["payload_capture"]
+    else:
+        h.core.agents[str(agent)]["payload_capture"] = bad
+    resp = await h.call(h.token(agent), params=tool("list_invoices", contact=EMAIL))
+    assert resp.status_code == 503 and h.upstream.received == []
+
+
+@pytest.mark.asyncio
+async def test_payload_values_never_appear_in_gateway_logs() -> None:
+    from structlog.testing import capture_logs
+
+    h = Harness()
+    agent = h.add_agent(LEAKY, payload_capture=True)
+    with capture_logs() as logs:
+        await h.call(h.token(agent), params=tool("leaky", contact=EMAIL))
+        await h.call(h.token(agent), params=tool("not_in_scope", contact=EMAIL))
+    assert EMAIL not in str(logs) and "AKIAIOSFODNN7EXAMPLE" not in str(logs)
+
+
+@pytest.mark.asyncio
+async def test_captured_payloads_stay_within_core_limits() -> None:
+    h = Harness()
+    agent = h.add_agent(INVOICES_READ, payload_capture=True)
+    # Many moderate fields (a single string over the 16 KB scan budget becomes a marker instead, see test_capture).
+    fields = {f"field_{i}": "y" * 400 for i in range(20)}
+    await h.call(h.token(agent), params=tool("list_invoices", contact=EMAIL, **fields))
+    (item,) = await _flushed(h)
+    for key in ("arguments_redacted", "result_excerpt"):
+        payload = item[key]
+        assert isinstance(payload, dict)
+        assert len(payload["text"]) <= 2048 and isinstance(payload["truncated"], bool)  # type: ignore[index]
+    assert item["arguments_redacted"]["truncated"] is True  # type: ignore[index]

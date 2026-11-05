@@ -14,12 +14,13 @@ from uuid import UUID
 from fastapi import HTTPException, status
 from postgrest.exceptions import APIError
 
-from redhand_core.auth.operator import OperatorContext
+from redhand_core.auth.operator import OperatorContext, Role
 from redhand_core.blackbox.models import (
     BlackBoxEventView,
     BlackBoxRetentionRequest,
     BlackBoxSettingsResponse,
     GatewayEventItem,
+    PayloadCaptureRequest,
     VerifyResponse,
 )
 # The control-action helpers are shared with the passport control actions so every control endpoint maps
@@ -60,6 +61,8 @@ async def ingest_events(
             "result_size_bytes": item.result_size_bytes,
             "redaction_count": item.redaction_count,
             "credential_jti": item.credential_jti,
+            "arguments_redacted": item.arguments_redacted.model_dump() if item.arguments_redacted else None,
+            "result_excerpt": item.result_excerpt.model_dump() if item.result_excerpt else None,
         }
         for item in items
     ]
@@ -202,5 +205,44 @@ async def set_retention(
         retention_days=request.retention_days,
         payload_retention_days=request.payload_retention_days,
         payload_capture_enabled=current.payload_capture_enabled,
+        changed=bool(data["changed"]),
+    )
+
+
+@retry_once_on_conflict
+async def set_payload_capture(
+    supabase: Any, operator: OperatorContext, request: PayloadCaptureRequest
+) -> BlackBoxSettingsResponse:
+    """
+    Turns payload capture on or off. ON is the data-collecting direction, so it needs the admin role and
+    explicit confirmation; OFF is the protective direction, so a security operator may do it without
+    confirmation (the same split as Safe Mode). Turning capture off does not delete what was captured: that
+    is cleared at the payload retention (or sooner by shortening it).
+    """
+    needed = Role.ADMIN if request.enabled else Role.SECURITY_OPERATOR
+    if operator.role < needed:
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN, f"This action requires the '{needed.name.lower()}' role or higher."
+        )
+    current = await get_settings(supabase, operator.organization_id)
+    if request.enabled and not current.payload_capture_enabled:
+        _require_confirmation(request.confirm, "Turning on payload capture")
+    data = await _rpc(
+        supabase,
+        "control_payload_capture",
+        {
+            "p_org": str(operator.organization_id), "p_actor": str(operator.user_id),
+            "p_enabled": request.enabled, "p_reason": request.reason,
+            "p_expected": current.payload_capture_enabled,  # compare-and-set against what the decision used
+        },
+        not_found_detail="Organization not found.",
+        conflict_detail="Payload capture conflicted with another change; try again.",
+    )
+    if isinstance(data, dict) and data.get("conflict"):
+        raise StateConflictError
+    return BlackBoxSettingsResponse(
+        retention_days=current.retention_days,
+        payload_retention_days=current.payload_retention_days,
+        payload_capture_enabled=request.enabled,
         changed=bool(data["changed"]),
     )

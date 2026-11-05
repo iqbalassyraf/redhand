@@ -21,6 +21,7 @@ class GatewayMetrics:
         self._events_buffered = 0
         self._events_dropped_total = 0
         self._events_rejected_total = 0
+        self._payload_captures: Counter[str] = Counter()
 
     def record_budget_flush(self, outcome: str, unreported_keys: int) -> None:
         with self._lock:
@@ -35,6 +36,10 @@ class GatewayMetrics:
     def record_event_dropped(self, count: int = 1) -> None:
         with self._lock:
             self._events_dropped_total += count
+
+    def record_payload_capture(self, outcome: str) -> None:
+        with self._lock:
+            self._payload_captures[outcome] += 1
 
     def record_events_rejected(self, count: int) -> None:
         with self._lock:
@@ -86,7 +91,11 @@ class GatewayMetrics:
                 "# HELP redhand_gateway_events_rejected_total Events core acknowledged but refused to store.",
                 "# TYPE redhand_gateway_events_rejected_total counter",
                 f"redhand_gateway_events_rejected_total {self._events_rejected_total}",
+                "# HELP redhand_gateway_payload_captures_total Black Box payload excerpts built, by outcome.",
+                "# TYPE redhand_gateway_payload_captures_total counter",
             ]
+            for outcome, count in sorted(self._payload_captures.items()):
+                lines.append(f'redhand_gateway_payload_captures_total{{outcome="{outcome}"}} {count}')
             lines += [
                 "# HELP redhand_gateway_overhead_ms Gateway-added latency, excluding upstream time.",
                 "# TYPE redhand_gateway_overhead_ms histogram",

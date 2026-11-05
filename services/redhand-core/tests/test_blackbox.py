@@ -324,3 +324,150 @@ def test_retention_changes_stay_within_the_callers_organization() -> None:
     assert resp.status_code == 200
     assert env.client.get("/v1/blackbox/settings", headers=env.h_other_org()).json()["retention_days"] == 7
     assert env.client.get("/v1/blackbox/settings", headers=env.h()).json()["retention_days"] == 30
+
+
+# ---------------------------------------------------------------------------
+# Payload capture (Phase 3 M2b)
+# ---------------------------------------------------------------------------
+
+
+def _excerpt(text: str = "{\"path\":\"/tmp/a\"}", truncated: bool = False) -> dict[str, Any]:
+    return {"text": text, "truncated": truncated, "original_bytes": len(text.encode())}
+
+
+def _capture(env: Env, user: str = "admin", **body: Any) -> Any:
+    return env.client.put("/v1/blackbox/payload-capture", json=body, headers=env.h(user))
+
+
+def _capture_audit(env: Env) -> list[dict[str, Any]]:
+    return [r for r in env.store.tables.get("control_audit_log", []) if r["action"] == "organization.payload_capture_changed"]
+
+
+def _stored(env: Env, seq: int = 1) -> dict[str, Any]:
+    return next(
+        e for e in env.store.tables["agent_events"] if e["organization_id"] == DEFAULT_ORG_ID and e["seq"] == seq
+    )
+
+
+def test_payloads_are_dropped_while_capture_is_off() -> None:
+    env = Env()
+    resp = env.ingest([_event(FINOPS_AGENT_ID, arguments_redacted=_excerpt(), result_excerpt=_excerpt("ok"))])
+    assert resp.json() == {"accepted": 1, "rejected": 0}  # the event is kept, the payload is not
+    stored = _stored(env)
+    assert stored["arguments_redacted"] is None and stored["result_excerpt"] is None
+
+
+def test_payloads_are_stored_once_capture_is_on() -> None:
+    env = Env()
+    assert _capture(env, enabled=True, confirm=True).status_code == 200
+    env.ingest([_event(FINOPS_AGENT_ID, arguments_redacted=_excerpt(), result_excerpt=_excerpt("ok"))])
+    stored = _stored(env)
+    assert stored["arguments_redacted"]["text"] == "{\"path\":\"/tmp/a\"}"
+    assert stored["result_excerpt"] == _excerpt("ok")
+    assert env.verify(1, 1).json()["ok"] is True  # the hash does not cover the payload
+
+
+def test_the_timeline_never_returns_payloads() -> None:
+    env = Env()
+    _capture(env, enabled=True, confirm=True)
+    env.ingest([_event(FINOPS_AGENT_ID, arguments_redacted=_excerpt("distinctive-payload-text"))])
+    body = env.timeline().text
+    assert "distinctive-payload-text" not in body and "arguments_redacted" not in body
+
+
+def test_malformed_payloads_are_rejected_at_the_schema_boundary() -> None:
+    env = Env()
+    _capture(env, enabled=True, confirm=True)
+    for bad in (
+        {"text": "x" * 2049, "truncated": False, "original_bytes": 2049},
+        {"text": "x", "truncated": "no", "original_bytes": 1},
+        {"text": "x", "truncated": False, "original_bytes": -1},
+        {"text": "x", "truncated": False, "original_bytes": 1, "extra": 1},
+        {"truncated": False, "original_bytes": 1},
+        "just a string",
+    ):
+        resp = env.ingest([_event(FINOPS_AGENT_ID, arguments_redacted=bad)])
+        assert resp.status_code == 422, bad
+    assert env.store.tables.get("agent_events", []) == []
+
+
+def test_admin_turns_capture_on_with_confirmation_and_it_is_audited() -> None:
+    env = Env()
+    resp = _capture(env, enabled=True, confirm=True, reason="debugging an agent")
+    assert resp.status_code == 200
+    assert resp.json()["payload_capture_enabled"] is True and resp.json()["changed"] is True
+    assert env.client.get("/v1/blackbox/settings", headers=env.h()).json()["payload_capture_enabled"] is True
+    (audit,) = _capture_audit(env)
+    assert audit["actor_user_id"] == "00000000-0000-0000-0000-0000000000a2"
+    assert audit["details"] == {"old_enabled": False, "new_enabled": True}
+
+
+def test_turning_capture_on_without_confirmation_is_refused() -> None:
+    env = Env()
+    resp = _capture(env, enabled=True)
+    assert resp.status_code == 400 and "confirm" in resp.json()["detail"]
+    assert env.client.get("/v1/blackbox/settings", headers=env.h()).json()["payload_capture_enabled"] is False
+    assert _capture_audit(env) == []
+
+
+def test_only_admins_can_turn_capture_on() -> None:
+    env = Env()
+    for user in ("viewer", "operator"):
+        assert _capture(env, user=user, enabled=True, confirm=True).status_code == 403, user
+    assert _capture_audit(env) == []
+
+
+def test_a_security_operator_can_turn_capture_off_without_confirmation() -> None:
+    env = Env()
+    _capture(env, enabled=True, confirm=True)
+    resp = _capture(env, user="operator", enabled=False)
+    assert resp.status_code == 200 and resp.json()["payload_capture_enabled"] is False
+    assert _capture(env, user="viewer", enabled=False).status_code == 403
+    assert [a["details"]["new_enabled"] for a in _capture_audit(env)] == [False, True]  # newest first
+
+
+def test_repeating_the_current_setting_changes_nothing() -> None:
+    env = Env()
+    resp = _capture(env, enabled=False)
+    assert resp.status_code == 200 and resp.json()["changed"] is False
+    _capture(env, enabled=True, confirm=True)
+    again = _capture(env, enabled=True)  # already on: no confirmation needed for a no-op
+    assert again.status_code == 200 and again.json()["changed"] is False
+    assert len(_capture_audit(env)) == 1
+
+
+def test_capture_settings_are_per_organization() -> None:
+    env = Env()
+    _capture(env, enabled=True, confirm=True)
+    assert env.client.get("/v1/blackbox/settings", headers=env.h_other_org()).json()["payload_capture_enabled"] is False
+    other = env.client.put(
+        "/v1/blackbox/payload-capture", json={"enabled": True, "confirm": True}, headers=env.h_other_org()
+    )
+    assert other.status_code == 200
+    assert len(_capture_audit(env)) == 2
+
+
+def test_payload_capture_rejects_unknown_fields_and_non_booleans() -> None:
+    env = Env()
+    assert _capture(env, enabled="yes", confirm=True).status_code == 422
+    assert _capture(env, enabled=True, confirm=True, retention_days=7).status_code == 422
+    assert _capture(env).status_code == 422
+
+
+def test_the_gateway_context_says_whether_to_capture() -> None:
+    env = Env()
+    headers = {"Authorization": f"Bearer {SERVICE_TOKEN}"}
+    params = {"agent_id": FINOPS_AGENT_ID, "organization_id": DEFAULT_ORG_ID, "server": "xero", "instance_id": INSTANCE}
+    assert env.client.get("/internal/v1/gateway-context", params=params, headers=headers).json()["agent"]["payload_capture"] is False
+    _capture(env, enabled=True, confirm=True)
+    assert env.client.get("/internal/v1/gateway-context", params=params, headers=headers).json()["agent"]["payload_capture"] is True
+
+
+def test_anything_but_an_explicit_true_means_no_capture_in_the_context() -> None:
+    env = Env()
+    headers = {"Authorization": f"Bearer {SERVICE_TOKEN}"}
+    params = {"agent_id": FINOPS_AGENT_ID, "organization_id": DEFAULT_ORG_ID, "server": "xero", "instance_id": INSTANCE}
+    org = next(o for o in env.store.tables["organizations"] if o["id"] == DEFAULT_ORG_ID)
+    for odd in ("true", 1, None, "yes"):
+        org["payload_capture_enabled"] = odd
+        assert env.client.get("/internal/v1/gateway-context", params=params, headers=headers).json()["agent"]["payload_capture"] is False, odd

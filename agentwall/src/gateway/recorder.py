@@ -60,6 +60,10 @@ class GatewayEvent:
     result_size_bytes: int | None = None
     redaction_count: int = 0
     credential_jti: str | None = None
+    # Redacted, size-capped excerpts (agentwall/src/gateway/capture.py); None unless the organization turned
+    # payload capture on. Core stores them only if its own flag is on too.
+    arguments_redacted: dict[str, Any] | None = None
+    result_excerpt: dict[str, Any] | None = None
 
     def as_item(self) -> dict[str, Any]:
         return {
@@ -69,6 +73,7 @@ class GatewayEvent:
             "latency_ms": self.latency_ms, "argument_keys": self.argument_keys,
             "arguments_sha256": self.arguments_sha256, "result_size_bytes": self.result_size_bytes,
             "redaction_count": self.redaction_count, "credential_jti": self.credential_jti,
+            "arguments_redacted": self.arguments_redacted, "result_excerpt": self.result_excerpt,
         }
 
 

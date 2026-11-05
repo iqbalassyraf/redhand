@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import copy
 import hashlib
+import json
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation
 from typing import Any, Callable
@@ -498,6 +499,31 @@ def _event_hash(
     return hashlib.sha256("\x1f".join(parts).encode("utf-8")).hexdigest()
 
 
+def _usable_payload(value: Any) -> bool:
+    """Mirrors record_events(): a payload must be a JSON object of at most 16 KB, else it is dropped."""
+    return isinstance(value, dict) and len(json.dumps(value)) <= 16384
+
+
+def _control_payload_capture(store: LocalSupabaseAdapter, p: dict[str, Any]) -> dict[str, Any]:
+    org, actor, enabled = str(p["p_org"]), str(p["p_actor"]), p["p_enabled"]
+    if not isinstance(enabled, bool):
+        raise _error("22023", "enabled must be true or false")
+    row = next((o for o in store.tables.get("organizations", []) if str(o.get("id")) == org), None)
+    if row is None:
+        raise _error("P0002", "organization not found")
+    old = row.get("payload_capture_enabled", False)
+    if old != p.get("p_expected"):
+        return {"conflict": True}
+    if old == enabled:
+        return {"changed": False, "payload_capture_enabled": enabled}
+    row["payload_capture_enabled"] = enabled
+    _append_audit(
+        store, org=org, actor=actor, action="organization.payload_capture_changed", target_type="organization",
+        target_id=org, reason=p.get("p_reason"), details={"old_enabled": old, "new_enabled": enabled},
+    )
+    return {"changed": True, "payload_capture_enabled": enabled}
+
+
 def _record_events(store: LocalSupabaseAdapter, p: dict[str, Any]) -> dict[str, Any]:
     instance, batch_id, org, items = str(p["p_instance"]), str(p["p_batch_id"]), str(p["p_org"]), p["p_items"]
     if not 8 <= len(instance) <= 64:
@@ -523,6 +549,8 @@ def _record_events(store: LocalSupabaseAdapter, p: dict[str, Any]) -> dict[str, 
         heads.append(head)
 
     events = store.tables.setdefault("agent_events", [])
+    org_row = next((o for o in store.tables.get("organizations", []) if str(o.get("id")) == org), None)
+    capture = org_row is not None and org_row.get("payload_capture_enabled") is True  # off unless explicitly on
     seq, prev = head["last_seq"], head["last_hash"]
     accepted = rejected = 0
     first_seq: int | None = None
@@ -550,6 +578,10 @@ def _record_events(store: LocalSupabaseAdapter, p: dict[str, Any]) -> dict[str, 
         upstream_status, latency_ms = item.get("upstream_status"), item.get("latency_ms")
         arguments_sha256, result_size = item.get("arguments_sha256") or "", item.get("result_size_bytes")
         redaction_count, credential_jti = int(item.get("redaction_count") or 0), item.get("credential_jti")
+        payloads = {
+            key: (item.get(key) if capture and _usable_payload(item.get(key)) else None)
+            for key in ("arguments_redacted", "result_excerpt")
+        }
         seq += 1
         h = _event_hash(
             prev, org, agent_id, seq, occurred_at, gateway_instance, server, method, tool_name, decision,
@@ -563,7 +595,7 @@ def _record_events(store: LocalSupabaseAdapter, p: dict[str, Any]) -> dict[str, 
             "upstream_status": upstream_status, "latency_ms": latency_ms, "argument_keys": argument_keys,
             "arguments_sha256": arguments_sha256, "result_size_bytes": result_size,
             "redaction_count": redaction_count, "credential_jti": credential_jti,
-            "prev_hash": prev, "hash": h, "batch_id": batch_id,
+            **payloads, "prev_hash": prev, "hash": h, "batch_id": batch_id,
         })
         prev = h
         accepted += 1
@@ -692,6 +724,7 @@ HANDLERS: dict[str, RpcHandler] = {
     "control_agent_budget": _control_agent_budget,
     "control_org_budget_default": _control_org_budget_default,
     "control_blackbox_retention": _control_blackbox_retention,
+    "control_payload_capture": _control_payload_capture,
     "record_usage": _record_usage,
     "mark_budget_frozen": _mark_budget_frozen,
     "usage_by_others": _usage_by_others,

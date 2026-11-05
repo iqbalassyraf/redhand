@@ -98,3 +98,46 @@ tamper-evident record.
   all of this.
 - **Retention settings:** `PUT /v1/blackbox/retention` (admin, `confirm: true` for any change, compare-and-set,
   audited as `organization.blackbox_retention_changed`); events 7–90 days, payloads 1–30 days.
+
+## Addendum (2026-11-05): payload capture (Phase 3 M2b)
+- **What is stored, and when:** only for organizations that turned capture on (off by default). Per recorded
+  tool call: a redacted excerpt of the arguments and, for allowed calls, of the result, each as compact JSON
+  text cut to 2 KB with a `truncated` flag and the original size. Refused calls keep an argument excerpt (what
+  was refused is the useful part) and no result.
+- **Redact first, truncate second:** the whole value is scanned, then the redacted text is cut. Cutting first
+  could slice a secret in half so no pattern matched and half of it was stored (tested at every offset around
+  the cut). The gateway is the only redaction point: the raw payload never leaves it. Core validates shape and
+  size and does **not** re-scrub, so a compromised gateway could send unredacted text (see follow-ups).
+- **Decision D2 (personal data):** redaction covers secrets (API keys, tokens, JWTs, PEM keys), email
+  addresses, Malaysian NRIC (MyKad) numbers (date-checked), card numbers (Luhn-checked), phone numbers, and
+  blanks the value of any field whose NAME looks sensitive (password, token, secret, authorization, cookie,
+  nric, ...). It is pattern based and best effort. It does not find names, addresses, free text, or a number
+  split across fields, so capture still stores customer data.
+- **Never store unscanned text:** the scan budget is 16 KiB of text, 1,000 values and depth 16; anything past
+  it, and any non-JSON type, is replaced by a `[NOT_CAPTURED:...]` marker. A single string over 16 KiB is
+  therefore not captured at all (no prefix is kept: cutting a string we cannot scan whole risks splitting a
+  secret at the window's edge). The budget is small on purpose: only 2 KB is ever stored, and capture runs on
+  the request path.
+- **Measured cost (capture on, local, one capture):** small call 0.02 ms, typical 2 KB result 0.35 ms p50,
+  60 KB mixed payload 2.9 ms p50 / 7 ms p99, 1,000 tiny values 0.6 ms p50. A first version with a 64 KiB budget
+  took 15 ms p50 on the 60 KB payload (over the 10 ms budget in CLAUDE.md section 8) and was reworked. Arguments
+  and result are scanned separately, so the worst case is about twice one capture. With capture off the cost is
+  one boolean check.
+- **The database enforces the setting too:** `record_events()` stores the payload columns only when the
+  organization's flag is on, and drops (never rejects) a payload that is not a JSON object or is over 16 KB,
+  keeping the event. Anything but an explicit true counts as off, in core's context and in SQL.
+- **Context field:** core sends `payload_capture` in the gateway context; the gateway requires it (no default)
+  and denies the call if it is missing or not a boolean, like `safe_mode` and `budget`. **Deploy core before the
+  gateway**, or every call is denied until core is deployed.
+- **Control action:** turning capture ON needs the admin role and `"confirm": true` (data starts being
+  collected); turning it OFF needs the security operator role and no confirmation (the same split as Safe Mode:
+  stopping is easy, starting needs care). Both are compare-and-set and audited
+  (`organization.payload_capture_changed`). Turning capture off does not delete what was captured; it is
+  cleared at the payload retention (default 7 days, 1-30), or sooner by shortening it.
+- **Alternatives rejected:** redacting in core (the raw payload would cross the network and sit in the
+  gateway's buffer first); a prefix window for oversized strings (edge-of-window leaks); a thread for the
+  scan (the GIL makes it no faster and adds a hand-off).
+- **Limits:** payloads are not yet shown in the dashboard (M2c adds viewing and export); the timeline API never
+  returns them. The recorder buffer holds payloads in memory until flushed: at most 10,000 events of up to
+  about 4 KB, so roughly 40 MB worst case on a 512 MiB instance.
+
