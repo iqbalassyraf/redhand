@@ -320,31 +320,6 @@ at `7816e96` (`redhand-core-00013-9r8`); smoke test 13/13. The gateway was not r
   a real unattended purge run, and purge timing on a large table.
 
 
-## 10. Risks and open questions
-
-- **Cloud Run CPU throttling** can delay background flushes between requests. Mitigation: flush is
-  also started from request handling when the oldest buffered event is older than 2 s, and trips
-  flush urgently. Measured on staging in M1.
-- **Clock skew** between instances: the timeline orders by `seq` (store order) and shows the gateway
-  time; skew shows up as out-of-order timestamps, not lost events.
-- **Volume per tenant:** a looping agent can produce many events; Budget Guard caps it, and a per-org
-  ingest cap (default 200,000 events/day, then sampled gap markers) protects the database. To confirm.
-- **False alarms from honey tools** (honest agents calling tempting tools): default action `alert`.
-- **Payload capture and PDPA:** storing customer payloads, even redacted, needs the customer's own
-  lawful basis; the toggle copy says so. Flag for human/legal review; no compliance claims.
-
-## 11. Decisions for you
-
-| | Decision | My recommendation |
-|---|---|---|
-| D1 | Default event retention | 30 days, configurable 7–90 |
-| D2 | Ship payload capture in Phase 3 | Yes, opt-in per organization, redacted, 2 KB caps, 7-day retention |
-| D3 | Honeytoken default actions | Freeze on use in arguments; alert on appearance in results; alert for honey tools |
-| D4 | External anchoring of the chain head (daily hash to owner by Telegram, or to a bucket) | Later (Phase 5 "Prove it" fits better) |
-| D5 | Canary URLs that detect use *outside* RedHand (public endpoint) | Not in Phase 3; revisit with customers |
-| D6 | Include honey tools | Yes, small and high value |
-| D7 | Per-organization ingest cap of 200,000 events/day | Yes |
-
 ### 9.3 M2b staging verification (2026-11-05)
 
 Migration `20261112000000_blackbox_payload_capture.sql` applied to staging (as `redhand_blackbox_payload_capture`),
@@ -371,3 +346,28 @@ succeeded (it deleted nothing: no event was old enough).
   actor with reasons. Captured payloads remain until the payload retention (7 days) clears them.
 - **Not verified:** core's capture rules on staging (above); behavior under load or on Cloud Run's CPU
   throttling; the hot-path cost on Cloud Run (measured locally only: ADR 0011 addendum); the dashboard (M2c).
+
+## 10. Risks and open questions
+
+- **Cloud Run CPU throttling** can delay background flushes between requests. Mitigation: flush is
+  also started from request handling when the oldest buffered event is older than 2 s, and trips
+  flush urgently. Measured on staging in M1.
+- **Clock skew** between instances: the timeline orders by `seq` (store order) and shows the gateway
+  time; skew shows up as out-of-order timestamps, not lost events.
+- **Volume per tenant:** a looping agent can produce many events; Budget Guard caps it, and a per-org
+  ingest cap (default 200,000 events/day, then sampled gap markers) protects the database. To confirm.
+- **False alarms from honey tools** (honest agents calling tempting tools): default action `alert`.
+- **Payload capture and PDPA:** storing customer payloads, even redacted, needs the customer's own
+  lawful basis; the toggle copy says so. Flag for human/legal review; no compliance claims.
+
+## 11. Decisions for you
+
+| | Decision | My recommendation |
+|---|---|---|
+| D1 | Default event retention | 30 days, configurable 7–90 |
+| D2 | Ship payload capture in Phase 3 | Yes, opt-in per organization, redacted, 2 KB caps, 7-day retention |
+| D3 | Honeytoken default actions | Freeze on use in arguments; alert on appearance in results; alert for honey tools |
+| D4 | External anchoring of the chain head (daily hash to owner by Telegram, or to a bucket) | Later (Phase 5 "Prove it" fits better) |
+| D5 | Canary URLs that detect use *outside* RedHand (public endpoint) | Not in Phase 3; revisit with customers |
+| D6 | Include honey tools | Yes, small and high value |
+| D7 | Per-organization ingest cap of 200,000 events/day | Yes |
