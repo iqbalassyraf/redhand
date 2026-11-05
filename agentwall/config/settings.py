@@ -89,6 +89,18 @@ class Settings(BaseSettings):
         default=100_000, ge=100, le=10_000_000,
         description="Most (agent, day) counters held in memory. A limited agent that cannot be tracked is refused.",
     )
+    RECORDER_FLUSH_INTERVAL_SECONDS: float = Field(
+        default=2.0, ge=0.5, le=30.0,
+        description="How often buffered Black Box events are reported to core (Phase 3 M1).",
+    )
+    RECORDER_MAX_BUFFERED_EVENTS: int = Field(
+        default=10_000, ge=100, le=1_000_000,
+        description="Most events held in memory before new ones are dropped (and counted) instead of blocking calls.",
+    )
+    RECORDER_MAX_BATCH_SIZE: int = Field(
+        default=500, ge=1, le=500,
+        description="Most events sent to core in one report call. Must not exceed core's own per-batch limit.",
+    )
     ALLOW_INSECURE_UPSTREAMS: bool = Field(
         default=False,
         description="Development only: allow http:// and private-network MCP server URLs.",

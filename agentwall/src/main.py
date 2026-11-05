@@ -30,6 +30,7 @@ from .gateway.budget import BudgetMeter, HttpUsageReporter
 from .gateway.context import CoreContextClient
 from .gateway.identity import AgentTokenVerifier
 from .gateway.metrics import GatewayMetrics
+from .gateway.recorder import EventRecorder, HttpEventReporter
 from .gateway.service import McpGateway
 from .gateway.upstream import UpstreamForwarder
 from .telemetry.audit_logger import TamperEvidentAuditLogger
@@ -72,6 +73,14 @@ def build_gateway(settings: Settings, firewall: FirewallPolicyEngine, audit: Tam
             max_keys=settings.BUDGET_MAX_TRACKED_KEYS,
             metrics=metrics,
         ),
+        recorder=EventRecorder(
+            instance_id=instance_id,
+            reporter=HttpEventReporter(core_url=core, service_token=token),
+            flush_interval=settings.RECORDER_FLUSH_INTERVAL_SECONDS,
+            max_buffered=settings.RECORDER_MAX_BUFFERED_EVENTS,
+            max_batch_size=settings.RECORDER_MAX_BATCH_SIZE,
+            metrics=metrics,
+        ),
     )
 
 
@@ -91,9 +100,11 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     setup_telemetry(settings.OTEL_SERVICE_NAME)
     firewall_engine.load_policies()
     gateway.budget.start()
+    gateway.recorder.start()
     yield
     logger.info("Shutting down AgentWall gateway")
     await gateway.budget.stop()
+    await gateway.recorder.stop()
 
 
 app = FastAPI(

@@ -27,6 +27,7 @@ from agentwall.src.gateway.budget import BudgetMeter
 from agentwall.src.gateway.context import CoreContextClient
 from agentwall.src.gateway.identity import AgentTokenVerifier
 from agentwall.src.gateway.metrics import GatewayMetrics
+from agentwall.src.gateway.recorder import EventRecorder
 from agentwall.src.gateway.service import (
     JSONRPC_GATEWAY_UNAVAILABLE,
     JSONRPC_METHOD_NOT_FOUND,
@@ -64,6 +65,25 @@ class FakeReporter:
             raise RuntimeError("reporter exploded")
         self.reports.append(items)
         return self.accept
+
+
+class FakeEventReporter:
+    """Stands in for core's /internal/v1/events."""
+
+    def __init__(self) -> None:
+        self.batches: list[list[dict[str, Any]]] = []
+        self.accept = True
+        self.crash = False
+
+    async def send(self, instance_id: str, batch_id: str, organization_id: UUID, items: list[dict[str, Any]]) -> bool:
+        if self.crash:
+            raise RuntimeError("event reporter exploded")
+        self.batches.append(items)
+        return self.accept
+
+    @property
+    def events(self) -> list[dict[str, Any]]:
+        return [item for batch in self.batches for item in batch]
 
 
 class FakeClock:
@@ -157,6 +177,8 @@ class Harness:
         self.audit = TamperEvidentAuditLogger()
         self.reporter = FakeReporter()
         self.budget = BudgetMeter(instance_id="test-gateway-0001", reporter=self.reporter, clock=self.clock, jitter=lambda: 0.5)
+        self.event_reporter = FakeEventReporter()
+        self.recorder = EventRecorder(instance_id="test-gateway-0001", reporter=self.event_reporter)
         self.gateway = McpGateway(
             verifier=AgentTokenVerifier(public_key_pem=public_pem, jwks_url=None),
             contexts=CoreContextClient(
@@ -172,6 +194,7 @@ class Harness:
             audit_logger=self.audit,
             metrics=GatewayMetrics(),
             budget=self.budget,
+            recorder=self.recorder,
         )
 
     def add_agent(
