@@ -14,7 +14,22 @@ from uuid import UUID
 from fastapi import HTTPException, status
 from postgrest.exceptions import APIError
 
-from redhand_core.blackbox.models import BlackBoxEventView, GatewayEventItem, VerifyResponse
+from redhand_core.auth.operator import OperatorContext
+from redhand_core.blackbox.models import (
+    BlackBoxEventView,
+    BlackBoxRetentionRequest,
+    BlackBoxSettingsResponse,
+    GatewayEventItem,
+    VerifyResponse,
+)
+# The control-action helpers are shared with the passport control actions so every control endpoint maps
+# database errors, confirmation and compare-and-set conflicts the same way.
+from redhand_core.passports.service import (
+    StateConflictError,
+    _require_confirmation,
+    _rpc,
+    retry_once_on_conflict,
+)
 
 logger = logging.getLogger("redhand.core.blackbox")
 
@@ -131,4 +146,61 @@ async def verify(supabase: Any, organization_id: UUID, from_seq: int, to_seq: in
     return VerifyResponse(
         ok=bool(data["ok"]), checked=int(data.get("checked") or 0),
         broken_seq=data.get("broken_seq"), reason=data.get("reason"),
+    )
+
+
+async def get_settings(supabase: Any, organization_id: UUID) -> BlackBoxSettingsResponse:
+    res = await (
+        supabase.table("organizations")
+        .select("blackbox_retention_days,payload_retention_days,payload_capture_enabled")
+        .eq("id", str(organization_id))
+        .execute()
+    )
+    rows = list(res.data or [])
+    if len(rows) != 1:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Organization not found.")
+    row = rows[0]
+    return BlackBoxSettingsResponse(
+        retention_days=int(row["blackbox_retention_days"]),
+        payload_retention_days=int(row["payload_retention_days"]),
+        payload_capture_enabled=bool(row["payload_capture_enabled"]),
+        changed=False,
+    )
+
+
+@retry_once_on_conflict
+async def set_retention(
+    supabase: Any, operator: OperatorContext, request: BlackBoxRetentionRequest
+) -> BlackBoxSettingsResponse:
+    """
+    Changes how long the organization's events and captured payloads are kept. Any change needs explicit
+    confirmation: a shorter retention deletes events at the next daily purge (it cannot be undone), a
+    longer one keeps more data. Compare-and-set against the values the decision was based on.
+    """
+    current = await get_settings(supabase, operator.organization_id)
+    unchanged = (
+        current.retention_days == request.retention_days
+        and current.payload_retention_days == request.payload_retention_days
+    )
+    if not unchanged:
+        _require_confirmation(request.confirm, "Changing the Black Box retention")
+    data = await _rpc(
+        supabase,
+        "control_blackbox_retention",
+        {
+            "p_org": str(operator.organization_id), "p_actor": str(operator.user_id),
+            "p_retention_days": request.retention_days, "p_payload_retention_days": request.payload_retention_days,
+            "p_reason": request.reason, "p_expected_retention_days": current.retention_days,
+            "p_expected_payload_retention_days": current.payload_retention_days,
+        },
+        not_found_detail="Organization not found.",
+        conflict_detail="The retention conflicted with another change; try again.",
+    )
+    if isinstance(data, dict) and data.get("conflict"):
+        raise StateConflictError
+    return BlackBoxSettingsResponse(
+        retention_days=request.retention_days,
+        payload_retention_days=request.payload_retention_days,
+        payload_capture_enabled=current.payload_capture_enabled,
+        changed=bool(data["changed"]),
     )

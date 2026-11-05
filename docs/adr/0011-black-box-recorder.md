@@ -76,3 +76,25 @@ tamper-evident record.
   an old core without the ingest endpoint simply fails every flush attempt and buffers, rather than crashing).
 - **Claims discipline:** the Black Box only ever shows traffic that went through the RedHand gateway; the
   dashboard copy, this ADR and the runbook all say so, per the product truth in CLAUDE.md §1.
+
+## Addendum (2026-11-05): retention (Phase 3 M2a)
+- **Decision:** the append-only trigger gets exactly two exceptions instead of a session flag: `DELETE` only
+  for events at or behind the organization's anchor, and `UPDATE` only to set the two payload columns to NULL
+  (the rest of the row compared as JSON, so a column added later is protected by default). A session flag
+  (`SET LOCAL`), as the M1 comment anticipated, was rejected: any `service_role` caller could set it.
+- **Anchor guard:** a trigger on `event_chain_heads` lets the anchor move only forward, only onto an existing
+  event whose hash it records, and only onto an event older than the organization's retention (minimum
+  7 days). Code with full table access therefore cannot erase recent events without it showing as a broken
+  chain or an audited retention change.
+- **Purge:** `purge_events()` runs daily (pg_cron, 19:17 UTC). Ages use `received_at` (the database clock). The
+  anchor stops just before the first event still within retention, because `received_at` is not strictly
+  increasing with `seq` (seq is assigned under the chain lock, `received_at` is the transaction start). At most
+  50,000 events per organization per run; the next run continues. Each anchor move is audited
+  (`organization.blackbox_purged`, system actor). Batch ids older than 2 days are dropped.
+- **Limits:** the guard checks the age of the anchor event only, not of every event behind it; an event a
+  few seconds younger than its neighbour can sit behind an old anchor, and the purge's prefix rule (tested)
+  is what keeps it. One run holds each organization's chain lock while it purges that organization, so
+  ingest for it waits briefly (the gateway retries; enforcement is unaffected). A superuser can still bypass
+  all of this.
+- **Retention settings:** `PUT /v1/blackbox/retention` (admin, `confirm: true` for any change, compare-and-set,
+  audited as `organization.blackbox_retention_changed`); events 7–90 days, payloads 1–30 days.

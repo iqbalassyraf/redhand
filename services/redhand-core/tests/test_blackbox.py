@@ -50,7 +50,10 @@ def _event(agent_id: str, decision: str = "ALLOW", tool: str = "read_file", **ov
 class Env:
     def __init__(self, **settings: Any) -> None:
         self.store = LocalSupabaseAdapter()
-        self.store.tables["organizations"].append({"id": OTHER_ORG, "name": "Other", "slug": "other", "safe_mode": False})
+        self.store.tables["organizations"].append({
+            "id": OTHER_ORG, "name": "Other", "slug": "other", "safe_mode": False,
+            "blackbox_retention_days": 30, "payload_capture_enabled": False, "payload_retention_days": 7,
+        })
         self.store.tables["organization_members"].append(
             {"id": str(uuid4()), "organization_id": OTHER_ORG, "user_id": OTHER_OWNER, "role": "owner"}
         )
@@ -239,3 +242,85 @@ def test_old_timestamp_still_chains_correctly() -> None:
     old = (datetime.now(timezone.utc) - timedelta(minutes=5)).isoformat()
     env.ingest([_event(FINOPS_AGENT_ID, occurred_at=old), _event(FINOPS_AGENT_ID)])
     assert env.verify(1, 2).json()["ok"] is True
+
+
+# ---------------------------------------------------------------------------
+# Retention settings (Phase 3 M2a)
+# ---------------------------------------------------------------------------
+
+
+def _retention(env: Env, user: str = "admin", **body: Any) -> Any:
+    return env.client.put("/v1/blackbox/retention", json=body, headers=env.h(user))
+
+
+def _retention_audit(env: Env) -> list[dict[str, Any]]:
+    return [r for r in env.store.tables.get("control_audit_log", []) if r["action"] == "organization.blackbox_retention_changed"]
+
+
+def test_settings_default_to_30_days_7_days_and_no_payload_capture() -> None:
+    env = Env()
+    resp = env.client.get("/v1/blackbox/settings", headers=env.h("viewer"))
+    assert resp.status_code == 200
+    assert resp.json() == {"retention_days": 30, "payload_retention_days": 7, "payload_capture_enabled": False, "changed": False}
+
+
+def test_admin_changes_retention_with_confirmation_and_it_is_audited() -> None:
+    env = Env()
+    resp = _retention(env, retention_days=14, payload_retention_days=3, reason="keep less", confirm=True)
+    assert resp.status_code == 200
+    assert resp.json() == {"retention_days": 14, "payload_retention_days": 3, "payload_capture_enabled": False, "changed": True}
+    assert env.client.get("/v1/blackbox/settings", headers=env.h()).json()["retention_days"] == 14
+    (audit,) = _retention_audit(env)
+    assert audit["actor_user_id"] == "00000000-0000-0000-0000-0000000000a2"  # the admin, not a client-supplied id
+    assert audit["details"]["old_retention_days"] == 30 and audit["details"]["new_retention_days"] == 14
+
+
+def test_a_retention_change_without_confirmation_is_refused_and_changes_nothing() -> None:
+    env = Env()
+    resp = _retention(env, user="owner", retention_days=7, payload_retention_days=7)
+    assert resp.status_code == 400
+    assert "confirm" in resp.json()["detail"]
+    assert env.client.get("/v1/blackbox/settings", headers=env.h()).json()["retention_days"] == 30
+    assert _retention_audit(env) == []
+
+
+def test_resending_the_current_values_needs_no_confirmation_and_is_not_audited() -> None:
+    env = Env()
+    resp = _retention(env, retention_days=30, payload_retention_days=7)
+    assert resp.status_code == 200 and resp.json()["changed"] is False
+    assert _retention_audit(env) == []
+
+
+def test_only_admins_and_owners_can_change_retention() -> None:
+    env = Env()
+    for user in ("viewer", "operator"):
+        resp = _retention(env, user=user, retention_days=14, payload_retention_days=3, confirm=True)
+        assert resp.status_code == 403, user
+    assert _retention_audit(env) == []
+
+
+def test_retention_outside_the_allowed_ranges_is_rejected() -> None:
+    env = Env()
+    for body in (
+        {"retention_days": 6, "payload_retention_days": 7},
+        {"retention_days": 91, "payload_retention_days": 7},
+        {"retention_days": 30, "payload_retention_days": 0},
+        {"retention_days": 30, "payload_retention_days": 31},
+        {"retention_days": "30", "payload_retention_days": 7},
+        {"retention_days": 30},
+        {"retention_days": 30, "payload_retention_days": 7, "payload_capture_enabled": True},
+    ):
+        resp = _retention(env, confirm=True, **body)
+        assert resp.status_code == 422, body
+    assert _retention_audit(env) == []
+
+
+def test_retention_changes_stay_within_the_callers_organization() -> None:
+    env = Env()
+    resp = env.client.put(
+        "/v1/blackbox/retention", headers=env.h_other_org(),
+        json={"retention_days": 7, "payload_retention_days": 1, "confirm": True},
+    )
+    assert resp.status_code == 200
+    assert env.client.get("/v1/blackbox/settings", headers=env.h_other_org()).json()["retention_days"] == 7
+    assert env.client.get("/v1/blackbox/settings", headers=env.h()).json()["retention_days"] == 30

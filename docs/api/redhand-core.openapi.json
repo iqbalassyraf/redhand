@@ -387,6 +387,77 @@
         "title": "BlackBoxEventView",
         "type": "object"
       },
+      "BlackBoxRetentionRequest": {
+        "additionalProperties": false,
+        "description": "New retention periods, in days. Both are required so the request states the full intent.",
+        "properties": {
+          "confirm": {
+            "default": false,
+            "description": "Required for any change: a shorter retention deletes events at the next daily purge, a longer one keeps more data.",
+            "title": "Confirm",
+            "type": "boolean"
+          },
+          "payload_retention_days": {
+            "maximum": 30.0,
+            "minimum": 1.0,
+            "title": "Payload Retention Days",
+            "type": "integer"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "retention_days": {
+            "maximum": 90.0,
+            "minimum": 7.0,
+            "title": "Retention Days",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "retention_days",
+          "payload_retention_days"
+        ],
+        "title": "BlackBoxRetentionRequest",
+        "type": "object"
+      },
+      "BlackBoxSettingsResponse": {
+        "description": "The organization's Black Box settings. payload_capture_enabled is read-only until payload capture\nships (Phase 3 M2b); it is always false today.",
+        "properties": {
+          "changed": {
+            "title": "Changed",
+            "type": "boolean"
+          },
+          "payload_capture_enabled": {
+            "title": "Payload Capture Enabled",
+            "type": "boolean"
+          },
+          "payload_retention_days": {
+            "title": "Payload Retention Days",
+            "type": "integer"
+          },
+          "retention_days": {
+            "title": "Retention Days",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "retention_days",
+          "payload_retention_days",
+          "payload_capture_enabled",
+          "changed"
+        ],
+        "title": "BlackBoxSettingsResponse",
+        "type": "object"
+      },
       "BlackBoxTimelineResponse": {
         "properties": {
           "events": {
@@ -3102,6 +3173,147 @@
           }
         },
         "summary": "Get Events",
+        "tags": [
+          "Black Box Recorder"
+        ]
+      }
+    },
+    "/v1/blackbox/retention": {
+      "put": {
+        "description": "How long events and captured payloads are kept. A shorter retention deletes events at the next daily\npurge and cannot be undone, so every change needs \"confirm\": true.",
+        "operationId": "set_retention_v1_blackbox_retention_put",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-RedHand-Org",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Redhand-Org"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BlackBoxRetentionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BlackBoxSettingsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Set Retention",
+        "tags": [
+          "Black Box Recorder"
+        ]
+      }
+    },
+    "/v1/blackbox/settings": {
+      "get": {
+        "operationId": "get_settings_v1_blackbox_settings_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-RedHand-Org",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Redhand-Org"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BlackBoxSettingsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Settings",
         "tags": [
           "Black Box Recorder"
         ]
