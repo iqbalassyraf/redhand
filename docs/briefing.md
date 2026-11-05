@@ -16,8 +16,8 @@ analysis and templates. Any per-event LLM use needs an explicit cost estimate an
 | Phase | Theme | Features | Status |
 |---|---|---|---|
 | 1 | Identity & control | Agent Passport, one-click revoke, dashboard kill switch, MCP gateway | **Built** (see below) |
-| 2 | Stop things | Budget Guard, Safe Mode, WhatsApp/Telegram panic command | Not started |
-| 3 | See things | Black Box Recorder, Honeytokens | Not started |
+| 2 | Stop things | Budget Guard, Safe Mode, WhatsApp/Telegram panic command | **Complete** (2026-11-04) |
+| 3 | See things | Black Box Recorder, Honeytokens | In progress: Black Box M1 done (`docs/plans/phase3-plan.md`) |
 | 4 | Check inputs | MCP Scanner, Prompt Injection Radar | Seed exists (`/v1/mcp/vet`) |
 | 5 | Prove it | Compliance reports, Trust Score | Not started |
 | Parked | Higher tiers | Red Team service, Shadow Agent Finder, Cross-agent firewall, Policy marketplace | Fuzzer exists in `redhand-sdk` |

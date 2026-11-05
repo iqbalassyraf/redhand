@@ -1,6 +1,9 @@
 # Phase 3 plan: "See things"
 
-**Status:** Draft for approval (2026-11-04). No code until approved.
+**Status:** Approved (2026-11-05). M1 (Black Box core) built 2026-11-05: migration, gateway recorder,
+core ingest/timeline/verify, dashboard page. 294 (redhand-core) + 174 (agentwall) tests pass, plus 25
+SQL tests; `tsc --noEmit` and `npm run build` clean. Staging verification of done tests 1, 2 and 6 not
+yet run (tracked below). M2 to M4 not started.
 
 **Goal:** an owner can see everything an agent did through RedHand, prove the record was not altered,
 and learn within seconds when an agent touches bait it should never touch.
@@ -265,7 +268,7 @@ editor per agent, payload capture toggle in organization settings; `src/lib/api.
 
 | | Milestone | Contents |
 |---|---|---|
-| M1 | Black Box core | Migration 1 (without payload columns in use), ingest, gateway recorder, timeline page, verify. Done tests 1, 2, 6. |
+| M1 | Black Box core | **Built (2026-11-05), not yet staging-verified.** Migration, ingest, gateway recorder, timeline page, verify. Done tests 1, 2, 6. |
 | M2 | Retention, export, payload capture | Purge with anchor, export, opt-in capture with redaction and its retention. Done test 3. |
 | M3 | Honeytokens | Migration 2, generator, context digests, scanner, trips with alert and freeze, dashboard. Done test 4. |
 | M4 | Honey tools, docs, staging | Honey tools, ADRs, runbooks, threat model, staging verification of all six done tests. Done test 5. |
