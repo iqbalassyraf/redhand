@@ -407,3 +407,85 @@ async def test_captured_payloads_stay_within_core_limits() -> None:
         assert isinstance(payload, dict)
         assert len(payload["text"]) <= 2048 and isinstance(payload["truncated"], bool)  # type: ignore[index]
     assert item["arguments_redacted"]["truncated"] is True  # type: ignore[index]
+
+
+# ---------------------------------------------------------------------------
+# Exactly-once delivery: a retry or a second flush must never store an event twice
+# ---------------------------------------------------------------------------
+
+
+def test_a_retry_resends_the_same_batch_id_and_the_same_events() -> None:
+    """Core ignores a batch id it has stored. If the reply to a stored batch is lost, the retry must carry the
+    SAME id and items, or core stores the events a second time under a new id."""
+    reporter = FakeReporter()
+    rec = EventRecorder(instance_id="gw-1", reporter=reporter)
+    rec.record(event(tool_name="first"))
+    rec.record(event(tool_name="second"))
+
+    reporter.accept = False  # the reply was lost: the gateway cannot tell the batch was stored
+    assert asyncio.run(rec.flush()) is False
+    rec.record(event(tool_name="arrived-between-attempts"))
+    reporter.accept = True
+    assert asyncio.run(rec.flush()) is True
+
+    (_, first_id, _, first_items), (_, retry_id, _, retry_items) = reporter.calls[:2]
+    assert retry_id == first_id and retry_items == first_items  # not even the late event joins the retry
+    assert asyncio.run(rec.flush()) is True
+    assert [i["tool_name"] for i in reporter.calls[2][3]] == ["arrived-between-attempts"]
+    assert reporter.calls[2][1] != first_id  # the next batch is new
+    assert rec.buffered_count == 0
+
+
+def test_a_new_batch_gets_a_new_id_after_the_old_one_is_accepted() -> None:
+    reporter = FakeReporter()
+    rec = EventRecorder(instance_id="gw-1", reporter=reporter)
+    rec.record(event())
+    asyncio.run(rec.flush())
+    rec.record(event())
+    asyncio.run(rec.flush())
+    assert reporter.calls[0][1] != reporter.calls[1][1]
+
+
+def test_a_drop_during_a_failed_attempt_is_reported_once_and_not_lost() -> None:
+    reporter = FakeReporter()
+    rec = EventRecorder(instance_id="gw-1", reporter=reporter, max_buffered=2)
+    agent = uuid4()
+    for _ in range(3):  # two buffered, one dropped
+        rec.record(event(agent_id=agent))
+    reporter.accept = False
+    asyncio.run(rec.flush())
+    rec.record(event(agent_id=agent))  # still full: a second drop while the first batch is waiting
+    reporter.accept = True
+    asyncio.run(rec.flush())
+    asyncio.run(rec.flush())
+    gaps = [i["reasons"][0] for call in reporter.calls for i in call[3] if i["method"] == "recorder.gap"]
+    assert gaps[0].startswith("1 event(s) dropped") and gaps[-1].startswith("1 event(s) dropped")
+    assert len(gaps) == 3 and rec.buffered_count == 0  # the retry repeated the first gap; the second drop got its own
+
+
+@pytest.mark.asyncio
+async def test_a_direct_flush_while_another_is_in_flight_does_not_send_events_twice() -> None:
+    """The background loop and the request path can both flush. The second must wait, not re-send the same events."""
+    release = asyncio.Event()
+    sent: list[tuple[str, list[dict[str, object]]]] = []
+
+    class SlowReporter:
+        async def send(self, instance_id: str, batch_id: str, organization_id: UUID, items: list[dict[str, object]]) -> bool:
+            sent.append((batch_id, items))
+            await release.wait()
+            return True
+
+    rec = EventRecorder(instance_id="gw-1", reporter=SlowReporter())
+    for name in ("a", "b", "c"):
+        rec.record(event(tool_name=name))
+
+    in_flight = asyncio.create_task(rec.flush())
+    await asyncio.sleep(0)  # the first flush is now inside send()
+    second = asyncio.create_task(rec.flush())  # what the background loop does: a direct call
+    await asyncio.sleep(0)
+    release.set()
+    await asyncio.gather(in_flight, second)
+
+    names = [i["tool_name"] for _, items in sent for i in items]
+    assert sorted(names) == ["a", "b", "c"]  # each event exactly once
+    assert rec.buffered_count == 0

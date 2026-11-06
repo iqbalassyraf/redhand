@@ -371,7 +371,7 @@ recording, idempotent retry, grants, row level security). Then the owner ran the
 - **Found while verifying:** the same refused call was recorded as two identical Black Box events (seq 28 and 29, two
   batches from one gateway instance). The hash chain is intact and nothing was lost; the likely cause is the
   recorder generating a new batch id for every retry, which defeats the duplicate protection. It did not recur on the
-  decoy test. A fix (a batch id kept until the batch is acknowledged, plus a test) is a follow-up.
+  decoy test. Two causes were found in the recorder: a new batch id on every retry, and the background loop flushing alongside a request-triggered flush. Both are fixed (a batch keeps its id and items until acknowledged; flushes are serialised) with tests that failed first; the staging gateway needs a redeploy for the fix.
 - **Test mistakes worth knowing:** the first four attempts "passed" because the command carried a placeholder
   instead of the honeytoken value, so nothing could trip. The decoy form rejected a name with a space; the dashboard
   now needs to say so (PR 20).

@@ -11,8 +11,12 @@ Design rules this module keeps, mirroring budget.py:
   for that organization carries one synthetic `recorder.gap` event noting how many were lost.
 - One batch is one organization (core's chain is per organization): the buffer is grouped by
   organization_id, and a flush sends one HTTP call per organization that has buffered events.
-- A single tracked flush task is shared by every caller (the same pattern as BudgetMeter), so a
-  scheduled flush and an urgent flush can never race and send the buffer twice.
+- A single tracked flush task is shared by the callers that start one (the same pattern as BudgetMeter),
+  and `flush()` itself holds a lock, so a flush started any other way (the background loop, shutdown)
+  waits for the one in flight instead of sending the same buffered events a second time.
+- A batch keeps its id and its exact items until core acknowledges it. Core ignores a batch id it has
+  already stored, so a retry after a lost reply is harmless only if it carries the SAME id and items;
+  a fresh id would store the events twice. Events that arrive meanwhile go in the next batch.
 - Losing the recorder (core down, or the process crashing) never affects enforcement: nothing here
   is on the decision path, and every method that can fail swallows its own exceptions.
 """
@@ -39,6 +43,16 @@ MAX_BACKOFF_SECONDS = 60.0
 MAX_BACKOFF_EXPONENT = 10
 REPORT_TIMEOUT_SECONDS = 5.0
 URGENT_WAIT_SECONDS = 1.0
+
+
+@dataclass(slots=True)
+class _Batch:
+    """A batch sent to core and not yet acknowledged: resent unchanged (same id, same items) until it is."""
+
+    batch_id: str
+    items: list[dict[str, Any]]
+    events: int  # buffered events included (the gap marker, if any, is not counted)
+    dropped: int  # drops the gap marker reported
 
 
 @dataclass(frozen=True, slots=True)
@@ -158,6 +172,8 @@ class EventRecorder:
         self._failures = 0
         self._next_flush_at = 0.0
         self._flush_task: asyncio.Task[bool] | None = None
+        self._flush_lock = asyncio.Lock()
+        self._inflight: dict[UUID, _Batch] = {}
         self._loop_task: asyncio.Task[None] | None = None
 
     # -- the recording path: synchronous, no I/O ------------------------------------------------
@@ -209,28 +225,29 @@ class EventRecorder:
 
     async def flush(self) -> bool:
         """Sends every organization's buffered events, each as one or more batches of at most
-        `max_batch_size`. Never raises. Returns True if every batch sent was accepted."""
-        orgs = [org for org, buf in self._buffers.items() if buf or self._dropped.get(org)]
-        if not orgs:
-            return True
-        all_ok = True
-        for org in orgs:
-            if not await self._flush_org(org):
-                all_ok = False
-        self._after_flush(all_ok)
-        return all_ok
+        `max_batch_size`. Never raises. Returns True if every batch sent was accepted. Callers are
+        serialised: a flush that arrives while another is running waits, then sees what is left."""
+        async with self._flush_lock:
+            orgs = [org for org, buf in self._buffers.items() if buf or self._dropped.get(org)]
+            if not orgs:
+                return True
+            all_ok = True
+            for org in orgs:
+                if not await self._flush_org(org):
+                    all_ok = False
+            self._after_flush(all_ok)
+            return all_ok
 
-    async def _flush_org(self, org: UUID) -> bool:
-        buf = self._buffers.get(org)
-        if buf is None:
-            return True
+    def _next_batch(self, org: UUID, buf: deque[GatewayEvent]) -> _Batch | None:
         items: list[dict[str, Any]] = []
         dropped = self._dropped.get(org, 0)
         dropped_agent = self._dropped_agent.get(org)
+        reported_drops = 0
         if dropped and dropped_agent is not None:
             # The gap marker must itself be a valid, storable event: core's record_events() checks
             # every item's agent_id against the agents table, so this uses an agent of the org that
             # actually had a drop rather than a synthetic id that would just be rejected.
+            reported_drops = dropped
             items.append({
                 "agent_id": str(dropped_agent), "occurred_at": _now_iso(), "gateway_instance": self.instance_id,
                 "server": "", "method": "recorder.gap", "tool_name": "", "decision": "ERROR",
@@ -244,18 +261,38 @@ class EventRecorder:
             item["gateway_instance"] = self.instance_id
             items.append(item)
         if not items:
+            return None
+        return _Batch(uuid4().hex, items, len(pending), reported_drops)
+
+    async def _flush_org(self, org: UUID) -> bool:
+        buf = self._buffers.get(org)
+        if buf is None:
             return True
+        batch = self._inflight.get(org)
+        if batch is None:
+            batch = self._next_batch(org, buf)
+            if batch is None:
+                return True
+            self._inflight[org] = batch
         try:
-            accepted = await self._reporter.send(self.instance_id, uuid4().hex, org, items)
+            accepted = await self._reporter.send(self.instance_id, batch.batch_id, org, batch.items)
         except Exception as exc:  # noqa: BLE001  a reporter must never take the gateway down
             logger.warning("Event report failed", error_type=type(exc).__name__)
             accepted = False
         if accepted:
-            for _ in pending:
+            del self._inflight[org]
+            # Only this method removes from the buffer's head (record() only appends), so the first
+            # `batch.events` events are exactly the ones just acknowledged.
+            for _ in range(batch.events):
                 buf.popleft()
-            self._dropped.pop(org, None)
-            self._dropped_agent.pop(org, None)
-            if not buf:
+            if batch.dropped:
+                remaining = self._dropped.get(org, 0) - batch.dropped
+                if remaining > 0:
+                    self._dropped[org] = remaining  # more were dropped while this batch was in flight
+                else:
+                    self._dropped.pop(org, None)
+                    self._dropped_agent.pop(org, None)
+            if not buf and not self._dropped.get(org):
                 del self._buffers[org]
         return accepted
 
