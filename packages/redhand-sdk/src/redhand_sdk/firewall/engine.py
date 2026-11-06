@@ -212,6 +212,16 @@ class InMemoryONNXDebertaClassifier:
             logger.warning("Failed to initialize ONNX Runtime session (%s); falling back.", exc)
             self._ort_session = None
 
+    @property
+    def model_loaded(self) -> bool:
+        """True only when a real ONNX session and tokenizer are in use, not the lexical stand-in."""
+        return self._ort_session is not None and self._tokenizer is not None
+
+    @property
+    def detector_tier(self) -> str:
+        """What to call this detector in findings: it must not claim to be the model when it is the stub."""
+        return "tier1_onnx_deberta" if self.model_loaded else "tier1_lexical_stub"
+
     def predict_injection_probability(self, text: str) -> float:
         """
         Runs sequence classification over `text` and returns the probability [0.0, 1.0]
@@ -291,6 +301,9 @@ class FirewallEngine:
         self.flag_threshold = flag_threshold
         self.latency_sla_ms = latency_sla_ms
         self._classifier = InMemoryONNXDebertaClassifier(model_path=onnx_model_path)
+
+    def _tier1_rule_id(self, verdict: str) -> str:
+        return f"RH-T1-{'DEBERTA' if self._classifier.model_loaded else 'LEXICAL-STUB'}-{verdict}"
 
     def evaluate(
         self,
@@ -374,11 +387,11 @@ class FirewallEngine:
                     event_type=SecurityEventType.PROMPT_INJECTION_INDIRECT,
                     severity=SeverityLevel.CRITICAL if score >= 0.92 else SeverityLevel.HIGH,
                     verdict=FirewallVerdict.BLOCKED,
-                    detector_tier="tier1_onnx_deberta",
+                    detector_tier=self._classifier.detector_tier,
                     confidence_score=round(score, 4),
                     firewall_latency_ms=latency_ms,
                     trigger_snippet=self._sanitize_snippet(serialized_args[:256]),
-                    matched_rule_id="RH-T1-DEBERTA-INJECTION",
+                    matched_rule_id=self._tier1_rule_id("INJECTION"),
                     mitigation_action=(
                         f"Semantic classifier blocked '{tool_name}' due to high probability "
                         f"({score:.1%}) of indirect prompt injection or intent hijacking."
@@ -394,11 +407,11 @@ class FirewallEngine:
                     event_type=SecurityEventType.PROMPT_INJECTION_INDIRECT,
                     severity=SeverityLevel.MEDIUM,
                     verdict=FirewallVerdict.FLAGGED,
-                    detector_tier="tier1_onnx_deberta",
+                    detector_tier=self._classifier.detector_tier,
                     confidence_score=round(score, 4),
                     firewall_latency_ms=latency_ms,
                     trigger_snippet=self._sanitize_snippet(serialized_args[:256]),
-                    matched_rule_id="RH-T1-DEBERTA-SUSPICIOUS",
+                    matched_rule_id=self._tier1_rule_id("SUSPICIOUS"),
                     mitigation_action=(
                         f"Tool '{tool_name}' permitted with elevated telemetry flag "
                         f"(classifier score={score:.1%})."

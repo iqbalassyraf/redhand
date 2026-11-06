@@ -62,3 +62,10 @@ must stay lean (no I/O, bounded work, CLAUDE.md section 8) and a failure must ne
 - A freeze takes effect on the agent's next call after core processes the trip (context cache at most 4 s).
 - Honeytokens, decoy tools and trips are kept until retired, then 90 days (`purge_honey()`, daily).
 - Deleting an organization removes its honeytokens, decoy tools and trips (foreign keys cascade).
+
+## Addendum (2026-11-06): tool names and argument keys
+Found in staging verification: only argument VALUES and results were scanned, so bait used as a tool name or an
+argument key was not matched, and the tool name reached the event, the gateway ledger, the log and the trip report.
+The scan now covers the tool name and every argument key and value. On a trip the redacted copies are what is
+recorded, logged and reported. Scan order is now bait first, then decoy.
+

@@ -190,8 +190,24 @@ class McpGateway:
                 return deny(200, JSONRPC_INVALID_PARAMS, "tools/call arguments must be an object.", "invalid_params")
             tool_name, arguments = params["name"], raw_args
 
-            # 4a. Decoy tools and honeytokens come first: a call to a decoy, or one carrying planted bait, is a
-            # trip however the passport is scoped, and neither is ever forwarded upstream.
+            # 4a. Honeytokens and decoy tools come first: a call carrying planted bait, or to a decoy, is a trip
+            # however the passport is scoped, and neither is ever forwarded upstream. The tool NAME is scanned
+            # along with the arguments (names and argument keys can carry bait too), and a trip is recorded,
+            # logged and reported with the redacted copies, so the bait itself never reaches an event or a log.
+            try:
+                bait = scan_honeytokens({"tool": tool_name, "arguments": arguments}, context.honeytokens)
+            except Exception as exc:  # noqa: BLE001  enforcement path: a scanner error denies
+                logger.error("Honeytoken scan failed", error_type=type(exc).__name__)
+                self._record(identity, context, method, message, "BLOCK", ["honeytoken scan failed"], 403, "", {}, started, capture=False)
+                return deny(200, JSONRPC_POLICY_VIOLATION, "PolicyViolation: request could not be checked.", "honeytoken_scan_error")
+            if bait.truncated:
+                self.metrics.record_honeytoken_scan_truncated()
+            if bait.matched:
+                safe_tool, safe_arguments = bait.value["tool"], bait.value["arguments"]
+                for honeytoken_id in bait.matched:
+                    self._trip(identity, context, "honeytoken", honeytoken_id, "arguments", safe_tool)
+                self._record(identity, context, method, message, "BLOCK", ["honeytoken"], 403, safe_tool, safe_arguments, started, capture=False)
+                return deny(200, JSONRPC_POLICY_VIOLATION, "PolicyViolation: request blocked.", "honeytoken")
             decoy = context.honey_tool(tool_name)
             if decoy is not None:
                 self._trip(identity, context, "honey_tool", decoy.id, "call", tool_name)
@@ -205,19 +221,6 @@ class McpGateway:
                     "jsonrpc": "2.0", "id": request_id,
                     "result": {"content": [{"type": "text", "text": "The service is temporarily unavailable. Try again later."}], "isError": True},
                 })
-            try:
-                bait = scan_honeytokens(arguments, context.honeytokens)
-            except Exception as exc:  # noqa: BLE001  enforcement path: a scanner error denies
-                logger.error("Honeytoken scan failed", error_type=type(exc).__name__)
-                self._record(identity, context, method, message, "BLOCK", ["honeytoken scan failed"], 403, tool_name, arguments, started, capture=False)
-                return deny(200, JSONRPC_POLICY_VIOLATION, "PolicyViolation: request could not be checked.", "honeytoken_scan_error")
-            if bait.truncated:
-                self.metrics.record_honeytoken_scan_truncated()
-            if bait.matched:
-                for honeytoken_id in bait.matched:
-                    self._trip(identity, context, "honeytoken", honeytoken_id, "arguments", tool_name)
-                self._record(identity, context, method, message, "BLOCK", ["honeytoken"], 403, tool_name, arguments, started, capture=False)
-                return deny(200, JSONRPC_POLICY_VIOLATION, "PolicyViolation: request blocked.", "honeytoken")
 
             if not context.allows_tool(tool_name):
                 if context.safe_mode and context.covers_tool(tool_name):
