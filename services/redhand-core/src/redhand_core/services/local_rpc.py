@@ -247,6 +247,8 @@ def _control_mcp_server(store: LocalSupabaseAdapter, p: dict[str, Any]) -> dict[
             "name": spec["name"],
             "url": spec["url"],
             "is_active": True,
+            "pin_mode": "alert",
+            "pin_last_alert_at": None,
             "created_by": actor,
             "created_at": _now(),
         }
@@ -727,6 +729,137 @@ def _record_trip(store: LocalSupabaseAdapter, p: dict[str, Any]) -> dict[str, An
     return {"recorded": True, "label": label, "action": action, "agent_name": agent_row.get("name"), "alert": not recent}
 
 
+_PIN_MODES = ("off", "alert", "enforce")
+_HEX64 = re.compile(r"^[0-9a-f]{64}$")
+
+
+def _pin_server(store: LocalSupabaseAdapter, org: str, server: str) -> dict[str, Any]:
+    row = next(
+        (s for s in store.tables.get("mcp_servers", []) if str(s.get("id")) == server and str(s.get("organization_id")) == org), None
+    )
+    if row is None:
+        raise _error("P0002", "server not found")
+    return row
+
+
+def _record_tool_observation(store: LocalSupabaseAdapter, p: dict[str, Any]) -> dict[str, Any]:
+    org, server_id, tools = str(p["p_org"]), str(p["p_server"]), p["p_tools"]
+    if not isinstance(tools, list) or len(tools) > 200:
+        raise _error("22023", "tools must be an array of at most 200")
+    server = _pin_server(store, org, server_id)
+    if server.get("pin_mode", "alert") == "off":
+        return {"new": 0, "changed": 0, "skipped": len(tools), "alert": False}
+    pins = store.tables.setdefault("mcp_tool_pins", [])
+    new = changed = skipped = 0
+    for tool in tools:
+        name, digest = tool.get("name"), tool.get("digest")
+        if not isinstance(name, str) or not 1 <= len(name) <= 128 or not isinstance(digest, str) or not _HEX64.match(digest):
+            skipped += 1
+            continue
+        mine = [x for x in pins if x["server_id"] == server_id and x["tool_name"] == name]
+        existing = next((x for x in mine if x["digest"] == digest), None)
+        if existing is not None:
+            existing["last_seen_at"] = _now()
+            continue
+        if len({x["tool_name"] for x in pins if x["server_id"] == server_id}) >= 500 and not mine:
+            skipped += 1
+            continue
+        if len(mine) >= 20:
+            droppable = sorted((x for x in mine if x["status"] in ("rejected", "superseded")), key=lambda x: x["last_seen_at"])
+            if not droppable:
+                skipped += 1
+                continue
+            pins.remove(droppable[0])
+        kind = "changed" if any(x["status"] == "approved" for x in mine) else "new"
+        rules = tool.get("rules") if isinstance(tool.get("rules"), list) else []
+        pins.append({
+            "id": str(uuid4()), "organization_id": org, "server_id": server_id, "tool_name": name, "digest": digest,
+            "status": "pending", "change_kind": kind, "description": str(tool.get("description") or "")[:2000],
+            "schema_text": str(tool.get("schema") or "")[:8000], "rules": [str(r)[:32] for r in rules][:20],
+            "first_seen_at": _now(), "last_seen_at": _now(), "decided_by": None, "decided_at": None,
+        })
+        _append_audit(
+            store, org=org, actor=_SYSTEM_ACTOR, action="tool_pin.pending", target_type="mcp_server", target_id=server_id,
+            reason=None, details={"tool": name, "kind": kind, "server": server["slug"]},
+        )
+        if kind == "changed":
+            changed += 1
+        else:
+            new += 1
+    alert = False
+    last = server.get("pin_last_alert_at")
+    if new + changed > 0 and (last is None or datetime.now(timezone.utc) - datetime.fromisoformat(last) > timedelta(minutes=10)):
+        server["pin_last_alert_at"] = _now()
+        alert = True
+    return {"new": new, "changed": changed, "skipped": skipped, "alert": alert, "server": server["slug"]}
+
+
+def _control_tool_pin(store: LocalSupabaseAdapter, p: dict[str, Any]) -> dict[str, Any]:
+    org, actor, pin_id, decision = str(p["p_org"]), str(p["p_actor"]), str(p["p_pin"]), p["p_decision"]
+    if decision not in ("approve", "reject"):
+        raise _error("22023", "decision must be approve or reject")
+    pins = store.tables.setdefault("mcp_tool_pins", [])
+    pin = next((x for x in pins if x["id"] == pin_id and x["organization_id"] == org), None)
+    if pin is None:
+        raise _error("P0002", "tool version not found")
+    if pin["status"] != "pending":
+        return {"conflict": True, "status": pin["status"]}
+    if decision == "approve":
+        for other in pins:
+            if other["server_id"] == pin["server_id"] and other["tool_name"] == pin["tool_name"] and other["status"] == "approved":
+                other["status"] = "superseded"
+    pin["status"] = "approved" if decision == "approve" else "rejected"
+    pin["decided_by"], pin["decided_at"] = actor, _now()
+    _append_audit(
+        store, org=org, actor=actor, action="tool_pin.approved" if decision == "approve" else "tool_pin.rejected",
+        target_type="mcp_server", target_id=pin["server_id"], reason=p.get("p_reason"),
+        details={"tool": pin["tool_name"], "kind": pin["change_kind"], "rules": pin["rules"]},
+    )
+    return {"conflict": False, "status": pin["status"]}
+
+
+def _control_tool_pins_approve_all(store: LocalSupabaseAdapter, p: dict[str, Any]) -> dict[str, Any]:
+    org, actor, server_id = str(p["p_org"]), str(p["p_actor"]), str(p["p_server"])
+    _pin_server(store, org, server_id)
+    pins = store.tables.setdefault("mcp_tool_pins", [])
+    newest: dict[str, dict[str, Any]] = {}
+    for pin in sorted((x for x in pins if x["server_id"] == server_id and x["status"] == "pending"), key=lambda x: x["last_seen_at"]):
+        newest[pin["tool_name"]] = pin
+    for name, keep in newest.items():
+        for other in pins:
+            if other["server_id"] != server_id or other["tool_name"] != name:
+                continue
+            if other["status"] == "approved":
+                other["status"] = "superseded"
+            elif other["status"] == "pending" and other is not keep:
+                other["status"], other["decided_by"], other["decided_at"] = "rejected", actor, _now()
+        keep["status"], keep["decided_by"], keep["decided_at"] = "approved", actor, _now()
+    if newest:
+        _append_audit(
+            store, org=org, actor=actor, action="tool_pin.approved_all", target_type="mcp_server", target_id=server_id,
+            reason=p.get("p_reason"), details={"tools_approved": len(newest)},
+        )
+    return {"approved": len(newest)}
+
+
+def _control_server_pin_mode(store: LocalSupabaseAdapter, p: dict[str, Any]) -> dict[str, Any]:
+    org, actor, server_id, mode = str(p["p_org"]), str(p["p_actor"]), str(p["p_server"]), p["p_mode"]
+    if mode not in _PIN_MODES:
+        raise _error("22023", "mode must be off, alert or enforce")
+    server = _pin_server(store, org, server_id)
+    current = server.get("pin_mode", "alert")
+    if current != p.get("p_expected"):
+        return {"conflict": True, "pin_mode": current}
+    if current == mode:
+        return {"conflict": False, "changed": False, "pin_mode": mode}
+    server["pin_mode"] = mode
+    _append_audit(
+        store, org=org, actor=actor, action="mcp_server.pin_mode_changed", target_type="mcp_server", target_id=server_id,
+        reason=p.get("p_reason"), details={"old_mode": current, "new_mode": mode, "server": server["slug"]},
+    )
+    return {"conflict": False, "changed": True, "pin_mode": mode}
+
+
 def _record_events(store: LocalSupabaseAdapter, p: dict[str, Any]) -> dict[str, Any]:
     instance, batch_id, org, items = str(p["p_instance"]), str(p["p_batch_id"]), str(p["p_org"]), p["p_items"]
     if not 8 <= len(instance) <= 64:
@@ -936,6 +1069,10 @@ HANDLERS: dict[str, RpcHandler] = {
     "control_honey_tool_create": _control_honey_tool_create,
     "control_honey_tool_retire": _control_honey_tool_retire,
     "record_trip": _record_trip,
+    "record_tool_observation": _record_tool_observation,
+    "control_tool_pin": _control_tool_pin,
+    "control_tool_pins_approve_all": _control_tool_pins_approve_all,
+    "control_server_pin_mode": _control_server_pin_mode,
     "record_usage": _record_usage,
     "mark_budget_frozen": _mark_budget_frozen,
     "usage_by_others": _usage_by_others,

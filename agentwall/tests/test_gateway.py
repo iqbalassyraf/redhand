@@ -28,6 +28,7 @@ from agentwall.src.gateway.context import CoreContextClient
 from agentwall.src.gateway.identity import AgentTokenVerifier
 from agentwall.src.gateway.metrics import GatewayMetrics
 from agentwall.src.gateway.recorder import EventRecorder
+from agentwall.src.gateway.pins import PinCoordinator, PinReport
 from agentwall.src.gateway.trips import Outcome, Trip, TripDispatcher
 from agentwall.src.gateway.service import (
     JSONRPC_GATEWAY_UNAVAILABLE,
@@ -80,6 +81,18 @@ class FakeTripReporter:
         return self.outcomes.pop(0) if self.outcomes else "ok"
 
 
+class FakePinReporter:
+    """Stands in for core's /internal/v1/tool-observations."""
+
+    def __init__(self) -> None:
+        self.reports: list[PinReport] = []
+        self.outcomes: list[Outcome] = []
+
+    async def send(self, report: PinReport) -> Outcome:
+        self.reports.append(report)
+        return self.outcomes.pop(0) if self.outcomes else "ok"
+
+
 class FakeEventReporter:
     """Stands in for core's /internal/v1/events."""
 
@@ -113,8 +126,13 @@ class FakeCore:
 
     agents: dict[str, dict[str, Any]] = field(default_factory=dict)
     servers: dict[tuple[str, str], str] = field(default_factory=dict)
+    pins: dict[tuple[str, str], dict[str, Any]] = field(default_factory=dict)  # (org, server) -> {"mode", "approved"}
     calls: int = 0
     mode: str = "ok"  # ok | down | error | malformed | mismatch
+
+    def _pin_fields(self, org: str, server: str) -> dict[str, Any]:
+        pin = self.pins.get((org, server), {"mode": "alert", "approved": []})
+        return {"pin_mode": pin["mode"], "approved_tools": [{"tool": t, "digest": d} for t, d in pin["approved"]]}
 
     def handler(self, request: httpx.Request) -> httpx.Response:
         self.calls += 1
@@ -133,7 +151,7 @@ class FakeCore:
         url = self.servers.get((q["organization_id"], q["server"]))
         body = {
             "agent": {**agent, "id": str(uuid4()) if self.mode == "mismatch" else agent["id"]},
-            "server": {"slug": q["server"], "url": url} if url else None,
+            "server": {"slug": q["server"], "url": url, **self._pin_fields(q["organization_id"], q["server"])} if url else None,
         }
         return httpx.Response(200, json=body)
 
@@ -194,6 +212,8 @@ class Harness:
         self.recorder = EventRecorder(instance_id="test-gateway-0001", reporter=self.event_reporter)
         self.trip_reporter = FakeTripReporter()
         self.trips = TripDispatcher(reporter=self.trip_reporter, retry_delays=())
+        self.pin_reporter = FakePinReporter()
+        self.pins = PinCoordinator(reporter=self.pin_reporter, retry_delays=())
         self.gateway = McpGateway(
             verifier=AgentTokenVerifier(public_key_pem=public_pem, jwks_url=None),
             contexts=CoreContextClient(
@@ -211,6 +231,7 @@ class Harness:
             budget=self.budget,
             recorder=self.recorder,
             trips=self.trips,
+            pins=self.pins,
         )
 
     def add_agent(

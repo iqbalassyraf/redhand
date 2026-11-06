@@ -32,6 +32,7 @@ from .budget import BudgetMeter
 from .metrics import GatewayMetrics
 from .capture import build_excerpt
 from .honeytokens import scan as scan_honeytokens
+from .pins import PinCoordinator
 from .recorder import EventRecorder, GatewayEvent
 from .trips import Trip, TripDispatcher
 from .upstream import DestinationBlockedError, UpstreamError, UpstreamForwarder
@@ -91,6 +92,7 @@ class McpGateway:
         budget: BudgetMeter,
         recorder: EventRecorder,
         trips: TripDispatcher,
+        pins: PinCoordinator,
     ) -> None:
         self.verifier = verifier
         self.contexts = contexts
@@ -101,6 +103,7 @@ class McpGateway:
         self.budget = budget
         self.recorder = recorder
         self.trips = trips
+        self.pins = pins
         self._budget_refusal_logged: dict[UUID, float] = {}
 
     def _record_budget_refusal(
@@ -233,6 +236,13 @@ class McpGateway:
                 return deny(200, JSONRPC_POLICY_VIOLATION, f"PolicyViolation: tool '{tool_name}' is out of scope.",
                             "out_of_scope", {"tool_name": tool_name, "violations": reasons})
 
+            if context.pin_mode == "enforce" and not self._pin_allows(identity, context, tool_name):
+                reasons = [f"Tool '{tool_name}' on server '{server}' is not approved: its current version has not been reviewed."]
+                self.metrics.record_pin_event("refused")
+                self._record(identity, context, method, message, "BLOCK", reasons, 403, tool_name, arguments, started)
+                return deny(200, JSONRPC_POLICY_VIOLATION, f"PolicyViolation: tool '{tool_name}' is not approved.",
+                            "tool_unapproved", {"tool_name": tool_name, "violations": reasons})
+
             violations = self.firewall.inspect_arguments(tool_name, arguments)
             if violations:
                 self._record(identity, context, method, message, "BLOCK", violations, 403, tool_name, arguments, started)
@@ -288,7 +298,13 @@ class McpGateway:
         captured_result: Any = None
         if body is not None and "result" in body:
             if method == "tools/list":
-                body = self._add_honey_tools(self._filter_tool_list(body, context), context)
+                body = self._filter_tool_list(body, context)
+                if context.pin_mode != "off":
+                    pinned = self._apply_pins(identity, context, body)
+                    if pinned is None:  # enforce mode could not check the list: show nothing rather than unchecked tools
+                        return deny(200, JSONRPC_GATEWAY_UNAVAILABLE, "The tool list could not be checked.", "pin_check_failed")
+                    body = pinned
+                body = self._add_honey_tools(body, context)
             elif method == "tools/call":
                 upstream_result = body["result"]
                 try:
@@ -340,6 +356,36 @@ class McpGateway:
             seen_in=seen_in,  # type: ignore[arg-type]  # one of three literals chosen by the callers above
             tool_name=tool_name, server=context.server_slug,
         ))
+
+    def _apply_pins(self, identity: AgentIdentity, context: GatewayContext, body: dict[str, Any]) -> dict[str, Any] | None:
+        """Hashes the listed tools, reports versions not yet reported, and in enforce mode keeps only tools whose current
+        version is approved. In alert mode a failure only counts (pinning is a side effect there); in enforce mode it
+        returns None so the caller shows no tools."""
+        result = body.get("result")
+        if not isinstance(result, dict) or not isinstance(result.get("tools"), list):
+            return body
+        try:
+            tools = [t for t in result["tools"] if isinstance(t, dict) and isinstance(t.get("name"), str) and t["name"]]
+            digests = self.pins.observe(identity.organization_id, context.server_slug, tools)
+            if context.pin_mode != "enforce":
+                return body
+            kept = [t for t in result["tools"] if isinstance(t, dict) and (t.get("name"), digests.get(str(t.get("name")))) in context.approved_tools]
+            hidden = len(result["tools"]) - len(kept)
+            if hidden:
+                self.metrics.record_pin_event("hidden", hidden)
+            return {**body, "result": {**result, "tools": kept}}
+        except Exception as exc:  # noqa: BLE001
+            logger.error("Tool pin check failed", error_type=type(exc).__name__)
+            self.metrics.record_pin_event("error")
+            return body if context.pin_mode != "enforce" else None
+
+    def _pin_allows(self, identity: AgentIdentity, context: GatewayContext, tool_name: str) -> bool:
+        """Enforce mode: a tool may be called if its name is approved and the version this gateway last saw for it (if it
+        has seen one) is the approved one. A tool never listed through this process is judged by name alone."""
+        if tool_name not in {name for name, _ in context.approved_tools}:
+            return False
+        last = self.pins.last_digest(identity.organization_id, context.server_slug, tool_name)
+        return last is None or (tool_name, last) in context.approved_tools
 
     @staticmethod
     def _add_honey_tools(body: dict[str, Any], context: GatewayContext) -> dict[str, Any]:

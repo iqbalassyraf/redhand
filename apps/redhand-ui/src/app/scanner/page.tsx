@@ -10,6 +10,7 @@ import React, { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { Hand, LogOut, RefreshCw } from "lucide-react";
 
+import { ToolPinsPanel } from "@/components/scanner/ToolPinsPanel";
 import {
   ApiError,
   type McpServer,
@@ -55,6 +56,7 @@ export default function ScannerPage() {
   const [result, setResult] = useState<ScanResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+  const [openPins, setOpenPins] = useState<string | null>(null);
 
   const handleError = useCallback(
     (err: unknown) => {
@@ -149,7 +151,8 @@ export default function ScannerPage() {
         <div className="mb-4">
           <h1 className="text-[18px] font-bold">MCP Scanner</h1>
           <p className="text-[#606060]">
-            Check a tool server before agents use it: hidden instructions in tool descriptions, risky tools and weak schemas.
+            Check a tool server before agents use it: hidden instructions in tool descriptions, risky tools and weak schemas. Tool pins
+            notice when a server changes a tool after you approved it.
             Rules catch known patterns and miss rephrased attacks, so a pass is not a guarantee. RedHand only covers agents
             that connect through the RedHand gateway.
           </p>
@@ -173,17 +176,39 @@ export default function ScannerPage() {
           ) : (
             <ul className="divide-y divide-[#F2F2F2]">
               {servers.map((s) => (
-                <li key={s.id} className="flex items-center justify-between py-2">
-                  <span>
-                    <span className="font-semibold">{s.name}</span> <span className="text-[#606060]">({s.slug})</span>
-                  </span>
-                  <button
-                    disabled={busy !== null}
-                    onClick={() => run(s.id, () => scannerApi.scanServer(token, s.id))}
-                    className="rounded-full bg-[#0F0F0F] px-3 py-1.5 font-semibold text-[#FFFFFF] disabled:opacity-50"
-                  >
-                    {busy === s.id ? "Scanning…" : "Scan"}
-                  </button>
+                <li key={s.id} className="py-2">
+                  <div className="flex items-center justify-between">
+                    <span>
+                      <span className="font-semibold">{s.name}</span> <span className="text-[#606060]">({s.slug})</span>
+                    </span>
+                    <span className="flex gap-2">
+                      <button
+                        onClick={() => setOpenPins(openPins === s.id ? null : s.id)}
+                        className="rounded-full border border-[#E5E5E5] px-3 py-1.5 font-semibold hover:bg-[#F2F2F2]"
+                      >
+                        {openPins === s.id ? "Hide tool pins" : "Tool pins"}
+                      </button>
+                      <button
+                        disabled={busy !== null}
+                        onClick={() => run(s.id, () => scannerApi.scanServer(token, s.id))}
+                        className="rounded-full bg-[#0F0F0F] px-3 py-1.5 font-semibold text-[#FFFFFF] disabled:opacity-50"
+                      >
+                        {busy === s.id ? "Scanning…" : "Scan"}
+                      </button>
+                    </span>
+                  </div>
+                  {openPins === s.id ? (
+                    <div className="mt-2 overflow-hidden rounded-[8px] border border-[#E5E5E5]">
+                      <ToolPinsPanel
+                        token={token}
+                        serverId={s.id}
+                        onUnauthorized={() => {
+                          signOut();
+                          window.location.href = "/login";
+                        }}
+                      />
+                    </div>
+                  ) : null}
                 </li>
               ))}
             </ul>

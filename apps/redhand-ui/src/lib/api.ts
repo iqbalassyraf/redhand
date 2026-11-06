@@ -499,3 +499,44 @@ export const scannerApi = {
     };
   },
 };
+
+export type PinMode = "off" | "alert" | "enforce";
+export type PinStatus = "pending" | "approved" | "rejected" | "superseded";
+
+export interface ToolPin {
+  id: string;
+  tool_name: string;
+  status: PinStatus;
+  change_kind: "new" | "changed";
+  description: string;
+  schema_text: string;
+  rules: string[];
+  first_seen_at: string;
+  last_seen_at: string;
+  approved_description: string | null;
+  approved_schema_text: string | null;
+}
+
+export interface ToolPins {
+  server_id: string;
+  server_slug: string;
+  pin_mode: PinMode;
+  pending_count: number;
+  pins: ToolPin[];
+}
+
+export const pinsApi = {
+  list: (t: string, serverId: string) => apiFetch<ToolPins>(`/v1/mcp-servers/${serverId}/tool-pins`, t),
+  decide: (t: string, pinId: string, decision: "approve" | "reject", reason: string) =>
+    apiFetch<{ status: PinStatus }>(`/v1/tool-pins/${pinId}/decision`, t, { method: "POST", body: { decision, reason: reason || null } }),
+  approveAll: (t: string, serverId: string, reason: string) =>
+    apiFetch<{ approved: number }>(`/v1/mcp-servers/${serverId}/tool-pins/approve-all`, t, {
+      method: "POST",
+      body: { reason: reason || null, confirm: true },
+    }),
+  setMode: (t: string, serverId: string, mode: PinMode, reason: string) =>
+    apiFetch<{ pin_mode: PinMode; changed: boolean }>(`/v1/mcp-servers/${serverId}/pin-mode`, t, {
+      method: "PUT",
+      body: { mode, reason: reason || null, confirm: true },
+    }),
+};
