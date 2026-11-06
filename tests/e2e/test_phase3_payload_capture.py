@@ -105,3 +105,36 @@ async def test_capture_changes_are_audited_with_the_acting_user(monkeypatch: pyt
         "00000000-0000-0000-0000-0000000000a3",  # security operator
     }
     await stack.close()
+
+
+@pytest.mark.asyncio
+async def test_a_captured_payload_is_read_and_exported_only_by_the_right_roles_and_each_access_is_audited(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    stack, token = await _setup(monkeypatch)
+    await _set_capture(stack, "admin", enabled=True, confirm=True)
+    await stack.call_tool(token, "list_invoices", month="2026-10", contact=EMAIL)
+    await stack.gateway.recorder.flush()
+
+    def audits(action: str) -> list[dict[str, Any]]:
+        return [r for r in stack.store.tables["control_audit_log"] if r["action"] == action]
+
+    assert (await stack.core.get("/v1/blackbox/events/1/payload", headers=stack.operator("viewer"))).status_code == 403
+    assert (await stack.core.get("/v1/blackbox/events/1/payload", headers=stack.operator("operator"))).status_code == 403
+    assert audits("organization.blackbox_payload_viewed") == []
+
+    viewed = await stack.core.get("/v1/blackbox/events/1/payload", headers=stack.operator("admin"))
+    assert viewed.status_code == 200 and viewed.headers["cache-control"] == "no-store"
+    args = json.loads(viewed.json()["arguments_redacted"]["text"])
+    assert args["contact"] == "[REDACTED:EMAIL]" and EMAIL not in viewed.text
+    assert len(audits("organization.blackbox_payload_viewed")) == 1
+
+    export = await stack.core.get(
+        "/v1/blackbox/export", params={"include_payloads": "true"}, headers=stack.operator("admin")
+    )
+    lines = [json.loads(line) for line in export.text.splitlines()]
+    assert lines[0]["seq"] == 1 and "[REDACTED:EMAIL]" in lines[0]["arguments_redacted"]["text"]
+    assert lines[-1] == {"export_complete": True, "rows": 1, "capped_at": None}
+    assert EMAIL not in export.text
+    assert audits("organization.blackbox_exported")[0]["details"]["include_payloads"] is True
+    await stack.close()

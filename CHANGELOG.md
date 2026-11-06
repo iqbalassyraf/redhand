@@ -30,6 +30,13 @@
   `20261112000000_blackbox_payload_capture.sql`. **Deploy order: migration, core, then gateway** (the gateway now
   requires a new `payload_capture` field from core). Payloads are not shown in the dashboard yet.
 
+- Black Box access (M2c, backend): admins can read one event's captured payload
+  (`GET /v1/blackbox/events/{seq}/payload`) and export the timeline as JSON Lines or CSV
+  (`GET /v1/blackbox/export`, security operator and above; `include_payloads` needs admin; at most 50,000
+  rows). Every payload read and every export is audited, the read in the same transaction. Responses are not
+  cacheable. `GET /v1/blackbox/settings` now says what the caller's role may do. New migration
+  `20261113000000_blackbox_access.sql`. Deploy order: migration, then core. The dashboard controls follow.
+
 ### Fixed
 - The Black Box stored no events on Supabase: the event hash helper could not find pgcrypto's `digest()`
   (installed in the `extensions` schema), and the original migration could not be applied on a fresh

@@ -38,18 +38,38 @@ def _sort_key(value: Any) -> Any:
         return (1, str(value or ""))
 
 
+def _comparable(value: Any) -> Any:
+    """Numbers compare as numbers, ISO timestamps as instants, everything else as text."""
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        pass
+    try:
+        parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+        return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+    except ValueError:
+        return str(value)
+
+
+_ORDERING = {
+    "lt": lambda a, b: a < b, "lte": lambda a, b: a <= b, "gt": lambda a, b: a > b, "gte": lambda a, b: a >= b,
+}
+
+
 def _matches_filters(row: dict[str, Any], filters: list[tuple[str, str, Any]]) -> bool:
     for column, op, value in filters:
         current: Any = row.get(column)
-        if op == "lt":
+        if op in _ORDERING:
             try:
-                if not float(current) < float(value):
+                if not _ORDERING[op](_comparable(current), _comparable(value)):
                     return False
-            except (TypeError, ValueError):
+            except TypeError:
                 return False
         elif str(current) != str(value):
             return False
     return True
+
+
 DEFAULT_DEV_API_KEY = "rh_dev_local_key"
 
 # Development operators for the local store. They exist only in the in-memory store,
@@ -115,6 +135,18 @@ class LocalTableQueryBuilder:
 
     def lt(self, column: str, value: Any) -> LocalTableQueryBuilder:
         self._filters.append((column, "lt", value))
+        return self
+
+    def lte(self, column: str, value: Any) -> LocalTableQueryBuilder:
+        self._filters.append((column, "lte", value))
+        return self
+
+    def gt(self, column: str, value: Any) -> LocalTableQueryBuilder:
+        self._filters.append((column, "gt", value))
+        return self
+
+    def gte(self, column: str, value: Any) -> LocalTableQueryBuilder:
+        self._filters.append((column, "gte", value))
         return self
 
     def maybe_single(self) -> LocalTableQueryBuilder:

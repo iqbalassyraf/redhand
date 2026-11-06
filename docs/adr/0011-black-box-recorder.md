@@ -141,3 +141,25 @@ tamper-evident record.
   returns them. The recorder buffer holds payloads in memory until flushed: at most 10,000 events of up to
   about 4 KB, so roughly 40 MB worst case on a 512 MiB instance.
 
+## Addendum (2026-11-06): payload view and export (Phase 3 M2c, backend)
+- **Reading is audited atomically.** `read_event_payload(org, actor, seq)` returns a payload and writes the
+  `organization.blackbox_payload_viewed` audit row in one transaction, so a payload cannot be read through core
+  without a trace and a failed audit write returns nothing. A missing event (or another organization's) returns
+  "not found" and writes no row. The audit row holds the actor, the sequence number and whether the event had
+  arguments or a result, never their text.
+- **Roles (decisions D8 to D10):** viewing a payload: admin and owner. Exporting metadata: security operator and
+  above. Exporting payloads: admin and owner. The router dependency and the service both check, so a new caller
+  that forgets one is still refused.
+- **Export streams.** Rows are read in chunks of 500 by `seq` (keyset), so memory is bounded by the chunk, not
+  the export; the cap is 50,000 rows. The audit row is written before the first read. A failure mid-stream
+  cuts the connection; JSON Lines ends with a trailer so a short file is detectable.
+- **Limits:** per operator and in process (like the other limiters): 60 payload views a minute, 10 exports an
+  hour. Several core instances multiply the allowance. Responses are `Cache-Control: no-store`.
+- **Capabilities:** `GET /v1/blackbox/settings` includes what the caller's role may do (decision D12). It only
+  lets the dashboard hide buttons; every action is still checked on the server.
+- **Alternatives rejected:** payloads in the timeline response (every poll would carry them); auditing in
+  application code after the read (the audit could fail after the data was returned); signed download links
+  or object storage (new infrastructure for an occasional export).
+- **Residual risk:** a compromised admin account can read and export captured payloads. It is audited,
+  rate-limited and capped, not prevented.
+

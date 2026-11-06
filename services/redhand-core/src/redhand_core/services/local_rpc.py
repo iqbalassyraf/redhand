@@ -524,6 +524,41 @@ def _control_payload_capture(store: LocalSupabaseAdapter, p: dict[str, Any]) -> 
     return {"changed": True, "payload_capture_enabled": enabled}
 
 
+def _read_event_payload(store: LocalSupabaseAdapter, p: dict[str, Any]) -> dict[str, Any]:
+    org, actor, seq = str(p["p_org"]), str(p["p_actor"]), p["p_seq"]
+    if not isinstance(seq, int) or seq < 1:
+        raise _error("22023", "organization, actor and a positive seq are required")
+    row = next(
+        (e for e in store.tables.get("agent_events", []) if str(e["organization_id"]) == org and e["seq"] == seq), None
+    )
+    if row is None:
+        return {"found": False}
+    _append_audit(
+        store, org=org, actor=actor, action="organization.blackbox_payload_viewed", target_type="organization",
+        target_id=org, reason=None,
+        details={
+            "seq": seq, "had_arguments": row.get("arguments_redacted") is not None,
+            "had_result": row.get("result_excerpt") is not None,
+        },
+    )
+    return {
+        "found": True, "seq": seq,
+        "arguments_redacted": row.get("arguments_redacted"), "result_excerpt": row.get("result_excerpt"),
+    }
+
+
+def _audit_blackbox_export(store: LocalSupabaseAdapter, p: dict[str, Any]) -> None:
+    org, actor, details = str(p["p_org"]), str(p["p_actor"]), p["p_details"]
+    if not isinstance(details, dict):
+        raise _error("22023", "organization, actor and details are required")
+    if not any(str(o.get("id")) == org for o in store.tables.get("organizations", [])):
+        raise _error("P0002", "organization not found")
+    _append_audit(
+        store, org=org, actor=actor, action="organization.blackbox_exported", target_type="organization",
+        target_id=org, reason=None, details=details,
+    )
+
+
 def _record_events(store: LocalSupabaseAdapter, p: dict[str, Any]) -> dict[str, Any]:
     instance, batch_id, org, items = str(p["p_instance"]), str(p["p_batch_id"]), str(p["p_org"]), p["p_items"]
     if not 8 <= len(instance) <= 64:
@@ -725,6 +760,8 @@ HANDLERS: dict[str, RpcHandler] = {
     "control_org_budget_default": _control_org_budget_default,
     "control_blackbox_retention": _control_blackbox_retention,
     "control_payload_capture": _control_payload_capture,
+    "read_event_payload": _read_event_payload,
+    "audit_blackbox_export": _audit_blackbox_export,
     "record_usage": _record_usage,
     "mark_budget_frozen": _mark_budget_frozen,
     "usage_by_others": _usage_by_others,

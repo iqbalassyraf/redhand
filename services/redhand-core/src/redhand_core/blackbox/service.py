@@ -8,7 +8,12 @@ filters here), never by trusting a client-supplied tenant id (CLAUDE.md §5.3).
 from __future__ import annotations
 
 import logging
-from typing import Any
+import csv
+import io
+import json
+from collections.abc import AsyncIterator
+from datetime import datetime
+from typing import Any, Literal
 from uuid import UUID
 
 from fastapi import HTTPException, status
@@ -16,11 +21,14 @@ from postgrest.exceptions import APIError
 
 from redhand_core.auth.operator import OperatorContext, Role
 from redhand_core.blackbox.models import (
+    BlackBoxCapabilities,
     BlackBoxEventView,
     BlackBoxRetentionRequest,
     BlackBoxSettingsResponse,
+    EventPayloadResponse,
     GatewayEventItem,
     PayloadCaptureRequest,
+    PayloadExcerpt,
     VerifyResponse,
 )
 # The control-action helpers are shared with the passport control actions so every control endpoint maps
@@ -246,3 +254,160 @@ async def set_payload_capture(
         payload_capture_enabled=request.enabled,
         changed=bool(data["changed"]),
     )
+
+
+def capabilities_for(role: Role) -> BlackBoxCapabilities:
+    """Mirrors the role checks below and in the router, for the dashboard to hide buttons. Never an authority."""
+    return BlackBoxCapabilities(
+        can_manage=role >= Role.ADMIN,
+        can_turn_capture_off=role >= Role.SECURITY_OPERATOR,
+        can_view_payloads=role >= Role.ADMIN,
+        can_export=role >= Role.SECURITY_OPERATOR,
+        can_export_payloads=role >= Role.ADMIN,
+    )
+
+
+async def read_payload(supabase: Any, operator: OperatorContext, seq: int) -> EventPayloadResponse:
+    """
+    One event's captured payload. The database function audits and reads in one transaction: no payload is
+    returned without an audit row, and a failed audit write returns nothing. Admin only (checked here too,
+    so a caller that forgets the router dependency is still refused).
+    """
+    if operator.role < Role.ADMIN:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "This action requires the 'admin' role or higher.")
+    try:
+        response = await supabase.rpc(
+            "read_event_payload",
+            {"p_org": str(operator.organization_id), "p_actor": str(operator.user_id), "p_seq": seq},
+        ).execute()
+    except APIError as exc:
+        logger.error("Payload read failed: sqlstate=%s", exc.code)  # never the message: it can echo data
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "The payload could not be read.") from None
+    data = response.data
+    if not isinstance(data, dict) or not data.get("found"):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Event not found.")
+    return EventPayloadResponse(
+        seq=int(data["seq"]),
+        arguments_redacted=PayloadExcerpt(**data["arguments_redacted"]) if data.get("arguments_redacted") else None,
+        result_excerpt=PayloadExcerpt(**data["result_excerpt"]) if data.get("result_excerpt") else None,
+    )
+
+
+MAX_EXPORT_ROWS = 50_000
+EXPORT_CHUNK = 500
+ExportFormat = Literal["jsonl", "csv"]
+_EXPORT_COLUMNS = "seq,agent_id,occurred_at,server,method,tool_name,decision,reasons,upstream_status,latency_ms,argument_keys"
+_CSV_HEADER = [
+    "seq", "occurred_at", "agent_id", "server", "method", "tool_name", "decision", "reasons", "upstream_status",
+    "latency_ms", "argument_keys",
+]
+_FORMULA_PREFIXES = ("=", "+", "-", "@", "\t", "\r")
+
+
+def csv_cell(value: Any) -> Any:
+    """Text that a spreadsheet would run as a formula (starts with = + - @ tab CR) is prefixed with an
+    apostrophe so it opens as text. Numbers and empty cells pass through."""
+    if isinstance(value, str) and value.startswith(_FORMULA_PREFIXES):
+        return "'" + value
+    return value
+
+
+def _csv_line(cells: list[Any]) -> str:
+    buffer = io.StringIO()
+    csv.writer(buffer, lineterminator="\r\n").writerow([csv_cell(c) for c in cells])
+    return buffer.getvalue()
+
+
+def _row_cells(row: dict[str, Any], include_payloads: bool) -> list[Any]:
+    cells: list[Any] = [
+        row["seq"], row["occurred_at"], row["agent_id"], row.get("server") or "", row["method"],
+        row.get("tool_name") or "", row["decision"], "; ".join(row.get("reasons") or []),
+        row.get("upstream_status"), row.get("latency_ms"), "; ".join(row.get("argument_keys") or []),
+    ]
+    if include_payloads:
+        args, result = row.get("arguments_redacted"), row.get("result_excerpt")
+        cells += [(args or {}).get("text", ""), (result or {}).get("text", "")]
+    return cells
+
+
+async def audit_export(supabase: Any, operator: OperatorContext, details: dict[str, Any]) -> None:
+    """Records that an export is starting. Called BEFORE any row is read: if it fails, nothing is exported."""
+    try:
+        await supabase.rpc(
+            "audit_blackbox_export",
+            {"p_org": str(operator.organization_id), "p_actor": str(operator.user_id), "p_details": details},
+        ).execute()
+    except APIError as exc:
+        logger.error("Export audit failed: sqlstate=%s", exc.code)
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "The export could not be started.") from None
+
+
+async def export_events(
+    supabase: Any,
+    organization_id: UUID,
+    *,
+    fmt: ExportFormat,
+    include_payloads: bool,
+    agent_id: UUID | None,
+    decision: str | None,
+    since: datetime | None,
+    until: datetime | None,
+) -> AsyncIterator[str]:
+    """
+    The organization's events, oldest first, as JSON Lines or CSV, at most MAX_EXPORT_ROWS. Read in chunks of
+    EXPORT_CHUNK by keyset (seq), so memory is bounded by the chunk size, not the export size. JSON Lines ends
+    with a trailer line saying how many rows were written and whether the cap cut the export short.
+    """
+    columns = _EXPORT_COLUMNS + (",arguments_redacted,result_excerpt" if include_payloads else "")
+    if fmt == "csv":
+        yield _csv_line(_CSV_HEADER + (["arguments_redacted", "result_excerpt"] if include_payloads else []))
+    written, last_seq, capped = 0, 0, False
+    while True:
+        remaining = MAX_EXPORT_ROWS - written
+        if remaining <= 0:
+            probe = await _export_query(
+                supabase, organization_id, "seq", last_seq, 1, agent_id, decision, since, until
+            )
+            capped = bool(probe)
+            break
+        rows = await _export_query(
+            supabase, organization_id, columns, last_seq, min(EXPORT_CHUNK, remaining), agent_id, decision, since, until
+        )
+        if not rows:
+            break
+        for row in rows:
+            if fmt == "csv":
+                yield _csv_line(_row_cells(row, include_payloads))
+            else:
+                yield json.dumps(_jsonl_record(row, include_payloads), ensure_ascii=False, separators=(",", ":")) + "\n"
+        written += len(rows)
+        last_seq = int(rows[-1]["seq"])
+        if len(rows) < min(EXPORT_CHUNK, remaining):
+            break
+    if fmt == "jsonl":
+        yield json.dumps({"export_complete": not capped, "rows": written, "capped_at": MAX_EXPORT_ROWS if capped else None}) + "\n"
+
+
+def _jsonl_record(row: dict[str, Any], include_payloads: bool) -> dict[str, Any]:
+    record = {key: row.get(key) for key in _EXPORT_COLUMNS.split(",")}
+    if include_payloads:
+        record["arguments_redacted"] = row.get("arguments_redacted")
+        record["result_excerpt"] = row.get("result_excerpt")
+    return record
+
+
+async def _export_query(
+    supabase: Any, organization_id: UUID, columns: str, after_seq: int, size: int,
+    agent_id: UUID | None, decision: str | None, since: datetime | None, until: datetime | None,
+) -> list[dict[str, Any]]:
+    query = supabase.table("agent_events").select(columns).eq("organization_id", str(organization_id)).gt("seq", after_seq)
+    if agent_id is not None:
+        query = query.eq("agent_id", str(agent_id))
+    if decision is not None:
+        query = query.eq("decision", decision)
+    if since is not None:
+        query = query.gte("occurred_at", since.isoformat())
+    if until is not None:
+        query = query.lte("occurred_at", until.isoformat())
+    res = await query.order("seq").limit(size).execute()
+    return list(res.data or [])
