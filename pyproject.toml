@@ -75,6 +75,7 @@ files = [
     "services/redhand-core/src/redhand_core/services/local_rpc.py",
     "services/redhand-core/src/redhand_core/services/notifications/slack.py",
     "agentwall/src/gateway",
+    "agentwall/src/bench",
     "agentwall/src/main.py",
     "agentwall/src/firewall/engine.py",
     "agentwall/src/telemetry/audit_logger.py",
