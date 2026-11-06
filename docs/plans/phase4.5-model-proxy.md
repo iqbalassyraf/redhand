@@ -1,6 +1,6 @@
 > **Status (2026-11-06):** the owner asked for Phase 4.5 to be built as well as possible. This document is the
-> original go/no-go evaluation (drafted by a cloud session on 2026-11-06). A concrete, costed build plan that
-> supersedes its open decisions is written separately and needs the owner's approval before any code.
+> original go/no-go evaluation (drafted by a cloud session on 2026-11-06). The approved build plan that
+> supersedes its open decisions is `phase4.5-build-plan.md`.
 > Section 3 below also uses older OWASP numbering in places; verify against the current OWASP list before anything
 > is published.
 
