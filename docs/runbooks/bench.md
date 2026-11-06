@@ -27,6 +27,14 @@ credentials are written as placeholders such as `{{AWS_KEY}}` and expanded from 
 secret-shaped string sits in the repository. Rules: at least 20 samples per side per category; at least 30% of the
 benign samples are hard cases; every category has Bahasa Malaysia samples (a native speaker should review them).
 
+## Dev and held-out samples
+`<category>.jsonl` are **dev** samples: rules are written and tuned against them, so they flatter the rules. `<category>.holdout.jsonl` are
+**held-out** samples (ids from 100): they are only ever used to report, never to tune. A category that has at least 20 held-out
+samples on each side is rated on them; the report lists dev misses for rule authors and deliberately does not list held-out misses.
+Process rules: never edit a rule to fit a held-out sample's text; fix a held-out miss only by adding a varied dev sample and
+generalising, and write a fresh held-out set before quoting new numbers; disclose any rule change made after seeing held-out
+results (the first held-out run for tool poisoning was 12 of 20; one pattern added for a dev miss moved it to 13 of 20).
+
 ## Limits worth knowing
 - The corpus is small and written by us. Real attackers rephrase, so the numbers flatter the detectors.
 - Variants of one idea are correlated; the families column shows how many distinct ideas stand behind the count.

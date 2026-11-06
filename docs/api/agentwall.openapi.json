@@ -22,7 +22,8 @@
               "CREDENTIAL_EXPOSURE",
               "FILESYSTEM_RISK",
               "SCHEMA_RISK",
-              "NETWORK_RISK"
+              "NETWORK_RISK",
+              "DESCRIPTION_RISK"
             ],
             "title": "Category",
             "type": "string"

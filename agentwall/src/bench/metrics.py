@@ -73,15 +73,29 @@ class CategoryResult:
 
 @dataclass(slots=True)
 class Evaluation:
-    categories: dict[str, CategoryResult]
+    categories: dict[str, CategoryResult]  # dev samples: used to write and tune rules, so they flatter them
     detectors: tuple[str, ...]
+    holdout: dict[str, CategoryResult] = field(default_factory=dict)  # held-out samples: reporting only, never tuned on
+
+    def headline(self, category: str) -> tuple[CategoryResult, str]:
+        """The result to quote for a category: held-out when it has enough samples on both sides, else dev (labelled)."""
+        held = self.holdout.get(category)
+        if held is not None and held.n_malicious >= MIN_SAMPLES_PER_SIDE and held.n_benign >= MIN_SAMPLES_PER_SIDE:
+            return held, "held-out"
+        return self.categories[category], "dev only"
 
     @property
     def total_samples(self) -> int:
-        return sum(c.n_malicious + c.n_benign for c in self.categories.values())
+        return sum(c.n_malicious + c.n_benign for c in (*self.categories.values(), *self.holdout.values()))
 
 
 def evaluate(samples: list[Sample], detectors: tuple[Detector, ...] = DETECTORS) -> Evaluation:
+    dev, held = _evaluate_split([s for s in samples if s.split == "dev"], detectors), \
+        _evaluate_split([s for s in samples if s.split == "holdout"], detectors)
+    return Evaluation(dev, tuple(d.name for d in detectors), held)
+
+
+def _evaluate_split(samples: list[Sample], detectors: tuple[Detector, ...]) -> dict[str, CategoryResult]:
     results: dict[str, CategoryResult] = {}
     families: dict[str, set[str]] = {}
     for sample in samples:
@@ -107,4 +121,4 @@ def evaluate(samples: list[Sample], detectors: tuple[Detector, ...] = DETECTORS)
                     res.hard_false_alarms += 1
     for category, fams in families.items():
         results[category].families = len(fams)
-    return Evaluation(dict(sorted(results.items())), tuple(d.name for d in detectors))
+    return dict(sorted(results.items()))

@@ -20,7 +20,7 @@ from agentwall.src.bench.metrics import (
     MIN_SAMPLES_PER_SIDE, CategoryResult, evaluate, wilson,
 )
 from agentwall.src.bench.report import (
-    baseline_is_current, compare_with_baseline, render_json, render_markdown, render_text, to_json,
+    baseline_is_current, compare_with_baseline, render_markdown, to_json,
 )
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -39,7 +39,7 @@ def _sample(i: int, label: str = "malicious", category: str = "injection_indirec
 # --- the corpus -----------------------------------------------------------------------------------------------
 
 def test_the_committed_corpus_loads_and_every_category_has_enough_samples_on_both_sides() -> None:
-    samples = load_corpus()
+    samples = [s for s in load_corpus() if s.split == "dev"]
     by_category: dict[str, dict[str, int]] = {}
     for s in samples:
         by_category.setdefault(s.category, {"malicious": 0, "benign": 0})[s.label] += 1
@@ -222,8 +222,10 @@ def test_reports_are_honest_about_what_is_not_covered_and_never_claim_perfection
     assert "flatter" in markdown and "not covered" in markdown and "RedHand only checks what flows through its gateway" in markdown
     for name in ("LLM04", "LLM08", "LLM09"):
         assert re.search(rf"\| {name} \|.*not (measured|covered)|\| {name} \|.*Not covered", markdown, re.IGNORECASE)
-    for text in (markdown, render_text(ev, digest), render_json(ev, digest)):
-        assert not re.search(r"= 100%|\s100%\s+\d", text)  # no category may be reported as a flat 100%
+    # A flat "100%" may appear in the DEV table (the rules are written against those samples) but never in what is
+    # meant to be quoted: the held-out results and the OWASP table.
+    quotable = markdown.split("## Held-out results")[1]
+    assert "= 100%" not in quotable
 
 
 def test_the_report_is_deterministic() -> None:
@@ -267,3 +269,51 @@ def test_cli_update_baseline_writes_a_file_that_passes_its_own_check(tmp_path: P
     assert bench_cli.main(["--update-baseline", str(out), "--out", str(tmp_path / "r.txt")]) == 0
     assert bench_cli.main(["--check", str(out), "--out", str(tmp_path / "r2.txt")]) == 0
     assert json.loads(out.read_text(encoding="utf-8")) == json.loads(BASELINE.read_text(encoding="utf-8"))
+
+
+# --- held-out samples ---------------------------------------------------------------------------------------
+
+def test_holdout_samples_are_marked_by_file_name_and_never_share_ids_with_dev() -> None:
+    samples = load_corpus()
+    holdout = [s for s in samples if s.split == "holdout"]
+    assert holdout and all(s.id.split("-")[1] >= "100" for s in holdout)
+    assert len({s.id for s in samples}) == len(samples)
+    for category in {s.category for s in holdout}:
+        mal = sum(1 for s in holdout if s.category == category and s.label == "malicious")
+        ben = sum(1 for s in holdout if s.category == category and s.label == "benign")
+        assert mal >= MIN_SAMPLES_PER_SIDE and ben >= MIN_SAMPLES_PER_SIDE, category
+
+
+def test_a_holdout_file_with_an_unknown_suffix_is_refused(tmp_path: Path) -> None:
+    (tmp_path / "secret_leak.extra.jsonl").write_text(json.dumps(_row()) + "\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="unknown corpus file kind"):
+        load_corpus(tmp_path)
+
+
+def test_evaluate_keeps_dev_and_holdout_apart_and_quotes_holdout_when_it_has_enough_samples() -> None:
+    dev = [_sample(i) for i in range(1, 21)] + [_sample(i, "benign") for i in range(21, 41)]
+    held = [_sample(100 + i, split="holdout") for i in range(20)] + [_sample(200 + i, "benign", split="holdout") for i in range(20)]
+    always = _detector("always", lambda s: True)
+    never = _detector("never", lambda s: False)
+    ev = evaluate(dev + held, (always,))
+    assert ev.categories["injection_indirect"].detected == 20 and ev.holdout["injection_indirect"].false_alarms == 20
+    headline, label = ev.headline("injection_indirect")
+    assert label == "held-out" and headline is ev.holdout["injection_indirect"]
+    small = evaluate(dev + held[:5], (never,))
+    assert small.headline("injection_indirect")[1] == "dev only"  # too few held-out samples to quote
+
+
+def test_the_gate_also_watches_the_held_out_results() -> None:
+    ev, digest = _current()
+    baseline = to_json(ev, digest)
+    baseline["holdout"]["tool_poisoning"]["detected"] += 1
+    assert any("(held-out)" in p and "detection fell" in p for p in compare_with_baseline(ev, digest, baseline))
+
+
+def test_the_report_labels_dev_results_as_flattering_and_keeps_held_out_misses_unlisted() -> None:
+    ev, digest = _current()
+    markdown = render_markdown(ev, digest)
+    assert "flatter them" in markdown and "Held-out results" in markdown
+    held = ev.holdout["tool_poisoning"]
+    assert held.missed  # there are held-out misses...
+    assert not any(missed_id in markdown for missed_id in held.missed)  # ...and they are deliberately not listed

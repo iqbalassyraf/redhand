@@ -21,11 +21,13 @@ from uuid import uuid4
 from fastapi import Depends, FastAPI, Header, HTTPException, Path, Query, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, PlainTextResponse, Response
+from pydantic import BaseModel, ConfigDict, Field
 import structlog
 
 from ..config.settings import Settings, get_settings
 from .firewall.engine import FirewallPolicyEngine
 from .firewall.mcp_vetting import MCPServerAuditor, MCPVettingReport
+from .gateway.scan import ScanError, list_tools
 from .gateway.budget import BudgetMeter, HttpUsageReporter
 from .gateway.context import CoreContextClient
 from .gateway.identity import AgentTokenVerifier
@@ -161,6 +163,7 @@ class _IpRateLimiter:
 
 
 _vet_limiter = _IpRateLimiter()
+_scan_limiter = _IpRateLimiter()
 
 
 async def _read_json_body(request: Request, limit: int) -> Any:
@@ -230,6 +233,38 @@ async def vet_mcp_manifest(request: Request) -> MCPVettingReport:
     if not isinstance(manifest, dict):
         raise HTTPException(status_code=400, detail="Invalid JSON manifest payload")
     return MCPServerAuditor.audit_manifest(manifest)
+
+
+class ScanRequest(BaseModel):
+    """What redhand-core asks the gateway to scan. The URL is a server REGISTERED in the caller's organization; core checks
+    that, the gateway re-checks the destination (https, public addresses, no redirects) before sending anything."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    server_url: str = Field(min_length=8, max_length=2048)
+    server_name: str = Field(default="server", max_length=128)
+
+
+class ScanResponse(BaseModel):
+    report: MCPVettingReport
+    tool_count: int
+    truncated: bool
+
+
+SCAN_REQUESTS_PER_MINUTE = 20
+
+
+@app.post("/internal/v1/scan", response_model=ScanResponse, dependencies=[Depends(require_service_token)], include_in_schema=False)
+async def scan_registered_server(payload: ScanRequest) -> ScanResponse:
+    """Lists a registered server's tools through the gateway's destination check and audits them. Service token only."""
+    if not _scan_limiter.allow("scan", SCAN_REQUESTS_PER_MINUTE, time.monotonic()):
+        raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail="Too many scans; try again shortly.")
+    try:
+        tools, truncated = await list_tools(gateway.forwarder, payload.server_url)
+    except ScanError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from None
+    report = MCPServerAuditor.audit_manifest({"name": payload.server_name, "tools": tools})
+    return ScanResponse(report=report, tool_count=len(tools), truncated=truncated)
 
 
 @app.get("/v1/policies", dependencies=[Depends(require_service_token)])

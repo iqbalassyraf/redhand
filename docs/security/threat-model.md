@@ -1,6 +1,6 @@
 # Threat model: Phases 1 through 3 (Identity and control; Stop things; See things)
 
-**Last updated:** 2026-11-06. Update this file whenever a trust boundary changes (CLAUDE.md §5.1).
+**Last updated:** 2026-11-07. Update this file whenever a trust boundary changes (CLAUDE.md §5.1).
 
 ## 1. Components and trust boundaries
 
@@ -23,6 +23,7 @@
 | 5 | Gateway → MCP server | Optional upstream credential supplied by the agent | Destination check per request: https, public IPs, no redirects |
 | 6 | Telegram → core webhook | Secret header (constant-time compare), then the chat must be linked to an operator whose role is re-read on every command | Public endpoint by necessity; private chats only; stop-only commands (ADR 0008) |
 | 7 | Gateway → core (`/internal/v1/events`) | Shared service token, constant-time compare (same boundary as #3) | Each batch claims one organization; every item's agent is re-checked against that organization inside `record_events()` (ADR 0011) |
+| 10 | Core → gateway (`/internal/v1/scan`) | Shared service token, constant-time compare | The URL is a registered server of the caller's organization chosen by core; the gateway re-checks the destination before sending |
 | 9 | Gateway → core (`/internal/v1/trips`) | Shared service token, constant-time compare | Identifiers only; every claim re-checked in `record_trip()` (same boundary family as #3 and #7) |
 | 8 | Operator → core (`/v1/blackbox/*`) | Same as #1 | Timeline, verify, payload view and export all filtered by the caller's organization_id in SQL |
 
@@ -69,6 +70,9 @@
 | Agent uses or reads planted bait (Phase 3 M3/M4) | Honeytokens: values generated server side, shown once, stored as SHA-256 only; the gateway holds digests only and matches by lookup (no I/O); a call carrying bait is refused before upstream, bait in a result is redacted, a decoy tool is never forwarded; the context fields are required (an older core makes the gateway deny); a scanner error denies; core re-checks the agent and reference against the organization and decides the action from what it stores; trips are idempotent, audited as the system actor, alerted (value never included) and, per the stored action, freeze the agent | Exact-match detection on three issued formats: a re-encoded, split or beyond-64-KiB value is not found; a freeze takes effect on the next call after core processes the trip (at most about 4 s of context cache); a compromised gateway instance holding a valid service token could send false trips (they alert or freeze an agent of its own tenant, visible in the audit) |
 | Honeytoken value exposed | Never logged, never in events, alerts, audit rows, list responses or the context; no payload is captured for a trip; creation responses are `no-store` | The value is visible to the person who creates it, and to anything they paste it into |
 | Trip flood used to spam or freeze | One alert per agent, bait and place per 5 minutes; 50 reports in flight at most; the report endpoint needs the service token | A flood of real trips still freezes that agent (by design) |
+| Poisoned MCP tool description hijacks an agent (Phase 4 M2) | Description rules (hidden instructions, concealment, exfiltration, cross-tool coercion, invisible characters) in the manifest auditor, English and Bahasa Malaysia, with text normalisation against obfuscation; findings never repeat the description; measured on a held-out set | Pattern rules miss rephrased attacks (first held-out detection 12 to 13 of 20); only the first 8 KiB of a description is read for phrases (length is flagged); a server that changes after approval is not caught until tool pinning (M3) |
+| Live scan used to make RedHand fetch an internal address | Registered servers only (organization-scoped in core, URL from the database, never the request); fetched by the gateway through the agent-traffic destination check (https, public addresses, no redirects, size and time limits, 5 pages, 500 tools); admin role; 20 scans a minute; service token on the gateway endpoint; results not stored | DNS rebinding between the check and the connect (same residual risk as agent traffic) |
+| Scan result carries an attack to the admin reading it | Server text is reduced to name, description and schema, stripped of control and invisible characters and length-capped in core; findings quote rule wording only; the dashboard renders plain text | A tool name (up to 128 characters) is shown as plain text |
 | Black Box recorder outage affects enforcement | `EventRecorder.record()` does no I/O and never raises into the decision path; flush failures only grow the buffer | None known |
 
 ## 3. Out of scope so far

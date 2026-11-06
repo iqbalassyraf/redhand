@@ -107,7 +107,7 @@ risk to measure. No LLM calls, no new services, no new dependencies.
 |---|---|---|
 | M0 | Foundations | n/a |
 | M1 | Measurement | 1 |
-| M2 | MCP Scanner | 2, 3 |
+| M2 | MCP Scanner (built 2026-11-07; staging check pending) | 2, 3 |
 | M3 | Tool pinning | 4 |
 | M4 | Radar and output checks | 5, 6, 10 |
 | M5 | Canary and secret scanning | 7, 8 |

@@ -154,6 +154,13 @@ class Settings(BaseSettings):
             "unset, those endpoints reject every call, so the gateway denies all traffic."
         ),
     )
+    GATEWAY_URL: str | None = Field(
+        default=None,
+        description=(
+            "Base URL of the AgentWall gateway (for example https://redhand-gateway-xxxx.a.run.app). Used only for the "
+            "MCP Scanner's live scan of registered servers; when unset that scan answers 503 and nothing else changes."
+        ),
+    )
     # -------------------------------------------------------------------------
     # Telegram panic command (Phase 2). Unset token or secret disables the feature.
     # -------------------------------------------------------------------------
