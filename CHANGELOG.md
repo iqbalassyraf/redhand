@@ -56,6 +56,13 @@
   `docs/runbooks/honeytokens.md` and ADR 0012.
 
 ### Fixed
+- Black Box: an event could be stored twice (seen on staging as two identical rows). The gateway's recorder gave a
+  retried batch a new id, so core's duplicate protection could not recognise it, and a flush started by the
+  background loop could run alongside one started by a request and send the same events twice. A batch now keeps
+  its id and exact contents until core acknowledges it, and flushes run one at a time. Events already stored twice
+  stay (the record is append-only); the hash chain was never affected. Gateway-only change: redeploy the gateway.
+
+### Fixed
 - The Black Box stored no events on Supabase: the event hash helper could not find pgcrypto's `digest()`
   (installed in the `extensions` schema), and the original migration could not be applied on a fresh
   Supabase database. Migration `20261110000100_blackbox_hash_search_path.sql` (PR #9).
