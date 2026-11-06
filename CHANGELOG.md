@@ -37,6 +37,14 @@
   cacheable. `GET /v1/blackbox/settings` now says what the caller's role may do. New migration
   `20261113000000_blackbox_access.sql`. Deploy order: migration, then core. The dashboard controls follow.
 
+- Black Box dashboard (M2c): the Black Box page now has a recording-settings panel (retention periods,
+  payload capture on and off, with a plain-language dialog before capture is turned on), a banner while capture
+  is on, an event detail drawer that shows the redacted payload to admins (each read audited), an export button
+  (JSON Lines or CSV; "with payloads" for admins), and **Delete captured payloads now** (admin, confirmation,
+  audited with the count; events and the tamper-evident chain stay). Buttons a role cannot use are hidden;
+  the server still enforces every action. New endpoint `POST /v1/blackbox/payloads/clear`, new migration
+  `20261114000000_blackbox_clear_payloads.sql`. Deploy order: migration, then core, then the dashboard.
+
 ### Fixed
 - The Black Box stored no events on Supabase: the event hash helper could not find pgcrypto's `digest()`
   (installed in the `extensions` schema), and the original migration could not be applied on a fresh

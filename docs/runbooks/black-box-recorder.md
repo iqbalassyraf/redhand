@@ -29,8 +29,7 @@ By default the Black Box stores **metadata only**: no argument values and no res
 **payload capture** so each recorded call also stores a redacted excerpt of its arguments and result.
 - **Turn on (admin, confirmation required):** `PUT /v1/blackbox/payload-capture` with
   `{"enabled": true, "confirm": true, "reason": "..."}`. **Turn off (security operator, no confirmation):**
-  `{"enabled": false}`. Both are audited (`organization.payload_capture_changed`). A dashboard control comes with
-  M2c. `GET /v1/blackbox/settings` shows the current state. A change reaches the gateway within a few seconds
+  `{"enabled": false}`. Both are audited (`organization.payload_capture_changed`). The dashboard's Black Box page has the same controls. `GET /v1/blackbox/settings` shows the current state. A change reaches the gateway within a few seconds
   (the context cache is at most 4 s).
 - **What is stored:** for each `tools/call`, compact JSON text of the arguments (and the result, for allowed
   calls), cut to 2 KB, after redaction. Refused calls keep the arguments only. Kept for the payload retention
@@ -42,13 +41,15 @@ By default the Black Box stores **metadata only**: no argument values and no res
   Any single string over 16 KB is not captured at all (a marker is stored instead). Capture still stores data
   your agents handled. **Before turning it on, check you have a lawful basis to store that data (for example
   under the PDPA); this note is a prompt for your own legal review, not a statement of compliance.**
-- **Turning it off does not delete what was captured.** To remove it sooner, shorten the payload retention
-  (`PUT /v1/blackbox/retention`); the next daily purge clears it.
+- **Turning it off does not delete what was captured.** To remove it at once use **Delete captured payloads now**
+  in the dashboard (`POST /v1/blackbox/payloads/clear`, admin, confirmation, audited with the count). Events
+  and the chain stay, so "Verify chain" still passes. Or shorten the payload retention; the next daily purge
+  clears it.
 - **Where to see it:** admins and owners can read one event's payload with
   `GET /v1/blackbox/events/{seq}/payload`; the timeline API never returns payloads. Each read is audited
   (`organization.blackbox_payload_viewed`, with the actor and sequence number, never the text) in the same
-  database transaction as the read, and limited to 60 per minute per operator. A dashboard view comes with
-  the second half of M2c.
+  database transaction as the read, and limited to 60 per minute per operator. The dashboard shows it in the
+  event detail drawer (admins only).
 
 ## Export (M2c)
 `GET /v1/blackbox/export?format=jsonl|csv` downloads the timeline, oldest first, at most 50,000 rows.

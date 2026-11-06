@@ -7,9 +7,18 @@
 
 import React, { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { Hand, LogOut, RefreshCw, ShieldCheck } from "lucide-react";
+import { Download, Hand, LogOut, RefreshCw, ShieldCheck } from "lucide-react";
 
-import { ApiError, type BlackBoxDecision, type BlackBoxEvent, blackboxApi } from "@/lib/api";
+import { EventDrawer } from "@/components/blackbox/EventDrawer";
+import { SettingsPanel } from "@/components/blackbox/SettingsPanel";
+import {
+  ApiError,
+  type BlackBoxDecision,
+  type BlackBoxEvent,
+  type BlackBoxSettings,
+  blackboxApi,
+  downloadBlackBoxExport,
+} from "@/lib/api";
 import { useAuth, useRequiredSession } from "@/lib/auth";
 
 const DECISION_STYLE: Record<BlackBoxDecision, string> = {
@@ -38,6 +47,12 @@ export default function BlackBoxPage() {
   const [notice, setNotice] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [verifying, setVerifying] = useState(false);
+  const [settings, setSettings] = useState<BlackBoxSettings | null>(null);
+  const [settingsBusy, setSettingsBusy] = useState(false);
+  const [selected, setSelected] = useState<BlackBoxEvent | null>(null);
+  const [exportFormat, setExportFormat] = useState<"jsonl" | "csv">("jsonl");
+  const [exportPayloads, setExportPayloads] = useState(false);
+  const [exporting, setExporting] = useState(false);
 
   const handleError = useCallback(
     (err: unknown) => {
@@ -72,6 +87,54 @@ export default function BlackBoxPage() {
     },
     [token, decisionFilter, handleError]
   );
+
+  const loadSettings = useCallback(async () => {
+    if (!token) return;
+    try {
+      setSettings(await blackboxApi.settings(token));
+    } catch (err) {
+      handleError(err);
+    }
+  }, [token, handleError]);
+
+  useEffect(() => {
+    loadSettings();
+  }, [loadSettings]);
+
+  // Runs a settings change and shows what the server answered; the server decides, the UI only reports.
+  const changeSettings = async (action: () => Promise<BlackBoxSettings | { cleared: number }>, done: string) => {
+    setSettingsBusy(true);
+    setError(null);
+    setNotice(null);
+    try {
+      const result = await action();
+      setNotice("cleared" in result ? `Deleted payloads from ${result.cleared} event(s).` : done);
+      await loadSettings();
+    } catch (err) {
+      handleError(err);
+    } finally {
+      setSettingsBusy(false);
+    }
+  };
+
+  const onExport = async () => {
+    if (!token) return;
+    setExporting(true);
+    setError(null);
+    setNotice(null);
+    try {
+      await downloadBlackBoxExport(token, {
+        format: exportFormat,
+        includePayloads: exportPayloads && !!settings?.capabilities?.can_export_payloads,
+        decision: decisionFilter || undefined,
+      });
+      setNotice("Export downloaded. It was recorded in the audit log. Handle it as customer data.");
+    } catch (err) {
+      handleError(err);
+    } finally {
+      setExporting(false);
+    }
+  };
 
   useEffect(() => {
     load({ reset: true });
@@ -141,8 +204,10 @@ export default function BlackBoxPage() {
           <div>
             <h1 className="text-[18px] font-bold">Black Box Recorder</h1>
             <p className="text-[12px] text-[#606060]">
-              Every tool call the gateway allowed, refused or failed to forward, through RedHand only.
-              Metadata only: no raw arguments or results are stored.
+              Every tool call the gateway allowed, refused or failed to forward, through RedHand only.{" "}
+              {settings?.payload_capture_enabled
+                ? "Payload capture is ON: redacted excerpts of arguments and results are stored."
+                : "Metadata only: no raw arguments or results are stored."}
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -162,6 +227,29 @@ export default function BlackBoxPage() {
           </div>
         </div>
 
+        {settings?.payload_capture_enabled ? (
+          <div className="mb-3 rounded-[8px] border border-[#FFE0B2] bg-[#FFF8EC] px-3 py-2 text-[12px] text-[#8A5A00]">
+            Payload capture is on. Redacted excerpts may still contain names or free text. Only admins can read them, and every read is audited.
+          </div>
+        ) : null}
+
+        {settings ? (
+          <SettingsPanel
+            settings={settings}
+            busy={settingsBusy}
+            onSaveRetention={(r, p, reason) =>
+              changeSettings(() => blackboxApi.setRetention(token, r, p, reason, true), "Retention updated.")
+            }
+            onSetCapture={(enabled, reason) =>
+              changeSettings(
+                () => blackboxApi.setCapture(token, enabled, reason, enabled),
+                enabled ? "Payload capture is on." : "Payload capture is off."
+              )
+            }
+            onClearPayloads={(reason) => changeSettings(() => blackboxApi.clearPayloads(token, reason), "")}
+          />
+        ) : null}
+
         {error ? (
           <div className="mb-3 rounded-[8px] border border-[#FDECEC] bg-[#FFF5F5] px-3 py-2 text-[12px] text-[#B42318]">{error}</div>
         ) : null}
@@ -169,7 +257,7 @@ export default function BlackBoxPage() {
           <div className="mb-3 rounded-[8px] border border-[#E6F4EA] bg-[#F3FBF5] px-3 py-2 text-[12px] text-[#1E7B34]">{notice}</div>
         ) : null}
 
-        <div className="mb-3 flex gap-1 text-[12px]">
+        <div className="mb-3 flex flex-wrap items-center gap-1 text-[12px]">
           {(["", "ALLOW", "BLOCK", "ERROR"] as const).map((d) => (
             <button
               key={d || "all"}
@@ -181,6 +269,29 @@ export default function BlackBoxPage() {
               {d || "All"}
             </button>
           ))}
+          {settings?.capabilities?.can_export ? (
+            <div className="ml-auto flex items-center gap-2">
+              <select
+                value={exportFormat} onChange={(e) => setExportFormat(e.target.value as "jsonl" | "csv")}
+                className="rounded-[8px] border border-[#E5E5E5] bg-[#FFFFFF] px-2 py-1" aria-label="Export format"
+              >
+                <option value="jsonl">JSON Lines</option>
+                <option value="csv">CSV</option>
+              </select>
+              {settings.capabilities.can_export_payloads ? (
+                <label className="flex items-center gap-1 text-[#606060]">
+                  <input type="checkbox" checked={exportPayloads} onChange={(e) => setExportPayloads(e.target.checked)} />
+                  with payloads
+                </label>
+              ) : null}
+              <button
+                onClick={onExport} disabled={exporting}
+                className="flex items-center gap-1.5 rounded-full border border-[#E5E5E5] bg-[#FFFFFF] px-3 py-1.5 font-semibold hover:bg-[#F2F2F2] disabled:opacity-50"
+              >
+                <Download className="h-3.5 w-3.5" /> {exporting ? "Exporting…" : "Export"}
+              </button>
+            </div>
+          ) : null}
         </div>
 
         <div className="overflow-hidden rounded-[10px] border border-[#E5E5E5] bg-[#FFFFFF]">
@@ -197,7 +308,11 @@ export default function BlackBoxPage() {
             </thead>
             <tbody>
               {events.map((e) => (
-                <tr key={e.seq} className="border-b border-[#F2F2F2] last:border-0">
+                <tr
+                  key={e.seq}
+                  onClick={() => setSelected(e)}
+                  className="cursor-pointer border-b border-[#F2F2F2] last:border-0 hover:bg-[#FAFAFA]"
+                >
                   <td className="px-3 py-2 text-[#606060]">{formatTime(e.occurred_at)}</td>
                   <td className="px-3 py-2">
                     <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${DECISION_STYLE[e.decision]}`}>
@@ -233,6 +348,18 @@ export default function BlackBoxPage() {
           </div>
         ) : null}
       </main>
+      {selected ? (
+        <EventDrawer
+          event={selected}
+          token={token}
+          canViewPayload={!!settings?.capabilities?.can_view_payloads}
+          onClose={() => setSelected(null)}
+          onUnauthorized={() => {
+            signOut();
+            window.location.href = "/login";
+          }}
+        />
+      ) : null}
     </div>
   );
 }

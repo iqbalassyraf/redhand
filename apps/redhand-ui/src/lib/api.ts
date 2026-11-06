@@ -273,6 +273,40 @@ export interface VerifyResult {
   reason: string | null;
 }
 
+export interface BlackBoxCapabilities {
+  can_manage: boolean;
+  can_turn_capture_off: boolean;
+  can_view_payloads: boolean;
+  can_export: boolean;
+  can_export_payloads: boolean;
+}
+
+export interface BlackBoxSettings {
+  retention_days: number;
+  payload_retention_days: number;
+  payload_capture_enabled: boolean;
+  changed: boolean;
+  capabilities: BlackBoxCapabilities | null;
+}
+
+export interface PayloadExcerpt {
+  text: string;
+  truncated: boolean;
+  original_bytes: number;
+}
+
+export interface EventPayload {
+  seq: number;
+  arguments_redacted: PayloadExcerpt | null;
+  result_excerpt: PayloadExcerpt | null;
+}
+
+export interface BlackBoxExportOptions {
+  format: "jsonl" | "csv";
+  includePayloads: boolean;
+  decision?: BlackBoxDecision;
+}
+
 export const blackboxApi = {
   events: (
     t: string,
@@ -288,7 +322,60 @@ export const blackboxApi = {
   },
   verify: (t: string, fromSeq: number, toSeq: number) =>
     apiFetch<VerifyResult>(`/v1/blackbox/verify?from_seq=${fromSeq}&to_seq=${toSeq}`, t),
+  settings: (t: string) => apiFetch<BlackBoxSettings>("/v1/blackbox/settings", t),
+  setRetention: (t: string, retentionDays: number, payloadRetentionDays: number, reason: string, confirm: boolean) =>
+    apiFetch<BlackBoxSettings>("/v1/blackbox/retention", t, {
+      method: "PUT",
+      body: {
+        retention_days: retentionDays,
+        payload_retention_days: payloadRetentionDays,
+        reason: reason || null,
+        confirm,
+      },
+    }),
+  setCapture: (t: string, enabled: boolean, reason: string, confirm: boolean) =>
+    apiFetch<BlackBoxSettings>("/v1/blackbox/payload-capture", t, {
+      method: "PUT",
+      body: { enabled, reason: reason || null, confirm },
+    }),
+  payload: (t: string, seq: number) => apiFetch<EventPayload>(`/v1/blackbox/events/${seq}/payload`, t),
+  clearPayloads: (t: string, reason: string) =>
+    apiFetch<{ cleared: number }>("/v1/blackbox/payloads/clear", t, {
+      method: "POST",
+      body: { reason: reason || null, confirm: true },
+    }),
 };
+
+/**
+ * Downloads the export through fetch so the access token travels in a header, never in a URL. The file is
+ * saved from memory; the server caps an export at 50,000 rows.
+ */
+export async function downloadBlackBoxExport(token: string, options: BlackBoxExportOptions): Promise<void> {
+  const query = new URLSearchParams({ format: options.format });
+  if (options.includePayloads) query.set("include_payloads", "true");
+  if (options.decision) query.set("decision", options.decision);
+  const resp = await fetch(`${CORE_API_BASE}/v1/blackbox/export?${query.toString()}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!resp.ok) {
+    let parsed: unknown = null;
+    try {
+      parsed = await resp.json();
+    } catch {
+      parsed = null;
+    }
+    throw new ApiError(resp.status, describeError(parsed, resp.status));
+  }
+  const blob = await resp.blob();
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `redhand-blackbox.${options.format}`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
 
 export const telegramApi = {
   createCode: (t: string) => apiFetch<TelegramLinkCode>("/v1/telegram/link-code", t, { method: "POST" }),

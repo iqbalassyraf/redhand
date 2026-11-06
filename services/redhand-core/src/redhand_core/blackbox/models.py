@@ -180,3 +180,16 @@ class PayloadCaptureRequest(BaseModel):
         description="Required to turn capture ON: from then on redacted excerpts of tool call arguments "
         "and results are stored. Turning it off needs no confirmation.",
     )
+
+
+class ClearPayloadsRequest(BaseModel):
+    """Delete every captured payload of the organization now. The events and the hash chain stay."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    reason: str | None = Field(default=None, max_length=MAX_REASON_LENGTH)
+    confirm: StrictBool = Field(default=False, description="Required: this cannot be undone.")
+
+
+class ClearPayloadsResponse(BaseModel):
+    cleared: int = Field(description="How many events had a payload removed.")

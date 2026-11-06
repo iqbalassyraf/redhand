@@ -271,3 +271,42 @@ def test_exports_are_rate_limited(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def test_the_default_organization_id_is_the_one_used() -> None:
     assert DEFAULT_ORG_ID  # guards the fixtures above against an import that silently changes tenants
+
+
+# --- delete captured payloads now --------------------------------------------------------------------------
+
+def _clear(env: Env, user: str = "admin", **body: Any) -> Any:
+    return env.client.post("/v1/blackbox/payloads/clear", json=body, headers=env.h(user))
+
+
+def test_an_admin_clears_every_payload_and_the_chain_still_verifies() -> None:
+    env = _env_with_payload()
+    resp = _clear(env, confirm=True, reason="customer asked")
+    assert resp.status_code == 200 and resp.json() == {"cleared": 1}
+    assert _view(env, 1).json()["arguments_redacted"] is None
+    assert env.verify(1, 2).json()["ok"] is True
+    (audit,) = _audit(env, "organization.blackbox_payloads_cleared")
+    assert audit["details"] == {"events_cleared": 1} and "payload-text" not in json.dumps(audit)
+    assert _clear(env, confirm=True).json() == {"cleared": 0}  # repeating is harmless and not audited again
+    assert len(_audit(env, "organization.blackbox_payloads_cleared")) == 1
+
+
+def test_clearing_needs_confirmation_and_changes_nothing_without_it() -> None:
+    env = _env_with_payload()
+    assert _clear(env).status_code == 400
+    assert _view(env, 1).json()["arguments_redacted"] is not None
+
+
+@pytest.mark.parametrize("user", ["viewer", "operator"])
+def test_only_admins_can_clear_payloads(user: str) -> None:
+    env = _env_with_payload()
+    assert _clear(env, user, confirm=True).status_code == 403
+    assert _view(env, 1).json()["arguments_redacted"] is not None
+
+
+def test_clearing_never_touches_another_organization() -> None:
+    env = _env_with_payload()
+    assert env.client.post(
+        "/v1/blackbox/payloads/clear", json={"confirm": True}, headers=env.h_other_org()
+    ).json() == {"cleared": 0}
+    assert _view(env, 1).json()["arguments_redacted"] is not None

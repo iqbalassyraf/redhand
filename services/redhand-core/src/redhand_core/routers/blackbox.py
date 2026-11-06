@@ -7,6 +7,7 @@ GET /v1/blackbox/settings  retention periods and whether payload capture is on
 PUT /v1/blackbox/retention changes the retention periods (admin, with confirmation, audited)
 PUT /v1/blackbox/payload-capture turns payload capture on (admin, confirmation) or off (security operator)
 GET /v1/blackbox/events/{seq}/payload one event's captured payload (admin; audited with the read)
+POST /v1/blackbox/payloads/clear deletes every captured payload now (admin, confirmation, audited)
 GET /v1/blackbox/export    the timeline as JSON Lines or CSV (security operator; payloads need admin; audited)
 
 Every read is scoped to the caller's organization (never a client-supplied tenant id).
@@ -28,6 +29,8 @@ from redhand_core.blackbox.models import (
     BlackBoxRetentionRequest,
     BlackBoxSettingsResponse,
     BlackBoxTimelineResponse,
+    ClearPayloadsRequest,
+    ClearPayloadsResponse,
     EventPayloadResponse,
     PayloadCaptureRequest,
     VerifyResponse,
@@ -146,3 +149,11 @@ async def export_events(
         media_type="text/csv; charset=utf-8" if export_format == "csv" else "application/x-ndjson",
         headers={**_NO_STORE, "Content-Disposition": f'attachment; filename="redhand-blackbox-{stamp}.{export_format}"'},
     )
+
+
+@router.post("/v1/blackbox/payloads/clear", response_model=ClearPayloadsResponse)
+async def clear_payloads(
+    payload: ClearPayloadsRequest, operator: AdminDep, supabase: SupabaseDep
+) -> ClearPayloadsResponse:
+    """Deletes every captured payload of the organization now. It cannot be undone; events and the hash chain stay."""
+    return await blackbox_service.clear_payloads(supabase, operator, payload)

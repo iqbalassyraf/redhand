@@ -579,6 +579,46 @@
         "title": "BudgetUpdateRequest",
         "type": "object"
       },
+      "ClearPayloadsRequest": {
+        "additionalProperties": false,
+        "description": "Delete every captured payload of the organization now. The events and the hash chain stay.",
+        "properties": {
+          "confirm": {
+            "default": false,
+            "description": "Required: this cannot be undone.",
+            "title": "Confirm",
+            "type": "boolean"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          }
+        },
+        "title": "ClearPayloadsRequest",
+        "type": "object"
+      },
+      "ClearPayloadsResponse": {
+        "properties": {
+          "cleared": {
+            "description": "How many events had a payload removed.",
+            "title": "Cleared",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "cleared"
+        ],
+        "title": "ClearPayloadsResponse",
+        "type": "object"
+      },
       "ConfirmedControlActionRequest": {
         "additionalProperties": false,
         "properties": {
@@ -3620,6 +3660,82 @@
           }
         },
         "summary": "Set Payload Capture",
+        "tags": [
+          "Black Box Recorder"
+        ]
+      }
+    },
+    "/v1/blackbox/payloads/clear": {
+      "post": {
+        "description": "Deletes every captured payload of the organization now. It cannot be undone; events and the hash chain stay.",
+        "operationId": "clear_payloads_v1_blackbox_payloads_clear_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-RedHand-Org",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Redhand-Org"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClearPayloadsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClearPayloadsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Clear Payloads",
         "tags": [
           "Black Box Recorder"
         ]
