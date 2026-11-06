@@ -17,14 +17,18 @@ interface Props {
   onClearPayloads: (reason: string) => void;
 }
 
-// Draft wording, to be reviewed by the owner or their lawyer before launch. It states the limits plainly and
-// makes no compliance claim.
-export const CAPTURE_WARNING = [
-  "From now on, a redacted excerpt (up to 2 KB) of each tool call's arguments and results is stored.",
-  "Redaction is pattern based and best effort. It removes API keys and tokens, email addresses, Malaysian NRIC numbers, card and phone numbers, and fields named like passwords. It does NOT detect names, addresses or free text, so customer data can still be stored.",
-  "You need your own lawful basis to store this data. This is not legal advice and RedHand makes no compliance claim.",
-  "Only admins can read payloads, and every read and export is recorded in the audit log.",
-];
+// Wording for the capture-on dialog. Every sentence here is checked against what the code does (docs/runbooks/
+// black-box-recorder.md). It states the limits plainly and makes no compliance claim: whether the owner has a lawful
+// basis to store this data is for the owner (and their lawyer) to decide.
+export function captureWarning(payloadRetentionDays: number): string[] {
+  return [
+    "From now on, a redacted excerpt (up to 2 KB) of each tool call's arguments and results is stored. A single value over 16 KB is skipped, not stored.",
+    "Redaction is pattern based and best effort. It removes API keys and tokens, email addresses, Malaysian NRIC numbers, card and phone numbers, and fields named like passwords. It does NOT detect names, addresses or free text, so customer data can still be stored.",
+    `Excerpts are kept for ${payloadRetentionDays} days (you can change this in these settings), then removed. Turning capture off does not delete what is already stored: use "Delete captured payloads now" for that.`,
+    "Only admins can read excerpts, and every read and every export is recorded in the audit log.",
+    "You need your own lawful basis to store this data. This is not legal advice and RedHand makes no compliance claim.",
+  ];
+}
 
 export function SettingsPanel({ settings, busy, onSaveRetention, onSetCapture, onClearPayloads }: Props) {
   const caps = settings.capabilities;
@@ -145,7 +149,7 @@ export function SettingsPanel({ settings, busy, onSaveRetention, onSetCapture, o
           <div className="max-w-lg rounded-[12px] bg-[#FFFFFF] p-5 text-[13px] shadow-lg">
             <h3 className="mb-2 text-[16px] font-bold">Turn on payload capture?</h3>
             <ul className="mb-3 list-disc space-y-2 pl-5 text-[#303030]">
-              {CAPTURE_WARNING.map((line) => (
+              {captureWarning(settings.payload_retention_days).map((line) => (
                 <li key={line}>{line}</li>
               ))}
             </ul>
