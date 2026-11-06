@@ -55,6 +55,16 @@
   core, then the gateway** (the new gateway requires fields only the new core sends). Limits are in
   `docs/runbooks/honeytokens.md` and ADR 0012.
 
+- MCP Scanner (Phase 4 M2): dashboard -> **MCP Scanner**. New rules read tool descriptions for hidden instructions,
+  concealment, data sent outside, cross-tool coercion and invisible text (English and Bahasa Malaysia); findings never
+  quote the server's text. An admin can **scan a registered server** (the gateway lists its tools through its safety checks
+  and audits them) or anyone can check a pasted manifest. The manifest auditor now matches whole names, not substrings
+  (it flagged `shellfish.js`), and reports network-capable tools. On the held-out set tool-description poisoning is
+  detected 13 of 20 with 0 false alarms (20 of 20 on the samples the rules were written against). New endpoint
+  `POST /v1/mcp-servers/{id}/scan` and the internal `/internal/v1/scan`. Live scans need `GATEWAY_URL` on core
+  (`docs/runbooks/mcp-scanner.md`); deploy the gateway, then core.
+- `redhand bench` now keeps a held-out set that rules are never tuned on and rates categories on it.
+
 - `redhand bench` (Phase 4 M1): a labelled corpus of 292 samples (7 categories, English and Bahasa Malaysia, 53% of
   the benign ones built to look like attacks) run through the checks the gateway ships today, reporting detection and
   false-alarm rates with 95% confidence intervals and a generated coverage table

@@ -153,6 +153,9 @@ export default function HoneytokensPage() {
             <Link href="/honeytokens" className="rounded-full bg-[#0F0F0F] px-3 py-1.5 font-semibold text-[#FFFFFF]">
               Honeytokens
             </Link>
+            <Link href="/scanner" className="rounded-full px-3 py-1.5 font-medium text-[#606060] hover:bg-[#F2F2F2]">
+              MCP Scanner
+            </Link>
           </nav>
         </div>
         <div className="flex items-center gap-3 text-[12px]">

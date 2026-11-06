@@ -2304,6 +2304,136 @@
         "title": "SafeModeRequest",
         "type": "object"
       },
+      "ScanFinding": {
+        "properties": {
+          "category": {
+            "title": "Category",
+            "type": "string"
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "remediation": {
+            "title": "Remediation",
+            "type": "string"
+          },
+          "severity": {
+            "enum": [
+              "CRITICAL",
+              "HIGH",
+              "MEDIUM",
+              "LOW",
+              "INFO"
+            ],
+            "title": "Severity",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "tool_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tool Name"
+          }
+        },
+        "required": [
+          "id",
+          "severity",
+          "category",
+          "tool_name",
+          "title",
+          "description",
+          "remediation"
+        ],
+        "title": "ScanFinding",
+        "type": "object"
+      },
+      "ScanResponse": {
+        "properties": {
+          "findings": {
+            "items": {
+              "$ref": "#/components/schemas/ScanFinding"
+            },
+            "title": "Findings",
+            "type": "array"
+          },
+          "findings_omitted": {
+            "description": "Findings beyond the first 200, not shown.",
+            "title": "Findings Omitted",
+            "type": "integer"
+          },
+          "limits": {
+            "default": "Static scan of the tool list only: it cannot see what a tool does when called, and a server that requires credentials to list its tools cannot be scanned.",
+            "description": "What this scan does not do, shown with the result.",
+            "title": "Limits",
+            "type": "string"
+          },
+          "risk_score": {
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Risk Score",
+            "type": "integer"
+          },
+          "scanned_at": {
+            "format": "date-time",
+            "title": "Scanned At",
+            "type": "string"
+          },
+          "server_id": {
+            "format": "uuid",
+            "title": "Server Id",
+            "type": "string"
+          },
+          "server_slug": {
+            "title": "Server Slug",
+            "type": "string"
+          },
+          "tool_count": {
+            "title": "Tool Count",
+            "type": "integer"
+          },
+          "truncated": {
+            "description": "The server had more tools or pages than the scanner reads; the rest was not scanned.",
+            "title": "Truncated",
+            "type": "boolean"
+          },
+          "verdict": {
+            "enum": [
+              "PASS",
+              "WARN",
+              "FAIL"
+            ],
+            "title": "Verdict",
+            "type": "string"
+          }
+        },
+        "required": [
+          "server_id",
+          "server_slug",
+          "verdict",
+          "risk_score",
+          "tool_count",
+          "truncated",
+          "findings",
+          "findings_omitted",
+          "scanned_at"
+        ],
+        "title": "ScanResponse",
+        "type": "object"
+      },
       "Scope": {
         "additionalProperties": false,
         "description": "One allowlisted permission. `tool=\"*\"` allows every tool on the server.\n`access` is declared by the operator, never inferred: MCP servers' own read/write hints are\nself-declared by the server and untrusted. It is enforced only while Safe Mode is on (ADR 0009):\nthen the gateway allows a tool only if a scope with access \"read\" covers it. RedHand cannot verify\nthat a tool really is read-only.",
@@ -5259,6 +5389,82 @@
         "summary": "Deactivate Mcp Server",
         "tags": [
           "Agent Passports & Control Actions"
+        ]
+      }
+    },
+    "/v1/mcp-servers/{server_id}/scan": {
+      "post": {
+        "description": "Scans one registered, active server of the caller's organization. The result is returned, not stored.",
+        "operationId": "scan_registered_server_v1_mcp_servers__server_id__scan_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "server_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Server Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-RedHand-Org",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Redhand-Org"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScanResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Scan Registered Server",
+        "tags": [
+          "MCP Scanner"
         ]
       }
     },

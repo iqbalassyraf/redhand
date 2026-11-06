@@ -4,10 +4,13 @@ Performs pre-install static security vetting of Model Context Protocol (MCP) ser
 analyzing binary commands, environment secrets, tool permissions, and schema constraints.
 """
 
+import os
 import re
 from typing import Any, Literal
 from pydantic import BaseModel, Field
 import structlog
+
+from .description_rules import scan_description
 
 logger = structlog.get_logger(__name__)
 
@@ -21,6 +24,7 @@ class MCPFinding(BaseModel):
         "FILESYSTEM_RISK",
         "SCHEMA_RISK",
         "NETWORK_RISK",
+        "DESCRIPTION_RISK",
     ]
     tool_name: str | None = None
     title: str
@@ -35,6 +39,21 @@ class MCPVettingReport(BaseModel):
     total_tools_scanned: int
     findings: list[MCPFinding] = Field(default_factory=list)
     recommended_policy: dict[str, Any] = Field(default_factory=dict)
+
+
+_WORDS = re.compile(r"[a-z0-9]+")
+
+
+def _tokens(text: str) -> set[str]:
+    """Lower-case word tokens of a name, splitting on punctuation, underscores and camelCase, so 'seashell_lookup' is
+    {'seashell', 'lookup'} and does not contain 'shell' (substring matching flagged harmless names)."""
+    spaced = re.sub(r"([a-z0-9])([A-Z])", r"\1 \2", text)
+    return set(_WORDS.findall(spaced.lower()))
+
+
+def _keyword_hit(keywords: set[str], tokens: set[str]) -> bool:
+    """A keyword like 'write_file' hits when all of its words are tokens; 'bash' hits when 'bash' is a token."""
+    return any(set(k.split("_")) <= tokens for k in keywords)
 
 
 class MCPServerAuditor:
@@ -67,9 +86,18 @@ class MCPServerAuditor:
         env_vars = manifest.get("env", {})
         tools = manifest.get("tools", [])
 
-        # 1. Audit Server Binary & Invocation Arguments
+        # 1. Audit Server Binary & Invocation Arguments. Matches whole program names and argument tokens, not substrings,
+        # so 'dist/shellfish.js' is not a shell.
+        program = os.path.basename(command.split()[0]) if command.strip() else ""
+        program = program[:-4] if program.endswith(".exe") else program
+        arg_tokens = {t for a in args for t in _WORDS.findall(a)}
         for d_cmd in cls.DANGEROUS_COMMANDS:
-            if d_cmd in command or any(d_cmd in arg for arg in args):
+            head, _, flag = d_cmd.partition(" ")
+            if flag:  # an interpreter run with an inline-code flag, such as 'python -c'
+                matched = program.startswith(head) and flag in args
+            else:
+                matched = program == d_cmd or program == d_cmd.replace(".exe", "") or d_cmd in arg_tokens
+            if matched:
                 score += 40
                 findings.append(
                     MCPFinding(
@@ -104,14 +132,17 @@ class MCPServerAuditor:
 
         for tool in tools:
             tool_name = tool.get("name", "unnamed_tool")
-            tool_desc = tool.get("description", "").lower()
+            raw_desc = tool.get("description", "")
+            raw_desc = raw_desc if isinstance(raw_desc, str) else ""
+            tool_desc = raw_desc.lower()
             input_schema = tool.get("inputSchema") or tool.get("schema") or {}
             properties = input_schema.get("properties", {})
             required_props = input_schema.get("required", [])
             tool_lower = tool_name.lower()
+            name_tokens, desc_tokens = _tokens(str(tool_name)), _tokens(tool_desc)
 
             # Check arbitrary command execution
-            if any(k in tool_lower or k in tool_desc for k in cls.RAW_EXEC_KEYWORDS):
+            if _keyword_hit(cls.RAW_EXEC_KEYWORDS, name_tokens | desc_tokens):
                 score += 30
                 findings.append(
                     MCPFinding(
@@ -126,7 +157,7 @@ class MCPServerAuditor:
                 )
 
             # Check destructive filesystem capabilities
-            if any(k in tool_lower for k in cls.FILESYSTEM_KEYWORDS):
+            if _keyword_hit(cls.FILESYSTEM_KEYWORDS, name_tokens):
                 score += 25
                 findings.append(
                     MCPFinding(
@@ -141,7 +172,7 @@ class MCPServerAuditor:
                 )
 
             # Check SQL / database tools
-            if any(k in tool_lower for k in cls.DATABASE_KEYWORDS):
+            if _keyword_hit(cls.DATABASE_KEYWORDS, name_tokens):
                 score += 20
                 findings.append(
                     MCPFinding(
@@ -152,6 +183,37 @@ class MCPServerAuditor:
                         title=f"Database Access Tool Detected: '{tool_name}'",
                         description=f"Tool '{tool_name}' connects to persistent database. Full table dump or data poisoning risks exist.",
                         remediation="Apply SQLASTGuardrail with mandatory LIMIT clauses and column-level exfiltration restrictions.",
+                    )
+                )
+
+            # Check network-capable tools (name only, like the filesystem and database checks)
+            if _keyword_hit(cls.NETWORK_KEYWORDS, name_tokens):
+                score += 15
+                findings.append(
+                    MCPFinding(
+                        id="MCP-SEC-009",
+                        severity="MEDIUM",
+                        category="NETWORK_RISK",
+                        tool_name=tool_name,
+                        title=f"Network-Capable Tool: '{tool_name}'",
+                        description=f"Tool '{tool_name}' can send requests to outside addresses, which can carry data out.",
+                        remediation="Restrict destinations with an allowlist and review what data the tool can send.",
+                    )
+                )
+
+            # Check the description for hidden instructions, concealment, exfiltration and cross-tool coercion. The
+            # description text is untrusted: findings carry the rule's fixed wording and never repeat it.
+            for rule in scan_description(raw_desc):
+                score += 35 if rule.severity == "HIGH" else 15
+                findings.append(
+                    MCPFinding(
+                        id=rule.rule_id,
+                        severity="HIGH" if rule.severity == "HIGH" else "MEDIUM",
+                        category="DESCRIPTION_RISK",
+                        tool_name=tool_name,
+                        title=rule.title,
+                        description=rule.description,
+                        remediation=rule.remediation,
                     )
                 )
 

@@ -73,6 +73,9 @@ class Sample(BaseModel):
     text: str | None = Field(default=None, max_length=MAX_TEXT_CHARS)
     manifest: dict[str, Any] | None = None
     note: str = Field(default="", max_length=200)
+    # "dev" samples may be used to write and tune rules; "holdout" samples are only ever used to REPORT. A rule that is
+    # tuned against its own test samples looks far better than it is. The split comes from the file name (<category>.holdout.jsonl).
+    split: Literal["dev", "holdout"] = "dev"
 
     @model_validator(mode="after")
     def _shape(self) -> Sample:
@@ -121,8 +124,12 @@ def load_corpus(directory: Path = DEFAULT_CORPUS_DIR) -> list[Sample]:
                 sample = Sample.model_validate(raw)
             except (ValueError, TypeError) as exc:
                 raise ValueError(f"{path.name}:{number}: {exc}") from exc
-            if sample.category != path.stem:
+            stem, _, kind = path.stem.partition(".")
+            if sample.category != stem:
                 raise ValueError(f"{path.name}:{number}: category {sample.category!r} does not match the file name")
+            if kind not in ("", "holdout"):
+                raise ValueError(f"{path.name}: unknown corpus file kind {kind!r}")
+            sample = sample.model_copy(update={"split": "holdout" if kind == "holdout" else "dev"})
             if sample.id in seen:
                 raise ValueError(f"{path.name}:{number}: duplicate id {sample.id}")
             seen.add(sample.id)

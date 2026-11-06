@@ -434,3 +434,68 @@ export const honeyApi = {
   retireTool: (t: string, id: string) =>
     apiFetch<{ changed: boolean }>(`/v1/honey-tools/${id}/retire`, t, { method: "POST" }),
 };
+
+export type ScanSeverity = "CRITICAL" | "HIGH" | "MEDIUM" | "LOW" | "INFO";
+
+export interface ScanFinding {
+  id: string;
+  severity: ScanSeverity;
+  category: string;
+  tool_name: string | null;
+  title: string;
+  description: string;
+  remediation: string;
+}
+
+/** One result shape for both ways of scanning (a pasted manifest, or a live scan of a registered server). */
+export interface ScanResult {
+  verdict: "PASS" | "WARN" | "FAIL";
+  risk_score: number;
+  tool_count: number;
+  truncated: boolean;
+  findings: ScanFinding[];
+  findings_omitted: number;
+  source: string;
+  limits: string;
+}
+
+interface LiveScanResponse {
+  server_slug: string;
+  verdict: "PASS" | "WARN" | "FAIL";
+  risk_score: number;
+  tool_count: number;
+  truncated: boolean;
+  findings: ScanFinding[];
+  findings_omitted: number;
+  limits: string;
+}
+
+export const scannerApi = {
+  /** Live scan of a REGISTERED server, run by the gateway on core's behalf (admin only; the server decides). */
+  scanServer: async (t: string, serverId: string): Promise<ScanResult> => {
+    const r = await apiFetch<LiveScanResponse>(`/v1/mcp-servers/${serverId}/scan`, t, { method: "POST" });
+    return {
+      verdict: r.verdict, risk_score: r.risk_score, tool_count: r.tool_count, truncated: r.truncated,
+      findings: r.findings, findings_omitted: r.findings_omitted, source: `registered server "${r.server_slug}"`, limits: r.limits,
+    };
+  },
+  /** Static check of a pasted manifest, through the gateway's public, rate-limited vetting endpoint. Fetches nothing. */
+  vetManifest: async (manifest: unknown): Promise<ScanResult> => {
+    const resp = await fetch(`${GATEWAY_BASE}/v1/mcp/vet`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(manifest),
+    });
+    if (!resp.ok) {
+      throw new ApiError(resp.status, resp.status === 429 ? "Too many checks; wait a minute." : `The check failed (HTTP ${resp.status}).`);
+    }
+    const r = (await resp.json()) as {
+      verdict: "PASS" | "WARN" | "FAIL"; risk_score: number; total_tools_scanned: number; findings: ScanFinding[];
+    };
+    return {
+      verdict: r.verdict, risk_score: r.risk_score, tool_count: r.total_tools_scanned, truncated: false,
+      findings: r.findings, findings_omitted: 0, source: "pasted manifest",
+      limits: "Static check of what you pasted: it cannot see what a tool does when called.",
+    };
+  },
+};

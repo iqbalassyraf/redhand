@@ -34,14 +34,21 @@ def _interval(pair: tuple[float, float]) -> str:
     return f"{_pct(pair[0])}-{_pct(pair[1])}"
 
 
-def render_text(ev: Evaluation, digest: str) -> str:
+def _text_rows(results: dict[str, CategoryResult]) -> list[str]:
     rows = ["category              mal  ben  fams  detected  95% CI      false alarms  95% CI     status"]
-    for r in ev.categories.values():
+    for r in results.values():
         rows.append(
             f"{r.category:<20} {r.n_malicious:>4} {r.n_benign:>4} {r.families:>5}  "
             f"{r.detected:>3}/{r.n_malicious:<3} {_pct(r.detection_rate):>4}  {_interval(r.detection_interval):<10}  "
             f"{r.false_alarms:>3}/{r.n_benign:<3} {_pct(r.false_alarm_rate):>4}  {_interval(r.false_alarm_interval):<9}  {r.status}"
         )
+    return rows
+
+
+def render_text(ev: Evaluation, digest: str) -> str:
+    rows = ["DEV samples (used to write and tune rules, so they flatter them):"] + _text_rows(ev.categories)
+    if ev.holdout:
+        rows += ["", "HELD-OUT samples (never tuned on; quote these when they exist):"] + _text_rows(ev.holdout)
     head = [
         f"redhand bench: corpus {digest}, {ev.total_samples} samples, detectors: {', '.join(ev.detectors)}",
         f"status rules: covered = detection >= {_pct(COVERED_DETECTION)} and false alarms <= {_pct(COVERED_FALSE_ALARM)}; "
@@ -52,19 +59,24 @@ def render_text(ev: Evaluation, digest: str) -> str:
     return "\n".join(head + rows) + "\n"
 
 
+def _category_json(results: dict[str, CategoryResult]) -> dict[str, Any]:
+    return {
+        c.category: {
+            "owasp": c.owasp, "malicious": c.n_malicious, "benign": c.n_benign, "families": c.families,
+            "detected": c.detected, "false_alarms": c.false_alarms, "hard_benign": c.hard_benign,
+            "hard_false_alarms": c.hard_false_alarms, "status": c.status,
+            "by_lang": {lang: {"malicious": n, "detected": d} for lang, (n, d) in sorted(c.by_lang.items())},
+        }
+        for c in results.values()
+    }
+
+
 def to_json(ev: Evaluation, digest: str) -> dict[str, Any]:
     return {
         "corpus": digest,
         "detectors": list(ev.detectors),
-        "categories": {
-            c.category: {
-                "owasp": c.owasp, "malicious": c.n_malicious, "benign": c.n_benign, "families": c.families,
-                "detected": c.detected, "false_alarms": c.false_alarms, "hard_benign": c.hard_benign,
-                "hard_false_alarms": c.hard_false_alarms, "status": c.status,
-                "by_lang": {lang: {"malicious": n, "detected": d} for lang, (n, d) in sorted(c.by_lang.items())},
-            }
-            for c in ev.categories.values()
-        },
+        "categories": _category_json(ev.categories),
+        "holdout": _category_json(ev.holdout),
     }
 
 
@@ -92,7 +104,7 @@ def render_markdown(ev: Evaluation, digest: str) -> str:
         f"**weak** = detects something but misses the partial bar; **not covered** = detects nothing. A category with "
         f"fewer than {MIN_SAMPLES_PER_SIDE} samples on either side is **insufficient data**.",
         "",
-        "## Measured categories",
+        "## Dev results (the rules were written and tuned against these, so they flatter them)",
         "",
         "| Category | OWASP | Malicious | Benign | Families | Detection (95% CI) | False alarms (95% CI) | Hard benign false alarms | Status |",
         "|---|---|---|---|---|---|---|---|---|",
@@ -104,7 +116,22 @@ def render_markdown(ev: Evaluation, digest: str) -> str:
             f"{c.false_alarms}/{c.n_benign} = {_pct(c.false_alarm_rate)} ({_interval(c.false_alarm_interval)}) | "
             f"{c.hard_false_alarms}/{c.hard_benign} | **{c.status}** |"
         )
-    lines += ["", "### Detection by language (malicious samples)", "", "| Category | English | Bahasa Malaysia |", "|---|---|---|"]
+    if ev.holdout:
+        lines += [
+            "", "## Held-out results (never tuned on: quote these)", "",
+            "Held-out samples were written separately and rules are never adjusted to fit them. A category with a "
+            "held-out set is rated on it; the dev table above is what the rules were written against.", "",
+            "| Category | OWASP | Malicious | Benign | Detection (95% CI) | False alarms (95% CI) | Hard benign false alarms | Status |",
+            "|---|---|---|---|---|---|---|---|",
+        ]
+        for c in ev.holdout.values():
+            lines.append(
+                f"| `{c.category}` | {c.owasp} | {c.n_malicious} | {c.n_benign} | "
+                f"{c.detected}/{c.n_malicious} = {_pct(c.detection_rate)} ({_interval(c.detection_interval)}) | "
+                f"{c.false_alarms}/{c.n_benign} = {_pct(c.false_alarm_rate)} ({_interval(c.false_alarm_interval)}) | "
+                f"{c.hard_false_alarms}/{c.hard_benign} | **{c.status}** |"
+            )
+    lines += ["", "### Detection by language (dev malicious samples)", "", "| Category | English | Bahasa Malaysia |", "|---|---|---|"]
     for c in ev.categories.values():
         en, ms = c.by_lang.get("en", (0, 0)), c.by_lang.get("ms", (0, 0))
         lines.append(f"| `{c.category}` | {en[1]}/{en[0]} | {ms[1]}/{ms[0]} |")
@@ -112,9 +139,11 @@ def render_markdown(ev: Evaluation, digest: str) -> str:
               "| Item | Name | Benchmark categories and status | Notes |", "|---|---|---|---|"]
     for item, name, note in OWASP_ITEMS:
         cats = [c for c in ev.categories.values() if c.owasp == item]
-        status = "; ".join(f"`{c.category}`: {c.status}" for c in cats) if cats else "not measured"
+        status = "; ".join(
+            f"`{c.category}`: {ev.headline(c.category)[0].status} ({ev.headline(c.category)[1]})" for c in cats
+        ) if cats else "not measured"
         lines.append(f"| {item} | {name} | {status} | {note} |")
-    lines += ["", "## Missed samples and false alarms (for the rule authors)", ""]
+    lines += ["", "## Missed dev samples and false alarms (for the rule authors; held-out misses are deliberately not listed)", ""]
     for c in ev.categories.values():
         if c.missed or c.false_alarm_ids:
             lines.append(f"- `{c.category}`: missed {', '.join(c.missed) or 'none'}; false alarms {', '.join(c.false_alarm_ids) or 'none'}")
@@ -127,19 +156,21 @@ def compare_with_baseline(ev: Evaluation, digest: str, baseline: dict[str, Any])
     if baseline.get("corpus") != digest:
         problems.append(f"corpus changed ({baseline.get('corpus')} -> {digest}): regenerate the baseline on purpose")
         return problems
-    base = baseline.get("categories", {})
-    for name, cat in ev.categories.items():
-        before = base.get(name)
-        if before is None:
-            problems.append(f"{name}: not in the baseline")
-            continue
-        if cat.detected < before["detected"]:
-            problems.append(f"{name}: detection fell from {before['detected']} to {cat.detected} of {cat.n_malicious}")
-        if cat.false_alarms > before["false_alarms"]:
-            problems.append(f"{name}: false alarms rose from {before['false_alarms']} to {cat.false_alarms} of {cat.n_benign}")
-    for name in base:
-        if name not in ev.categories:
-            problems.append(f"{name}: in the baseline but missing from the corpus")
+    for section, current in (("categories", ev.categories), ("holdout", ev.holdout)):
+        base = baseline.get(section, {})
+        label = "" if section == "categories" else " (held-out)"
+        for name, cat in current.items():
+            before = base.get(name)
+            if before is None:
+                problems.append(f"{name}{label}: not in the baseline")
+                continue
+            if cat.detected < before["detected"]:
+                problems.append(f"{name}{label}: detection fell from {before['detected']} to {cat.detected} of {cat.n_malicious}")
+            if cat.false_alarms > before["false_alarms"]:
+                problems.append(f"{name}{label}: false alarms rose from {before['false_alarms']} to {cat.false_alarms} of {cat.n_benign}")
+        for name in base:
+            if name not in current:
+                problems.append(f"{name}{label}: in the baseline but missing from the corpus")
     return problems
 
 
