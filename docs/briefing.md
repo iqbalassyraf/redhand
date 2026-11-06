@@ -17,8 +17,9 @@ analysis and templates. Any per-event LLM use needs an explicit cost estimate an
 |---|---|---|---|
 | 1 | Identity & control | Agent Passport, one-click revoke, dashboard kill switch, MCP gateway | **Built** (see below) |
 | 2 | Stop things | Budget Guard, Safe Mode, WhatsApp/Telegram panic command | **Complete** (2026-11-04) |
-| 3 | See things | Black Box Recorder, Honeytokens | In progress: Black Box M1 done (`docs/plans/phase3-plan.md`) |
-| 4 | Check inputs | MCP Scanner, Prompt Injection Radar | Seed exists (`/v1/mcp/vet`) |
+| 3 | See things | Black Box Recorder, Honeytokens | In progress: Black Box M1 done + M2a/M2b; M2c, M3, M4 next (`docs/plans/phase3-plan.md`) |
+| 4 | Check inputs | MCP Scanner (servers/skills/packages), Prompt Injection Radar, output-handling checks, system-prompt canaries, secret-in-prompt scanning, RAG protection, loop/rate limits, OWASP coverage matrix | Plan drafted (`docs/plans/phase4-plan.md`); seeds exist (`/v1/mcp/vet`, egress guardrail, `redhand scan`). All deterministic — no external LLM on the hot path |
+| 4.5 | Model proxy (evaluation) | Dollar/token budgets, user-input injection checks, output-stream inspection, approved-model enforcement | Evaluation only, separate go/no-go (`docs/plans/phase4.5-model-proxy.md`); changes RedHand's latency/cost/uptime profile |
 | 5 | Prove it | Compliance reports, Trust Score | Not started |
 | Parked | Higher tiers | Red Team service, Shadow Agent Finder, Cross-agent firewall, Policy marketplace | Fuzzer exists in `redhand-sdk` |
 
