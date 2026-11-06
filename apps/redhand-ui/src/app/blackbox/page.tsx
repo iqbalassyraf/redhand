@@ -180,6 +180,9 @@ export default function BlackBoxPage() {
             <Link href="/blackbox" className="rounded-full bg-[#0F0F0F] px-3 py-1.5 font-semibold text-[#FFFFFF]">
               Black Box
             </Link>
+            <Link href="/honeytokens" className="rounded-full px-3 py-1.5 font-medium text-[#606060] hover:bg-[#F2F2F2]">
+              Honeytokens
+            </Link>
           </nav>
         </div>
         <div className="flex items-center gap-3 text-[12px]">

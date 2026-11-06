@@ -10,3 +10,6 @@ deliberate, reviewed maintenance action.
    `control_audit_log_no_update` trigger **and the `trg_agent_events_append_only` trigger on
    `agent_events`** (Black Box events are append-only too, except behind the retention anchor), delete the
    organization, re-enable both triggers, and record the action in the operations log.
+4. The organization's honeytokens, decoy tools and trips (`honeytokens`, `honey_tools`, `honeytrips`) have no
+   append-only trigger and are removed by the same cascade. Captured payloads live in `agent_events` and go with
+   the events; an admin can also clear them earlier with **Delete captured payloads now** (dashboard Black Box page).

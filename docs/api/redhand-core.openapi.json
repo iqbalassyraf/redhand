@@ -1224,6 +1224,350 @@
         "title": "HTTPValidationError",
         "type": "object"
       },
+      "HoneyToolCreateRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "default": "alert",
+            "enum": [
+              "alert",
+              "freeze"
+            ],
+            "title": "Action",
+            "type": "string"
+          },
+          "agent_id": {
+            "format": "uuid",
+            "title": "Agent Id",
+            "type": "string"
+          },
+          "description": {
+            "maxLength": 300,
+            "minLength": 1,
+            "title": "Description",
+            "type": "string"
+          },
+          "name": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_]{2,63}$",
+            "title": "Name",
+            "type": "string"
+          },
+          "server": {
+            "pattern": "^[a-z0-9][a-z0-9-]{0,62}$",
+            "title": "Server",
+            "type": "string"
+          }
+        },
+        "required": [
+          "agent_id",
+          "server",
+          "name",
+          "description"
+        ],
+        "title": "HoneyToolCreateRequest",
+        "type": "object"
+      },
+      "HoneyToolView": {
+        "properties": {
+          "action": {
+            "enum": [
+              "alert",
+              "freeze"
+            ],
+            "title": "Action",
+            "type": "string"
+          },
+          "agent_id": {
+            "format": "uuid",
+            "title": "Agent Id",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "last_tripped_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Tripped At"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "server": {
+            "title": "Server",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "active",
+              "retired"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "trip_count": {
+            "title": "Trip Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "agent_id",
+          "server",
+          "name",
+          "description",
+          "action",
+          "status",
+          "created_at",
+          "last_tripped_at",
+          "trip_count"
+        ],
+        "title": "HoneyToolView",
+        "type": "object"
+      },
+      "HoneytokenCreateRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "action_on_read": {
+            "default": "alert",
+            "description": "When it appears in a tool RESULT (the agent read it).",
+            "enum": [
+              "alert",
+              "freeze"
+            ],
+            "title": "Action On Read",
+            "type": "string"
+          },
+          "action_on_use": {
+            "default": "freeze",
+            "description": "When an agent USES it in a tool call (the call is refused).",
+            "enum": [
+              "alert",
+              "freeze"
+            ],
+            "title": "Action On Use",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "api_key",
+              "aws_key",
+              "password"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "label": {
+            "description": "What the owner calls it, for example 'Decoy prod key in .env'.",
+            "pattern": "^[^\\x00-\\x1f\\x7f]{1,64}$",
+            "title": "Label",
+            "type": "string"
+          }
+        },
+        "required": [
+          "label",
+          "kind"
+        ],
+        "title": "HoneytokenCreateRequest",
+        "type": "object"
+      },
+      "HoneytokenCreated": {
+        "properties": {
+          "action_on_read": {
+            "enum": [
+              "alert",
+              "freeze"
+            ],
+            "title": "Action On Read",
+            "type": "string"
+          },
+          "action_on_use": {
+            "enum": [
+              "alert",
+              "freeze"
+            ],
+            "title": "Action On Use",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "hint": {
+            "description": "The last four characters, to recognise it. Never the value.",
+            "title": "Hint",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "api_key",
+              "aws_key",
+              "password"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "last_tripped_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Tripped At"
+          },
+          "status": {
+            "enum": [
+              "active",
+              "retired"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "trip_count": {
+            "title": "Trip Count",
+            "type": "integer"
+          },
+          "value": {
+            "description": "The honeytoken value. Shown ONCE: RedHand stores only its digest.",
+            "title": "Value",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "kind",
+          "hint",
+          "action_on_use",
+          "action_on_read",
+          "status",
+          "created_at",
+          "last_tripped_at",
+          "trip_count",
+          "value"
+        ],
+        "title": "HoneytokenCreated",
+        "type": "object"
+      },
+      "HoneytokenView": {
+        "properties": {
+          "action_on_read": {
+            "enum": [
+              "alert",
+              "freeze"
+            ],
+            "title": "Action On Read",
+            "type": "string"
+          },
+          "action_on_use": {
+            "enum": [
+              "alert",
+              "freeze"
+            ],
+            "title": "Action On Use",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "hint": {
+            "description": "The last four characters, to recognise it. Never the value.",
+            "title": "Hint",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "api_key",
+              "aws_key",
+              "password"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "last_tripped_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Tripped At"
+          },
+          "status": {
+            "enum": [
+              "active",
+              "retired"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "trip_count": {
+            "title": "Trip Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "kind",
+          "hint",
+          "action_on_use",
+          "action_on_read",
+          "status",
+          "created_at",
+          "last_tripped_at",
+          "trip_count"
+        ],
+        "title": "HoneytokenView",
+        "type": "object"
+      },
       "KeyRotationResponse": {
         "properties": {
           "agent_key": {
@@ -1784,6 +2128,19 @@
           }
         },
         "title": "RenewRequest",
+        "type": "object"
+      },
+      "RetireResponse": {
+        "properties": {
+          "changed": {
+            "title": "Changed",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "changed"
+        ],
+        "title": "RetireResponse",
         "type": "object"
       },
       "RiskTier": {
@@ -4076,6 +4433,459 @@
         "summary": "Approve or Deny a Paused HITL Circuit-Breaker Intervention",
         "tags": [
           "Human-in-the-Loop (HITL) Circuit Breaker"
+        ]
+      }
+    },
+    "/v1/honey-tools": {
+      "get": {
+        "operationId": "list_honey_tools_v1_honey_tools_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "agent_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Agent Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-RedHand-Org",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Redhand-Org"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/HoneyToolView"
+                  },
+                  "title": "Response List Honey Tools V1 Honey Tools Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Honey Tools",
+        "tags": [
+          "Honeytokens"
+        ]
+      },
+      "post": {
+        "description": "Adds a decoy tool to one agent's tool list on one MCP server. A call to it is never forwarded. An honest\nagent can call a tempting tool when a user asks for exactly that, so the default action is alert, not freeze.",
+        "operationId": "create_honey_tool_v1_honey_tools_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-RedHand-Org",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Redhand-Org"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HoneyToolCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HoneyToolView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Honey Tool",
+        "tags": [
+          "Honeytokens"
+        ]
+      }
+    },
+    "/v1/honey-tools/{honey_tool_id}/retire": {
+      "post": {
+        "operationId": "retire_honey_tool_v1_honey_tools__honey_tool_id__retire_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "honey_tool_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Honey Tool Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-RedHand-Org",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Redhand-Org"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RetireResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Retire Honey Tool",
+        "tags": [
+          "Honeytokens"
+        ]
+      }
+    },
+    "/v1/honeytokens": {
+      "get": {
+        "operationId": "list_honeytokens_v1_honeytokens_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-RedHand-Org",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Redhand-Org"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/HoneytokenView"
+                  },
+                  "title": "Response List Honeytokens V1 Honeytokens Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Honeytokens",
+        "tags": [
+          "Honeytokens"
+        ]
+      },
+      "post": {
+        "description": "Creates a honeytoken. The response is the ONLY time the value is shown (like an agent key).",
+        "operationId": "create_honeytoken_v1_honeytokens_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-RedHand-Org",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Redhand-Org"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HoneytokenCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HoneytokenCreated"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Honeytoken",
+        "tags": [
+          "Honeytokens"
+        ]
+      }
+    },
+    "/v1/honeytokens/{honeytoken_id}/retire": {
+      "post": {
+        "operationId": "retire_honeytoken_v1_honeytokens__honeytoken_id__retire_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "honeytoken_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Honeytoken Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-RedHand-Org",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Redhand-Org"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RetireResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Retire Honeytoken",
+        "tags": [
+          "Honeytokens"
         ]
       }
     },

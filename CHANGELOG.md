@@ -45,6 +45,16 @@
   the server still enforces every action. New endpoint `POST /v1/blackbox/payloads/clear`, new migration
   `20261114000000_blackbox_clear_payloads.sql`. Deploy order: migration, then core, then the dashboard.
 
+- Honeytokens and decoy tools (Phase 3 M3/M4): dashboard -> **Honeytokens**. Create a fake credential (API-key,
+  AWS-style or password format; the value is shown once and only a fingerprint is kept) and plant it where only a
+  misbehaving agent would look; add decoy tools to one agent's tool list. A call carrying a honeytoken is refused
+  before it reaches the MCP server, bait in a result is redacted, a decoy tool is never forwarded. Each trip alerts
+  your linked Telegram chats within seconds (never including the value), is recorded in the Black Box and the
+  control audit, and freezes the agent if you chose that. New endpoints `/v1/honeytokens`, `/v1/honey-tools` and
+  the internal `/internal/v1/trips`; new migration `20261115000000_honeytokens.sql`. **Deploy order: migration,
+  core, then the gateway** (the new gateway requires fields only the new core sends). Limits are in
+  `docs/runbooks/honeytokens.md` and ADR 0012.
+
 ### Fixed
 - The Black Box stored no events on Supabase: the event hash helper could not find pgcrypto's `digest()`
   (installed in the `extensions` schema), and the original migration could not be applied on a fresh

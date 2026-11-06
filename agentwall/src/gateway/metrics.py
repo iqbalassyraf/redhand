@@ -22,6 +22,9 @@ class GatewayMetrics:
         self._events_dropped_total = 0
         self._events_rejected_total = 0
         self._payload_captures: Counter[str] = Counter()
+        self._trips: Counter[tuple[str, str]] = Counter()
+        self._trip_reports: Counter[str] = Counter()
+        self._honeytoken_scans_truncated = 0
 
     def record_budget_flush(self, outcome: str, unreported_keys: int) -> None:
         with self._lock:
@@ -40,6 +43,18 @@ class GatewayMetrics:
     def record_payload_capture(self, outcome: str) -> None:
         with self._lock:
             self._payload_captures[outcome] += 1
+
+    def record_trip(self, kind: str, seen_in: str) -> None:
+        with self._lock:
+            self._trips[(kind, seen_in)] += 1
+
+    def record_trip_report(self, outcome: str) -> None:
+        with self._lock:
+            self._trip_reports[outcome] += 1
+
+    def record_honeytoken_scan_truncated(self) -> None:
+        with self._lock:
+            self._honeytoken_scans_truncated += 1
 
     def record_events_rejected(self, count: int) -> None:
         with self._lock:
@@ -96,6 +111,23 @@ class GatewayMetrics:
             ]
             for outcome, count in sorted(self._payload_captures.items()):
                 lines.append(f'redhand_gateway_payload_captures_total{{outcome="{outcome}"}} {count}')
+            lines += [
+                "# HELP redhand_gateway_trips_total Honeytoken and decoy tool trips, by kind and where seen.",
+                "# TYPE redhand_gateway_trips_total counter",
+            ]
+            for (kind, seen_in), count in sorted(self._trips.items()):
+                lines.append(f'redhand_gateway_trips_total{{kind="{kind}",seen_in="{seen_in}"}} {count}')
+            lines += [
+                "# HELP redhand_gateway_trip_reports_total Trip reports to core, by outcome (ok, refused, failed, dropped).",
+                "# TYPE redhand_gateway_trip_reports_total counter",
+            ]
+            for outcome, count in sorted(self._trip_reports.items()):
+                lines.append(f'redhand_gateway_trip_reports_total{{outcome="{outcome}"}} {count}')
+            lines += [
+                "# HELP redhand_gateway_honeytoken_scans_truncated_total Scans that hit the 64 KiB budget; the rest was not scanned.",
+                "# TYPE redhand_gateway_honeytoken_scans_truncated_total counter",
+                f"redhand_gateway_honeytoken_scans_truncated_total {self._honeytoken_scans_truncated}",
+            ]
             lines += [
                 "# HELP redhand_gateway_overhead_ms Gateway-added latency, excluding upstream time.",
                 "# TYPE redhand_gateway_overhead_ms histogram",

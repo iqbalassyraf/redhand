@@ -15,6 +15,7 @@ from __future__ import annotations
 import copy
 import hashlib
 import json
+import re
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation
 from typing import Any, Callable
@@ -577,6 +578,155 @@ def _audit_blackbox_export(store: LocalSupabaseAdapter, p: dict[str, Any]) -> No
     )
 
 
+_HONEY_KINDS = ("api_key", "aws_key", "password")
+_ACTIONS = ("alert", "freeze")
+_TOOL_NAME = re.compile(r"^[A-Za-z][A-Za-z0-9_]{2,63}$")
+_SYSTEM_ACTOR = "00000000-0000-0000-0000-000000000000"
+
+
+def _org_exists(store: LocalSupabaseAdapter, org: str) -> bool:
+    return any(str(o.get("id")) == org for o in store.tables.get("organizations", []))
+
+
+def _agent_of(store: LocalSupabaseAdapter, org: str, agent: str) -> dict[str, Any] | None:
+    return next(
+        (a for a in store.tables.get("agents", []) if str(a.get("id")) == agent and str(a.get("organization_id")) == org), None
+    )
+
+
+def _public_honeytoken(row: dict[str, Any]) -> dict[str, Any]:
+    keys = ("id", "label", "kind", "hint", "action_on_use", "action_on_read", "status", "created_at", "last_tripped_at", "trip_count")
+    return {k: row.get(k) for k in keys}
+
+
+def _control_honeytoken_create(store: LocalSupabaseAdapter, p: dict[str, Any]) -> dict[str, Any]:
+    org, actor = str(p["p_org"]), str(p["p_actor"])
+    if not _org_exists(store, org):
+        raise _error("P0002", "organization not found")
+    rows = store.tables.setdefault("honeytokens", [])
+    if sum(1 for r in rows if r["organization_id"] == org and r["status"] == "active") >= 50:
+        raise _error("23514", "at most 50 active honeytokens per organization")
+    if p["p_kind"] not in _HONEY_KINDS or p["p_action_on_use"] not in _ACTIONS or p["p_action_on_read"] not in _ACTIONS:
+        raise _error("23514", "invalid honeytoken")
+    if any(r["organization_id"] == org and r["digest"] == p["p_digest"] for r in rows):
+        raise _error("23505", "duplicate honeytoken")
+    row = {
+        "id": str(uuid4()), "organization_id": org, "label": p["p_label"], "kind": p["p_kind"], "digest": p["p_digest"],
+        "hint": p["p_hint"], "action_on_use": p["p_action_on_use"], "action_on_read": p["p_action_on_read"],
+        "status": "active", "created_by": actor, "created_at": _now(), "retired_at": None, "last_tripped_at": None,
+        "trip_count": 0,
+    }
+    rows.insert(0, row)
+    _append_audit(
+        store, org=org, actor=actor, action="honeytoken.created", target_type="organization", target_id=org, reason=None,
+        details={"honeytoken_id": row["id"], "label": row["label"], "kind": row["kind"],
+                 "action_on_use": row["action_on_use"], "action_on_read": row["action_on_read"]},
+    )
+    return _public_honeytoken(row)
+
+
+def _control_honeytoken_retire(store: LocalSupabaseAdapter, p: dict[str, Any]) -> dict[str, Any]:
+    org, actor, ident = str(p["p_org"]), str(p["p_actor"]), str(p["p_id"])
+    row = next((r for r in store.tables.get("honeytokens", []) if r["id"] == ident and r["organization_id"] == org), None)
+    if row is None:
+        raise _error("P0002", "honeytoken not found")
+    if row["status"] == "retired":
+        return {"changed": False}
+    row["status"], row["retired_at"] = "retired", _now()
+    _append_audit(
+        store, org=org, actor=actor, action="honeytoken.retired", target_type="organization", target_id=org, reason=None,
+        details={"honeytoken_id": ident, "label": row["label"]},
+    )
+    return {"changed": True}
+
+
+def _control_honey_tool_create(store: LocalSupabaseAdapter, p: dict[str, Any]) -> dict[str, Any]:
+    org, actor, agent = str(p["p_org"]), str(p["p_actor"]), str(p["p_agent"])
+    if _agent_of(store, org, agent) is None:
+        raise _error("P0002", "agent not found")
+    rows = store.tables.setdefault("honey_tools", [])
+    if sum(1 for r in rows if r["agent_id"] == agent and r["status"] == "active") >= 5:
+        raise _error("23514", "at most 5 active honey tools per agent")
+    if not _TOOL_NAME.match(p["p_name"]) or p["p_action"] not in _ACTIONS:
+        raise _error("23514", "invalid honey tool")
+    if any(r["agent_id"] == agent and r["server_slug"] == p["p_server"] and r["name"] == p["p_name"] and r["status"] == "active" for r in rows):
+        raise _error("23505", "duplicate honey tool")
+    row = {
+        "id": str(uuid4()), "organization_id": org, "agent_id": agent, "server_slug": p["p_server"], "name": p["p_name"],
+        "description": p["p_description"], "action": p["p_action"], "status": "active", "created_by": actor,
+        "created_at": _now(), "retired_at": None, "last_tripped_at": None, "trip_count": 0,
+    }
+    rows.insert(0, row)
+    _append_audit(
+        store, org=org, actor=actor, action="honey_tool.created", target_type="agent", target_id=agent, reason=None,
+        details={"honey_tool_id": row["id"], "name": row["name"], "server": row["server_slug"], "action": row["action"]},
+    )
+    return {k: row[k] for k in ("id", "agent_id", "name", "description", "action", "status", "created_at", "last_tripped_at", "trip_count")} | {"server": row["server_slug"]}
+
+
+def _control_honey_tool_retire(store: LocalSupabaseAdapter, p: dict[str, Any]) -> dict[str, Any]:
+    org, actor, ident = str(p["p_org"]), str(p["p_actor"]), str(p["p_id"])
+    row = next((r for r in store.tables.get("honey_tools", []) if r["id"] == ident and r["organization_id"] == org), None)
+    if row is None:
+        raise _error("P0002", "honey tool not found")
+    if row["status"] == "retired":
+        return {"changed": False}
+    row["status"], row["retired_at"] = "retired", _now()
+    _append_audit(
+        store, org=org, actor=actor, action="honey_tool.retired", target_type="agent", target_id=row["agent_id"], reason=None,
+        details={"honey_tool_id": ident, "name": row["name"]},
+    )
+    return {"changed": True}
+
+
+def _record_trip(store: LocalSupabaseAdapter, p: dict[str, Any]) -> dict[str, Any]:
+    org, trip_id, agent, kind = str(p["p_org"]), str(p["p_trip_id"]), str(p["p_agent"]), p["p_kind"]
+    ref, seen_in = str(p["p_ref"]), p["p_seen_in"]
+    if kind not in ("honeytoken", "honey_tool") or (kind == "honeytoken" and seen_in not in ("arguments", "result")) or (
+        kind == "honey_tool" and seen_in != "call"
+    ):
+        raise _error("22023", "invalid trip")
+    agent_row = _agent_of(store, org, agent)
+    if agent_row is None:
+        raise _error("P0002", "agent not found")
+    if kind == "honeytoken":
+        found = next((r for r in store.tables.get("honeytokens", []) if r["id"] == ref and r["organization_id"] == org and r["status"] == "active"), None)
+        action = None if found is None else (found["action_on_use"] if seen_in == "arguments" else found["action_on_read"])
+        label = None if found is None else found["label"]
+    else:
+        found = next(
+            (r for r in store.tables.get("honey_tools", []) if r["id"] == ref and r["organization_id"] == org
+             and r["agent_id"] == agent and r["status"] == "active"), None,
+        )
+        action = None if found is None else found["action"]
+        label = None if found is None else found["name"]
+    if found is None:
+        return {"recorded": False, "reason": "unknown_reference"}
+    trips = store.tables.setdefault("honeytrips", [])
+    now = datetime.now(timezone.utc)
+    recent = any(
+        t["ref_id"] == ref and t["agent_id"] == agent and t["seen_in"] == seen_in
+        and now - datetime.fromisoformat(t["occurred_at"]) < timedelta(minutes=5)
+        for t in trips
+    )
+    if any(t["id"] == trip_id for t in trips):
+        return {"recorded": False, "reason": "duplicate"}
+    trips.append({
+        "id": trip_id, "organization_id": org, "agent_id": agent, "kind": kind, "ref_id": ref, "seen_in": seen_in,
+        "tool_name": str(p.get("p_tool") or "")[:128], "server_slug": str(p.get("p_server") or "")[:128],
+        "occurred_at": now.isoformat(),
+    })
+    found["last_tripped_at"] = now.isoformat()
+    found["trip_count"] = int(found["trip_count"]) + 1
+    _append_audit(
+        store, org=org, actor=_SYSTEM_ACTOR, action="honeytoken.tripped" if kind == "honeytoken" else "honey_tool.tripped",
+        target_type="agent", target_id=agent, reason=None,
+        details={"ref_id": ref, "label": label, "seen_in": seen_in, "tool": str(p.get("p_tool") or "")[:128],
+                 "server": str(p.get("p_server") or "")[:128], "action": action},
+    )
+    return {"recorded": True, "label": label, "action": action, "agent_name": agent_row.get("name"), "alert": not recent}
+
+
 def _record_events(store: LocalSupabaseAdapter, p: dict[str, Any]) -> dict[str, Any]:
     instance, batch_id, org, items = str(p["p_instance"]), str(p["p_batch_id"]), str(p["p_org"]), p["p_items"]
     if not 8 <= len(instance) <= 64:
@@ -781,6 +931,11 @@ HANDLERS: dict[str, RpcHandler] = {
     "read_event_payload": _read_event_payload,
     "audit_blackbox_export": _audit_blackbox_export,
     "control_clear_payloads": _control_clear_payloads,
+    "control_honeytoken_create": _control_honeytoken_create,
+    "control_honeytoken_retire": _control_honeytoken_retire,
+    "control_honey_tool_create": _control_honey_tool_create,
+    "control_honey_tool_retire": _control_honey_tool_retire,
+    "record_trip": _record_trip,
     "record_usage": _record_usage,
     "mark_budget_frozen": _mark_budget_frozen,
     "usage_by_others": _usage_by_others,

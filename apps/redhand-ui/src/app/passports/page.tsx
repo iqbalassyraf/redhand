@@ -180,6 +180,9 @@ export default function PassportsPage() {
             <Link href="/blackbox" className="rounded-full px-3 py-1.5 font-medium text-[#606060] hover:bg-[#F2F2F2]">
               Black Box
             </Link>
+            <Link href="/honeytokens" className="rounded-full px-3 py-1.5 font-medium text-[#606060] hover:bg-[#F2F2F2]">
+              Honeytokens
+            </Link>
             <Link href="/" className="rounded-full px-3 py-1.5 font-medium text-[#606060] hover:bg-[#F2F2F2]">
               Command center (demo)
             </Link>

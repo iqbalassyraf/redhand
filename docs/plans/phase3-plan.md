@@ -268,9 +268,9 @@ editor per agent, payload capture toggle in organization settings; `src/lib/api.
 | | Milestone | Contents |
 |---|---|---|
 | M1 | Black Box core | **Done (2026-11-05).** Migration, ingest, gateway recorder, timeline page, verify. Done tests 1, 2 on staging; 6 locally (9.1). |
-| M2 | Retention, export, payload capture | Purge with anchor, export, opt-in capture with redaction and its retention. Done test 3. **M2a (retention purge, anchor guard, retention settings) built 2026-11-05**; **M2b (payload capture with redaction incl. personal data, decision D2) done 2026-11-05** (9.3); M2c-1 (payload view, export, capabilities: backend) built 2026-11-06; M2c-2 (dashboard) next. |
-| M3 | Honeytokens | Migration 2, generator, context digests, scanner, trips with alert and freeze, dashboard. Done test 4. |
-| M4 | Honey tools, docs, staging | Honey tools, ADRs, runbooks, threat model, staging verification of all six done tests. Done test 5. |
+| M2 | Retention, export, payload capture | Purge with anchor, export, opt-in capture with redaction and its retention. Done test 3. **M2a (retention purge, anchor guard, retention settings) built 2026-11-05**; **M2b (payload capture with redaction incl. personal data, decision D2) done 2026-11-05** (9.3); M2c (payload view, export, dashboard, delete payloads) built 2026-11-06. |
+| M3 | Honeytokens | **Built 2026-11-06.** Migration `20261115000000_honeytokens.sql`, generator, context digests, scanner, trips with alert and freeze, dashboard. Done test 4 (local suite; staging pending). |
+| M4 | Honey tools, docs, staging | **Built 2026-11-06** (honey tools, ADR 0012, runbook, threat model). Staging verification of done tests 3 to 5 pending. |
 
 Each milestone is its own PR with tests and a staging check, like Phase 2.
 

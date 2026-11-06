@@ -383,3 +383,54 @@ export const telegramApi = {
   unlink: (t: string, id: string) =>
     apiFetch<{ link_id: string; changed: boolean }>(`/v1/telegram/links/${id}/unlink`, t, { method: "POST" }),
 };
+
+export type HoneytokenKind = "api_key" | "aws_key" | "password";
+export type HoneyAction = "alert" | "freeze";
+
+export interface Honeytoken {
+  id: string;
+  label: string;
+  kind: HoneytokenKind;
+  hint: string;
+  action_on_use: HoneyAction;
+  action_on_read: HoneyAction;
+  status: "active" | "retired";
+  created_at: string;
+  last_tripped_at: string | null;
+  trip_count: number;
+}
+
+export interface HoneytokenCreated extends Honeytoken {
+  /** Shown once: RedHand keeps only a digest. */
+  value: string;
+}
+
+export interface HoneyTool {
+  id: string;
+  agent_id: string;
+  server: string;
+  name: string;
+  description: string;
+  action: HoneyAction;
+  status: "active" | "retired";
+  created_at: string;
+  last_tripped_at: string | null;
+  trip_count: number;
+}
+
+export const honeyApi = {
+  tokens: (t: string) => apiFetch<Honeytoken[]>("/v1/honeytokens", t),
+  createToken: (
+    t: string,
+    body: { label: string; kind: HoneytokenKind; action_on_use: HoneyAction; action_on_read: HoneyAction }
+  ) => apiFetch<HoneytokenCreated>("/v1/honeytokens", t, { method: "POST", body }),
+  retireToken: (t: string, id: string) =>
+    apiFetch<{ changed: boolean }>(`/v1/honeytokens/${id}/retire`, t, { method: "POST" }),
+  tools: (t: string) => apiFetch<HoneyTool[]>("/v1/honey-tools", t),
+  createTool: (
+    t: string,
+    body: { agent_id: string; server: string; name: string; description: string; action: HoneyAction }
+  ) => apiFetch<HoneyTool>("/v1/honey-tools", t, { method: "POST", body }),
+  retireTool: (t: string, id: string) =>
+    apiFetch<{ changed: boolean }>(`/v1/honey-tools/${id}/retire`, t, { method: "POST" }),
+};
