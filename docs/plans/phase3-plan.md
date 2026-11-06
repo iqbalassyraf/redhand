@@ -347,6 +347,35 @@ succeeded (it deleted nothing: no event was old enough).
 - **Not verified:** core's capture rules on staging (above); behavior under load or on Cloud Run's CPU
   throttling; the hot-path cost on Cloud Run (measured locally only: ADR 0011 addendum); the dashboard (M2c).
 
+### 9.4 M2c, M3 and M4 staging verification (2026-11-06)
+
+Deployed in order: migrations `20261113` to `20261115`, core, then the gateway; the smoke test passed. The new SQL
+was checked first in blocks that always roll back (read and export audit, honeytoken and decoy create, trip
+recording, idempotent retry, grants, row level security). Then the owner ran the checks below.
+
+- **Done test 4 (honeytoken trip): pass.** A call carrying an active honeytoken (action: freeze) was refused with
+  "request blocked" before reaching the MCP server. Core recorded one trip (`honeytoken in arguments`), audited
+  `honeytoken.tripped` and a system-actor freeze ("Honeytoken trip: bait4"), the agent showed frozen, and the Black
+  Box event had reason `honeytoken` and no payload. The Telegram alert named the agent, the label and the tool, never
+  the value, and arrived at once.
+- **Done test 5 (decoy tool trip): pass.** The decoy was listed in the agent's `tools/list`. A call to it returned a
+  plain tool error and was not forwarded; one trip, `honey_tool.tripped` audited, event reason `honey_tool`, Telegram
+  alert received. The agent was frozen because that decoy had been saved with action `freeze`.
+- **Done test 3 (capture, controls): partly checked in the dashboard.** Verified: the settings panel, capture off
+  (as the default), export download, "Delete captured payloads now" (audited `blackbox_payloads_cleared`, "Deleted
+  payloads from 0 event(s)" because capture was off), the capture and export audit rows. **Not verified on staging:**
+  the event drawer showing a payload (no `blackbox_payload_viewed` audit row exists), the viewer role's hidden buttons
+  (checked locally only), and capture ON through the dialog on staging after the dashboard release. Verified locally
+  (headless browser, in-memory store).
+- **Done test 6:** still verified by the local suite only.
+- **Found while verifying:** the same refused call was recorded as two identical Black Box events (seq 28 and 29, two
+  batches from one gateway instance). The hash chain is intact and nothing was lost; the likely cause is the
+  recorder generating a new batch id for every retry, which defeats the duplicate protection. It did not recur on the
+  decoy test. A fix (a batch id kept until the batch is acknowledged, plus a test) is a follow-up.
+- **Test mistakes worth knowing:** the first four attempts "passed" because the command carried a placeholder
+  instead of the honeytoken value, so nothing could trip. The decoy form rejected a name with a space; the dashboard
+  now needs to say so (PR 20).
+
 ## 10. Risks and open questions
 
 - **Cloud Run CPU throttling** can delay background flushes between requests. Mitigation: flush is
