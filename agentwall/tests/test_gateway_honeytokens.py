@@ -5,6 +5,7 @@ used, read or called. Planted values here are made-up fixtures, not real credent
 
 from __future__ import annotations
 
+import dataclasses
 import hashlib
 import json
 from typing import Any
@@ -332,3 +333,43 @@ async def test_reports_past_the_in_flight_cap_are_dropped_not_queued(monkeypatch
     assert len(dispatcher._tasks) == MAX_IN_FLIGHT
     gate.set()
     await dispatcher.wait_idle()
+
+
+# --- bait in a tool name or an argument key must not leak into events, logs or reports ------------------------
+
+@pytest.mark.asyncio
+async def test_bait_used_as_a_tool_name_is_a_trip_and_never_reaches_events_or_reports() -> None:
+    ref = _ref(API_KEY)
+    h, _, token = _wired([ref], scopes=[{"server": "xero", "tool": "*", "access": "write"}], payload_capture=True)
+    resp = await h.call(token, params=tool(API_KEY, month="2026-10"))
+    await h.trips.wait_idle()
+    assert resp.body["error"]["code"] == -32000 and h.upstream.received == []
+    (trip,) = h.trip_reporter.trips
+    assert (trip.kind, trip.ref_id) == ("honeytoken", ref.id) and API_KEY not in trip.tool_name
+    await h.recorder.flush()
+    (event,) = [e for batch in h.event_reporter.batches for e in batch]
+    assert event["reasons"] == ["honeytoken"] and API_KEY not in json.dumps(event)
+    assert API_KEY not in json.dumps([dataclasses.asdict(t) for t in h.trip_reporter.trips], default=str)
+
+
+@pytest.mark.asyncio
+async def test_bait_used_as_an_argument_key_does_not_appear_in_the_recorded_event() -> None:
+    ref = _ref(API_KEY)
+    h, _, token = _wired([ref])
+    await h.call(token, params={"name": "list_invoices", "arguments": {API_KEY: "x", "month": "2026-10"}})
+    await h.recorder.flush()
+    (event,) = [e for batch in h.event_reporter.batches for e in batch]
+    assert event["reasons"] == ["honeytoken"] and API_KEY not in json.dumps(event)
+    assert "month" in event["argument_keys"]  # the harmless key is still recorded
+
+
+@pytest.mark.asyncio
+async def test_bait_is_never_written_to_the_gateways_own_logs(capsys: pytest.CaptureFixture[str]) -> None:
+    ref = _ref(API_KEY)
+    h, _, token = _wired([ref], scopes=[{"server": "xero", "tool": "*", "access": "write"}])
+    await h.call(token, params=tool(API_KEY, note=API_KEY))
+    await h.trips.wait_idle()
+    captured = capsys.readouterr()
+    assert API_KEY not in captured.out and API_KEY not in captured.err
+    ledger = json.dumps(h.audit.get_recent(1)[0], default=str)  # the gateway's own forensic ledger
+    assert API_KEY not in ledger and "[REDACTED:HONEYTOKEN]" in ledger

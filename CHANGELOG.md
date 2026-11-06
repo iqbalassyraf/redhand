@@ -61,6 +61,10 @@
   background loop could run alongside one started by a request and send the same events twice. A batch now keeps
   its id and exact contents until core acknowledges it, and flushes run one at a time. Events already stored twice
   stay (the record is append-only); the hash chain was never affected. Gateway-only change: redeploy the gateway.
+- Honeytokens: bait used as a tool NAME or an argument KEY is now detected, and on any trip the bait is kept out of
+  Black Box events, the gateway's own ledger and logs, and trip reports (found during staging verification).
+- SDK: the Tier 1 detector no longer reports itself as the ONNX model when the model file is absent; findings now say
+  `tier1_lexical_stub` and rule ids `RH-T1-LEXICAL-STUB-*`.
 
 ### Fixed
 - The Black Box stored no events on Supabase: the event hash helper could not find pgcrypto's `digest()`
