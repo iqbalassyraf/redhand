@@ -78,6 +78,14 @@ telegram_env_args() {
   if [ -n "$TELEGRAM_BOT_USERNAME" ]; then printf '@TELEGRAM_BOT_USERNAME=%s' "$TELEGRAM_BOT_USERNAME"; fi
 }
 
+# The MCP Scanner's live scan needs core to know the gateway's address. deploy.sh REPLACES all environment variables, so it
+# has to be passed on every core deploy. Empty when the gateway has not been deployed yet (then live scans answer 503).
+gateway_env_args() {
+  local url
+  url="$(gcloud run services describe redhand-gateway --region "$REGION" --project "$PROJECT_ID" --format='value(status.url)' 2>/dev/null || true)"
+  if [ -n "$url" ]; then printf '@GATEWAY_URL=%s' "$url"; fi
+}
+
 cors_json() {
   if [ -n "$DASHBOARD_ORIGIN" ]; then
     printf '["http://localhost:3000","%s"]' "${DASHBOARD_ORIGIN%/}"
@@ -195,7 +203,7 @@ deploy_core() {
   gcloud run deploy redhand-core --image "$IMAGE" --region "$REGION" --project "$PROJECT_ID" \
     --service-account "$(sa_email "$CORE_SA")" \
     --allow-unauthenticated --min-instances 0 --max-instances 1 --cpu 1 --memory 512Mi --timeout 300 \
-    --set-env-vars "^@^ENVIRONMENT=staging@LOG_LEVEL=INFO@SUPABASE_URL=${SUPABASE_URL}@OPERATOR_JWKS_URL=${SUPABASE_URL}/auth/v1/.well-known/jwks.json@OPERATOR_JWT_ISSUER=${SUPABASE_URL}/auth/v1@CORS_ALLOWED_ORIGINS=$(cors_json)$(telegram_env_args)" \
+    --set-env-vars "^@^ENVIRONMENT=staging@LOG_LEVEL=INFO@SUPABASE_URL=${SUPABASE_URL}@OPERATOR_JWKS_URL=${SUPABASE_URL}/auth/v1/.well-known/jwks.json@OPERATOR_JWT_ISSUER=${SUPABASE_URL}/auth/v1@CORS_ALLOWED_ORIGINS=$(cors_json)$(telegram_env_args)$(gateway_env_args)" \
     --set-secrets "SUPABASE_SERVICE_ROLE_KEY=${SECRET_SUPABASE}:latest,INTERNAL_SERVICE_TOKEN=${SECRET_INTERNAL}:latest,AGENT_TOKEN_SIGNING_KEY=${SECRET_SIGNING}:latest$(telegram_secret_args)"
   say "redhand-core: $(service_url redhand-core)"
   if secret_exists "$SECRET_TG_TOKEN" && [ -z "$TELEGRAM_BOT_USERNAME" ]; then
