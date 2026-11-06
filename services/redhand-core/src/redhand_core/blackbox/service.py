@@ -25,6 +25,8 @@ from redhand_core.blackbox.models import (
     BlackBoxEventView,
     BlackBoxRetentionRequest,
     BlackBoxSettingsResponse,
+    ClearPayloadsRequest,
+    ClearPayloadsResponse,
     EventPayloadResponse,
     GatewayEventItem,
     PayloadCaptureRequest,
@@ -411,3 +413,19 @@ async def _export_query(
         query = query.lte("occurred_at", until.isoformat())
     res = await query.order("seq").limit(size).execute()
     return list(res.data or [])
+
+
+async def clear_payloads(supabase: Any, operator: OperatorContext, request: ClearPayloadsRequest) -> ClearPayloadsResponse:
+    """Removes every captured payload of the caller's organization at once (admin, confirmation, audited with
+    the count). Events and the hash chain are untouched. Idempotent: a repeat clears nothing."""
+    if operator.role < Role.ADMIN:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "This action requires the 'admin' role or higher.")
+    _require_confirmation(request.confirm, "Deleting captured payloads")
+    data = await _rpc(
+        supabase,
+        "control_clear_payloads",
+        {"p_org": str(operator.organization_id), "p_actor": str(operator.user_id), "p_reason": request.reason},
+        not_found_detail="Organization not found.",
+        conflict_detail="Payloads could not be cleared; try again.",
+    )
+    return ClearPayloadsResponse(cleared=int(data["cleared"]))

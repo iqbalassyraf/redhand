@@ -547,6 +547,24 @@ def _read_event_payload(store: LocalSupabaseAdapter, p: dict[str, Any]) -> dict[
     }
 
 
+def _control_clear_payloads(store: LocalSupabaseAdapter, p: dict[str, Any]) -> dict[str, Any]:
+    org, actor = str(p["p_org"]), str(p["p_actor"])
+    if not any(str(o.get("id")) == org for o in store.tables.get("organizations", [])):
+        raise _error("P0002", "organization not found")
+    cleared = 0
+    for event in store.tables.get("agent_events", []):
+        if str(event["organization_id"]) == org and (event.get("arguments_redacted") or event.get("result_excerpt")):
+            event["arguments_redacted"] = None
+            event["result_excerpt"] = None
+            cleared += 1
+    if cleared:
+        _append_audit(
+            store, org=org, actor=actor, action="organization.blackbox_payloads_cleared", target_type="organization",
+            target_id=org, reason=p.get("p_reason"), details={"events_cleared": cleared},
+        )
+    return {"cleared": cleared}
+
+
 def _audit_blackbox_export(store: LocalSupabaseAdapter, p: dict[str, Any]) -> None:
     org, actor, details = str(p["p_org"]), str(p["p_actor"]), p["p_details"]
     if not isinstance(details, dict):
@@ -762,6 +780,7 @@ HANDLERS: dict[str, RpcHandler] = {
     "control_payload_capture": _control_payload_capture,
     "read_event_payload": _read_event_payload,
     "audit_blackbox_export": _audit_blackbox_export,
+    "control_clear_payloads": _control_clear_payloads,
     "record_usage": _record_usage,
     "mark_budget_frozen": _mark_budget_frozen,
     "usage_by_others": _usage_by_others,
