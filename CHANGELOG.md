@@ -55,6 +55,14 @@
   core, then the gateway** (the new gateway requires fields only the new core sends). Limits are in
   `docs/runbooks/honeytokens.md` and ADR 0012.
 
+- `redhand bench` (Phase 4 M1): a labelled corpus of 292 samples (7 categories, English and Bahasa Malaysia, 53% of
+  the benign ones built to look like attacks) run through the checks the gateway ships today, reporting detection and
+  false-alarm rates with 95% confidence intervals and a generated coverage table
+  (`docs/security/coverage-matrix.md`). Run with `python -m agentwall.src.bench`. Today's honest baseline: indirect
+  prompt injection 0 of 28 detected, output-handling (XSS, path traversal) 0, secret leaks 9 of 20, tool-description
+  poisoning 4 of 20, manifest audit 15 of 20 with 3 false alarms. A test fails if a change makes any category worse, or if
+  the committed baseline or table differs from a fresh run.
+
 ### Fixed
 - Black Box: an event could be stored twice (seen on staging as two identical rows). The gateway's recorder gave a
   retried batch a new id, so core's duplicate protection could not recognise it, and a flush started by the

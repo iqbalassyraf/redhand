@@ -1,0 +1,35 @@
+# Runbook: the detection benchmark (`redhand bench`)
+
+Measures how well the checks RedHand ships detect labelled attacks, and how often they raise a false alarm. It is how
+Phase 4 avoids unmeasured claims: every new detector must move these numbers, and none may be described as "blocking
+100%" of anything.
+
+## Run it
+```
+uv run python -m agentwall.src.bench                      # text table
+uv run python -m agentwall.src.bench --format markdown --out docs/security/coverage-matrix.md
+uv run python -m agentwall.src.bench --check agentwall/bench/baseline.json   # exit 1 if any category got worse
+uv run python -m agentwall.src.bench --update-baseline agentwall/bench/baseline.json
+```
+The test suite runs the same checks, so CI fails if a change makes a category worse, or if the committed
+`baseline.json` or `coverage-matrix.md` differ from a fresh run.
+
+## Changing detectors or the corpus
+1. Make the change, run the benchmark, and read the per-category numbers.
+2. If detection improved or false alarms fell, regenerate the baseline and the coverage table and commit both with the
+   change, saying what moved. If anything got worse, the test fails until you fix it or justify it in the PR.
+3. Adding corpus samples changes the corpus fingerprint and needs a new baseline on purpose.
+
+## The corpus (`agentwall/bench/corpus/<category>.jsonl`)
+One file per category; each line is a sample with `label` (malicious or benign), `lang` (en or ms), `family` (variants
+of one idea share a family), `hard` (a benign sample built to look like an attack) and `text` or `manifest`. Fake
+credentials are written as placeholders such as `{{AWS_KEY}}` and expanded from pieces in `corpus.py`, so no
+secret-shaped string sits in the repository. Rules: at least 20 samples per side per category; at least 30% of the
+benign samples are hard cases; every category has Bahasa Malaysia samples (a native speaker should review them).
+
+## Limits worth knowing
+- The corpus is small and written by us. Real attackers rephrase, so the numbers flatter the detectors.
+- Variants of one idea are correlated; the families column shows how many distinct ideas stand behind the count.
+- A category with fewer than 20 samples on either side is reported as insufficient data, never as covered.
+- OWASP numbering follows the 2025 list as the project understands it; verify before quoting externally.
+- It measures detectors on text; it says nothing about agents or traffic that do not flow through the gateway.

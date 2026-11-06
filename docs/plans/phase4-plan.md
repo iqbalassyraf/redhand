@@ -10,8 +10,9 @@ owner what it found, and publishes measured detection and false-alarm rates, at 
 an owner submits to the scanner. It does not see user prompts, or anything the agent reads elsewhere.
 
 ## 1. Done tests
-1. **Measured coverage:** `redhand bench` prints detection and false-alarm rates per category; the coverage table
-   is generated from that run, not written by hand.
+1. **Measured coverage:** `redhand bench` (for now `python -m agentwall.src.bench`; it lives with the gateway detectors it
+   measures, and the SDK command can delegate to it later) prints detection and false-alarm rates per category; the coverage
+   table is generated from that run, not written by hand.
 2. **Scanner:** a poisoned manifest (hidden instructions in a description, exfiltration text, shell execution, a
    missing schema) returns findings with severities. A clean manifest passes.
 3. **Live server scan:** an admin scans a registered server from the dashboard. Addresses that fail the gateway's
