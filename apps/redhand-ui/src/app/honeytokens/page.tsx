@@ -128,6 +128,8 @@ export default function HoneytokensPage() {
       setToolDescription("");
     });
 
+  // Mirrors redhand-core's rule: starts with a letter, then letters, digits or underscores, 3 to 64 characters.
+  const toolNameValid = /^[A-Za-z][A-Za-z0-9_]{2,63}$/.test(toolName.trim());
   const field = "rounded-[8px] border border-[#E5E5E5] px-2 py-1 text-[12px]";
   const agentName = (id: string) => agents.find((a) => a.id === id)?.name ?? id.slice(0, 8);
 
@@ -317,6 +319,9 @@ export default function HoneytokensPage() {
             <label className="flex flex-col gap-1">
               <span className="text-[#606060]">Tool name</span>
               <input value={toolName} maxLength={64} onChange={(e) => setToolName(e.target.value)} placeholder="export_all_customer_records" className={`${field} w-56`} />
+              {toolName.trim() && !toolNameValid ? (
+                <span className="text-[#B42318]">Letters, digits and underscores only (no spaces), starting with a letter, 3 to 64 characters.</span>
+              ) : null}
             </label>
             <label className="flex flex-col gap-1">
               <span className="text-[#606060]">Description the agent sees</span>
@@ -331,7 +336,7 @@ export default function HoneytokensPage() {
             </label>
             <button
               onClick={createTool}
-              disabled={busy || !toolAgent || !toolServer.trim() || !toolName.trim() || !toolDescription.trim()}
+              disabled={busy || !toolAgent || !toolServer.trim() || !toolNameValid || !toolDescription.trim()}
               className="rounded-full bg-[#0F0F0F] px-3 py-1.5 font-semibold text-[#FFFFFF] disabled:opacity-40"
             >
               Add decoy tool
