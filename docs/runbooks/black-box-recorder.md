@@ -44,8 +44,24 @@ By default the Black Box stores **metadata only**: no argument values and no res
   under the PDPA); this note is a prompt for your own legal review, not a statement of compliance.**
 - **Turning it off does not delete what was captured.** To remove it sooner, shorten the payload retention
   (`PUT /v1/blackbox/retention`); the next daily purge clears it.
-- **Where to see it:** payloads are not shown in the dashboard or returned by `/v1/blackbox/events` yet (M2c adds
-  viewing and export); until then they exist only in the database.
+- **Where to see it:** admins and owners can read one event's payload with
+  `GET /v1/blackbox/events/{seq}/payload`; the timeline API never returns payloads. Each read is audited
+  (`organization.blackbox_payload_viewed`, with the actor and sequence number, never the text) in the same
+  database transaction as the read, and limited to 60 per minute per operator. A dashboard view comes with
+  the second half of M2c.
+
+## Export (M2c)
+`GET /v1/blackbox/export?format=jsonl|csv` downloads the timeline, oldest first, at most 50,000 rows.
+- **Who:** security operators and above get metadata. `include_payloads=true` adds the redacted excerpts and
+  needs the admin role. Filters: `agent_id`, `decision`, `since`, `until`. At most 10 exports per hour per
+  operator.
+- **Audited first:** one `organization.blackbox_exported` row (actor, format, filters, whether payloads were
+  included) is written before the first row is read. If that write fails, nothing is exported.
+- **JSON Lines** ends with a trailer line `{"export_complete": ..., "rows": N, "capped_at": ...}`: a file
+  without it was cut short. CSV has no trailer. CSV text cells that start with `=`, `+`, `-` or `@` are prefixed
+  with an apostrophe so spreadsheets show them as text.
+- **Handle the file as customer data.** With payloads it holds redacted excerpts, which can still contain
+  names and free text (see "What is NOT detected"). Responses are `Cache-Control: no-store`.
 
 ## Deploy order (important)
 1. Apply `supabase/migrations/20261110000000_blackbox.sql`.

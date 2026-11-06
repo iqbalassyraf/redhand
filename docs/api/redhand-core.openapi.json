@@ -286,6 +286,41 @@
         "title": "AgentUsageView",
         "type": "object"
       },
+      "BlackBoxCapabilities": {
+        "description": "What the caller's role allows, computed by the server. It exists so the dashboard can hide buttons it\nwould be refused; the server still enforces every action, so ignoring this field grants nothing.",
+        "properties": {
+          "can_export": {
+            "title": "Can Export",
+            "type": "boolean"
+          },
+          "can_export_payloads": {
+            "title": "Can Export Payloads",
+            "type": "boolean"
+          },
+          "can_manage": {
+            "description": "Change retention or turn payload capture on (admin).",
+            "title": "Can Manage",
+            "type": "boolean"
+          },
+          "can_turn_capture_off": {
+            "title": "Can Turn Capture Off",
+            "type": "boolean"
+          },
+          "can_view_payloads": {
+            "title": "Can View Payloads",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "can_manage",
+          "can_turn_capture_off",
+          "can_view_payloads",
+          "can_export",
+          "can_export_payloads"
+        ],
+        "title": "BlackBoxCapabilities",
+        "type": "object"
+      },
       "BlackBoxEventView": {
         "properties": {
           "agent_id": {
@@ -430,8 +465,18 @@
         "type": "object"
       },
       "BlackBoxSettingsResponse": {
-        "description": "The organization's Black Box settings. payload_capture_enabled is read-only until payload capture\nships (Phase 3 M2b); it is always false today.",
+        "description": "The organization's Black Box settings. `capabilities` is filled on GET /v1/blackbox/settings.",
         "properties": {
+          "capabilities": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/BlackBoxCapabilities"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "changed": {
             "title": "Changed",
             "type": "boolean"
@@ -772,6 +817,42 @@
           "mint_latency_ms"
         ],
         "title": "DownscopedTokenResponse",
+        "type": "object"
+      },
+      "EventPayloadResponse": {
+        "description": "The stored (redacted) payload of one event. Either field is null when nothing was captured.",
+        "properties": {
+          "arguments_redacted": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PayloadExcerpt"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "result_excerpt": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PayloadExcerpt"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "seq": {
+            "title": "Seq",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "seq",
+          "arguments_redacted",
+          "result_excerpt"
+        ],
+        "title": "EventPayloadResponse",
         "type": "object"
       },
       "FirewallVerdict": {
@@ -1609,6 +1690,34 @@
           "enabled"
         ],
         "title": "PayloadCaptureRequest",
+        "type": "object"
+      },
+      "PayloadExcerpt": {
+        "additionalProperties": false,
+        "description": "A redacted, size-capped excerpt of a tool call's arguments or result, built by the gateway (never by\na client): compact JSON text, cut to at most 2 KB AFTER redaction. Only stored when the organization\nturned payload capture on (record_events() decides that, not the gateway).",
+        "properties": {
+          "original_bytes": {
+            "maximum": 100000000.0,
+            "minimum": 0.0,
+            "title": "Original Bytes",
+            "type": "integer"
+          },
+          "text": {
+            "maxLength": 2048,
+            "title": "Text",
+            "type": "string"
+          },
+          "truncated": {
+            "title": "Truncated",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "text",
+          "truncated",
+          "original_bytes"
+        ],
+        "title": "PayloadExcerpt",
         "type": "object"
       },
       "RenewRequest": {
@@ -3206,6 +3315,235 @@
           }
         },
         "summary": "Get Events",
+        "tags": [
+          "Black Box Recorder"
+        ]
+      }
+    },
+    "/v1/blackbox/events/{seq}/payload": {
+      "get": {
+        "description": "The redacted payload captured for one event. Reading it is itself audited, in the same transaction.",
+        "operationId": "get_event_payload_v1_blackbox_events__seq__payload_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "seq",
+            "required": true,
+            "schema": {
+              "minimum": 1,
+              "title": "Seq",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-RedHand-Org",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Redhand-Org"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EventPayloadResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Event Payload",
+        "tags": [
+          "Black Box Recorder"
+        ]
+      }
+    },
+    "/v1/blackbox/export": {
+      "get": {
+        "description": "Downloads the organization's timeline (oldest first, at most 50,000 rows). Metadata only by default;\ninclude_payloads adds the captured redacted excerpts and needs the admin role. The export is audited\nbefore the first row is read.",
+        "operationId": "export_events_v1_blackbox_export_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "format",
+            "required": false,
+            "schema": {
+              "default": "jsonl",
+              "pattern": "^(jsonl|csv)$",
+              "title": "Format",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "include_payloads",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Include Payloads",
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "query",
+            "name": "agent_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Agent Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "decision",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "pattern": "^(ALLOW|BLOCK|ERROR)$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Decision"
+            }
+          },
+          {
+            "in": "query",
+            "name": "since",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Since"
+            }
+          },
+          {
+            "in": "query",
+            "name": "until",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Until"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-RedHand-Org",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Redhand-Org"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Export Events",
         "tags": [
           "Black Box Recorder"
         ]

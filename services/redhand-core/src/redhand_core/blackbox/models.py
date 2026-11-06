@@ -124,14 +124,33 @@ MIN_RETENTION_DAYS, MAX_RETENTION_DAYS = 7, 90
 MIN_PAYLOAD_RETENTION_DAYS, MAX_PAYLOAD_RETENTION_DAYS = 1, 30
 
 
+class BlackBoxCapabilities(BaseModel):
+    """What the caller's role allows, computed by the server. It exists so the dashboard can hide buttons it
+    would be refused; the server still enforces every action, so ignoring this field grants nothing."""
+
+    can_manage: bool = Field(description="Change retention or turn payload capture on (admin).")
+    can_turn_capture_off: bool
+    can_view_payloads: bool
+    can_export: bool
+    can_export_payloads: bool
+
+
 class BlackBoxSettingsResponse(BaseModel):
-    """The organization's Black Box settings. payload_capture_enabled is read-only until payload capture
-    ships (Phase 3 M2b); it is always false today."""
+    """The organization's Black Box settings. `capabilities` is filled on GET /v1/blackbox/settings."""
 
     retention_days: int
     payload_retention_days: int
     payload_capture_enabled: bool
     changed: bool
+    capabilities: BlackBoxCapabilities | None = None
+
+
+class EventPayloadResponse(BaseModel):
+    """The stored (redacted) payload of one event. Either field is null when nothing was captured."""
+
+    seq: int
+    arguments_redacted: PayloadExcerpt | None
+    result_excerpt: PayloadExcerpt | None
 
 
 class BlackBoxRetentionRequest(BaseModel):

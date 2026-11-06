@@ -1,6 +1,6 @@
 # Threat model: Phases 1 through 3 (Identity and control; Stop things; See things)
 
-**Last updated:** 2026-11-05. Update this file whenever a trust boundary changes (CLAUDE.md §5.1).
+**Last updated:** 2026-11-06. Update this file whenever a trust boundary changes (CLAUDE.md §5.1).
 
 ## 1. Components and trust boundaries
 
@@ -23,7 +23,7 @@
 | 5 | Gateway → MCP server | Optional upstream credential supplied by the agent | Destination check per request: https, public IPs, no redirects |
 | 6 | Telegram → core webhook | Secret header (constant-time compare), then the chat must be linked to an operator whose role is re-read on every command | Public endpoint by necessity; private chats only; stop-only commands (ADR 0008) |
 | 7 | Gateway → core (`/internal/v1/events`) | Shared service token, constant-time compare (same boundary as #3) | Each batch claims one organization; every item's agent is re-checked against that organization inside `record_events()` (ADR 0011) |
-| 8 | Operator → core (`/v1/blackbox/*`) | Same as #1 | Timeline, verify and (M2) export all filtered by the caller's organization_id in SQL |
+| 8 | Operator → core (`/v1/blackbox/*`) | Same as #1 | Timeline, verify, payload view and export all filtered by the caller's organization_id in SQL |
 
 ## 2. Threats and mitigations
 
@@ -64,6 +64,7 @@
 | Recorder outage or flood used to hide activity | Buffer overflow drops the newest events (not silently): a `recorder.gap` marker is recorded once flushing resumes, and `redhand_gateway_events_dropped_total` is a metric | A sustained flood that keeps the buffer full could delay gap reporting; Budget Guard already caps an agent's own call rate |
 | Black Box events erased to hide activity, using the application's database access | Append-only trigger: deletes only behind the retention anchor, updates only clear payloads. Anchor guard: moves only forward, onto a real event's hash, older than the retention (min 7 days). Purges and retention changes are audited | A superuser can bypass triggers; lowering retention to 7 days (audited, admin, confirmed) then waiting for the purge erases older events |
 | Captured payloads expose personal data or secrets (M2b) | Off by default; turned on only by an admin with confirmation, audited; the gateway redacts secrets, personal-data patterns and sensitive field names BEFORE truncating to 2 KB and never stores unscanned text; the database enforces the flag; payloads are kept 7 days by default and never returned by the timeline API or written to logs; any failure records the event without a payload | Names, addresses and free text are not detected, nor numbers split across fields; core trusts the gateway's redaction and does not re-scrub, so a compromised gateway instance could send unredacted text (the gateway already holds the raw payload in memory); a value over 16 KB is not captured |
+| Captured payloads read or exported by the wrong person (M2c) | Viewing a payload and exporting payloads need the admin role, metadata export the security operator role; both checked in the router and the service, scoped by organization in SQL; each read is audited in the same transaction as the read (actor and seq, never the text) and each export is audited before the first row; per-operator rate limits; exports capped at 50,000 rows and streamed; `Cache-Control: no-store`; CSV formula injection neutralised | A compromised admin account can read and export captured payloads (audited, rate-limited, capped, not prevented); limits are per core instance; redaction limits still apply to what is exported |
 | Black Box recorder outage affects enforcement | `EventRecorder.record()` does no I/O and never raises into the decision path; flush failures only grow the buffer | None known |
 
 ## 3. Out of scope so far

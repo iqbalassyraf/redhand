@@ -261,14 +261,16 @@ def test_settings_default_to_30_days_7_days_and_no_payload_capture() -> None:
     env = Env()
     resp = env.client.get("/v1/blackbox/settings", headers=env.h("viewer"))
     assert resp.status_code == 200
-    assert resp.json() == {"retention_days": 30, "payload_retention_days": 7, "payload_capture_enabled": False, "changed": False}
+    body = resp.json()
+    assert body.pop("capabilities")["can_view_payloads"] is False  # a viewer; the role matrix is in test_blackbox_access
+    assert body == {"retention_days": 30, "payload_retention_days": 7, "payload_capture_enabled": False, "changed": False}
 
 
 def test_admin_changes_retention_with_confirmation_and_it_is_audited() -> None:
     env = Env()
     resp = _retention(env, retention_days=14, payload_retention_days=3, reason="keep less", confirm=True)
     assert resp.status_code == 200
-    assert resp.json() == {"retention_days": 14, "payload_retention_days": 3, "payload_capture_enabled": False, "changed": True}
+    assert resp.json() == {"retention_days": 14, "payload_retention_days": 3, "payload_capture_enabled": False, "changed": True, "capabilities": None}
     assert env.client.get("/v1/blackbox/settings", headers=env.h()).json()["retention_days"] == 14
     (audit,) = _retention_audit(env)
     assert audit["actor_user_id"] == "00000000-0000-0000-0000-0000000000a2"  # the admin, not a client-supplied id
