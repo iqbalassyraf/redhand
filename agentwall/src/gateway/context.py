@@ -21,6 +21,7 @@ from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictInt, Valida
 import structlog
 
 from .budget import BudgetState
+from .honeytokens import HoneytokenRef
 
 logger = structlog.get_logger(__name__)
 
@@ -46,6 +47,31 @@ class _BudgetPayload(BaseModel):
     action: str = Field(pattern=r"^(deny|freeze)$")
 
 
+class _HoneytokenPayload(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    id: UUID
+    digest: str = Field(pattern=r"^[0-9a-f]{64}$")
+
+
+class _HoneyToolPayload(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    id: UUID
+    name: str = Field(pattern=r"^[A-Za-z][A-Za-z0-9_]{2,63}$")
+    description: str = Field(min_length=1, max_length=300)
+
+
+class HoneyTool(BaseModel):
+    """A decoy tool for this agent on this server. Calling it is never forwarded."""
+
+    model_config = ConfigDict(frozen=True)
+
+    id: UUID
+    name: str
+    description: str
+
+
 class _AgentPayload(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
@@ -64,6 +90,10 @@ class _AgentPayload(BaseModel):
     # Also required with no default, for the same reason: an older core that sends no budget makes the
     # lookup fail and the call is denied rather than running with no limit.
     budget: _BudgetPayload
+    # Required, with no default, like the fields above: an older core that does not send them makes the lookup
+    # fail and the call is denied, rather than running with no bait checks. Deploy core before the gateway.
+    honeytokens: list[_HoneytokenPayload]
+    honey_tools: list[_HoneyToolPayload]
 
 
 class _ServerPayload(BaseModel):
@@ -92,6 +122,11 @@ class GatewayContext:
     safe_mode: bool
     budget: BudgetState
     payload_capture: bool
+    honeytokens: tuple[HoneytokenRef, ...]
+    honey_tools: tuple[HoneyTool, ...]
+
+    def honey_tool(self, name: str) -> HoneyTool | None:
+        return next((t for t in self.honey_tools if t.name == name), None)
 
     def covers_tool(self, tool: str) -> bool:
         """True when any scope covers the tool, ignoring Safe Mode."""
@@ -203,4 +238,6 @@ class CoreContextClient:
                 resets_at=payload.agent.budget.resets_at,
             ),
             payload_capture=payload.agent.payload_capture,
+            honeytokens=tuple(HoneytokenRef(h.id, h.digest) for h in payload.agent.honeytokens),
+            honey_tools=tuple(HoneyTool(id=t.id, name=t.name, description=t.description) for t in payload.agent.honey_tools),
         )

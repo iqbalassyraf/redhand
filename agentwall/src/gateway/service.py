@@ -31,7 +31,9 @@ from .identity import AgentAuthError, AgentIdentity, AgentTokenVerifier, KeyUnav
 from .budget import BudgetMeter
 from .metrics import GatewayMetrics
 from .capture import build_excerpt
+from .honeytokens import scan as scan_honeytokens
 from .recorder import EventRecorder, GatewayEvent
+from .trips import Trip, TripDispatcher
 from .upstream import DestinationBlockedError, UpstreamError, UpstreamForwarder
 
 logger = structlog.get_logger(__name__)
@@ -88,6 +90,7 @@ class McpGateway:
         metrics: GatewayMetrics,
         budget: BudgetMeter,
         recorder: EventRecorder,
+        trips: TripDispatcher,
     ) -> None:
         self.verifier = verifier
         self.contexts = contexts
@@ -97,6 +100,7 @@ class McpGateway:
         self.metrics = metrics
         self.budget = budget
         self.recorder = recorder
+        self.trips = trips
         self._budget_refusal_logged: dict[UUID, float] = {}
 
     def _record_budget_refusal(
@@ -186,6 +190,35 @@ class McpGateway:
                 return deny(200, JSONRPC_INVALID_PARAMS, "tools/call arguments must be an object.", "invalid_params")
             tool_name, arguments = params["name"], raw_args
 
+            # 4a. Decoy tools and honeytokens come first: a call to a decoy, or one carrying planted bait, is a
+            # trip however the passport is scoped, and neither is ever forwarded upstream.
+            decoy = context.honey_tool(tool_name)
+            if decoy is not None:
+                self._trip(identity, context, "honey_tool", decoy.id, "call", tool_name)
+                self._record(identity, context, method, message, "BLOCK", ["honey_tool"], 403, tool_name, arguments, started, capture=False)
+                self.metrics.record(
+                    method=method_label, outcome="deny", reason="honey_tool",
+                    overhead_ms=(time.perf_counter() - started) * 1000,
+                )
+                # Plausible, so an attacker does not learn the tool is bait: a generic tool error.
+                return GatewayResponse(200, {
+                    "jsonrpc": "2.0", "id": request_id,
+                    "result": {"content": [{"type": "text", "text": "The service is temporarily unavailable. Try again later."}], "isError": True},
+                })
+            try:
+                bait = scan_honeytokens(arguments, context.honeytokens)
+            except Exception as exc:  # noqa: BLE001  enforcement path: a scanner error denies
+                logger.error("Honeytoken scan failed", error_type=type(exc).__name__)
+                self._record(identity, context, method, message, "BLOCK", ["honeytoken scan failed"], 403, tool_name, arguments, started, capture=False)
+                return deny(200, JSONRPC_POLICY_VIOLATION, "PolicyViolation: request could not be checked.", "honeytoken_scan_error")
+            if bait.truncated:
+                self.metrics.record_honeytoken_scan_truncated()
+            if bait.matched:
+                for honeytoken_id in bait.matched:
+                    self._trip(identity, context, "honeytoken", honeytoken_id, "arguments", tool_name)
+                self._record(identity, context, method, message, "BLOCK", ["honeytoken"], 403, tool_name, arguments, started, capture=False)
+                return deny(200, JSONRPC_POLICY_VIOLATION, "PolicyViolation: request blocked.", "honeytoken")
+
             if not context.allows_tool(tool_name):
                 if context.safe_mode and context.covers_tool(tool_name):
                     reasons = [f"Safe Mode is on: tool '{tool_name}' on server '{server}' is not declared read-only."]
@@ -247,13 +280,30 @@ class McpGateway:
 
         body = result.message
         findings: list[str] = []
+        trip_reasons: list[str] = []
         result_size_bytes: int | None = None
         captured_result: Any = None
         if body is not None and "result" in body:
             if method == "tools/list":
-                body = self._filter_tool_list(body, context)
+                body = self._add_honey_tools(self._filter_tool_list(body, context), context)
             elif method == "tools/call":
-                redacted, findings = self.firewall.inspect_egress(body["result"])
+                upstream_result = body["result"]
+                try:
+                    bait = scan_honeytokens(upstream_result, context.honeytokens)
+                except Exception as exc:  # noqa: BLE001  the call already ran; a scanner error must not leak the result
+                    logger.error("Honeytoken scan failed", error_type=type(exc).__name__)
+                    self._record(identity, context, method, message, "BLOCK", ["honeytoken scan failed"], 403, tool_name, arguments, started, capture=False)
+                    return deny(200, JSONRPC_POLICY_VIOLATION, "PolicyViolation: result could not be checked.", "honeytoken_scan_error")
+                if bait.truncated:
+                    self.metrics.record_honeytoken_scan_truncated()
+                if bait.matched:
+                    # The agent READ planted bait. The result goes back with the bait redacted (refusing would
+                    # tip off an attacker that this record is special); core alerts or freezes per the stored action.
+                    for honeytoken_id in bait.matched:
+                        self._trip(identity, context, "honeytoken", honeytoken_id, "result", tool_name)
+                    upstream_result = bait.value
+                    trip_reasons = ["honeytoken"]
+                redacted, findings = self.firewall.inspect_egress(upstream_result)
                 if findings:
                     logger.warning("Secrets redacted from tool result", count=len(findings), tool=tool_name)
                 body = {**body, "result": redacted}
@@ -265,13 +315,41 @@ class McpGateway:
 
         if method == "tools/call":
             self._record(
-                identity, context, method, message, "ALLOW", [], result.status_code, tool_name, arguments, started,
+                identity, context, method, message, "ALLOW", trip_reasons, result.status_code, tool_name, arguments, started,
                 result_size_bytes=result_size_bytes, redaction_count=len(findings), result=captured_result,
+                capture=not trip_reasons,
             )
         self.metrics.record(method=method_label, outcome="allow", reason="ok", overhead_ms=overhead_ms)
         if body is None:
             return GatewayResponse(202, None, result.headers)
         return GatewayResponse(200, body, result.headers)
+
+    def _trip(
+        self, identity: AgentIdentity, context: GatewayContext, kind: str, ref_id: UUID, seen_in: str, tool_name: str
+    ) -> None:
+        """Counts a trip and reports it to core without waiting. Never logs the value (there is none here)."""
+        self.metrics.record_trip(kind, seen_in)
+        logger.warning("Trip", kind=kind, seen_in=seen_in, agent_id=str(identity.agent_id), tool=tool_name)
+        self.trips.report(Trip(
+            organization_id=identity.organization_id, trip_id=uuid4(), agent_id=identity.agent_id,
+            kind=kind,  # type: ignore[arg-type]  # one of two literals chosen by the callers above
+            ref_id=ref_id,
+            seen_in=seen_in,  # type: ignore[arg-type]  # one of three literals chosen by the callers above
+            tool_name=tool_name, server=context.server_slug,
+        ))
+
+    @staticmethod
+    def _add_honey_tools(body: dict[str, Any], context: GatewayContext) -> dict[str, Any]:
+        """Appends this agent's decoy tools to a tools/list result (never a duplicate of a real tool's name)."""
+        result = body.get("result")
+        if not context.honey_tools or not isinstance(result, dict) or not isinstance(result.get("tools"), list):
+            return body
+        names = {t.get("name") for t in result["tools"] if isinstance(t, dict)}
+        decoys = [
+            {"name": t.name, "description": t.description, "inputSchema": {"type": "object", "additionalProperties": True}}
+            for t in context.honey_tools if t.name not in names
+        ]
+        return {**body, "result": {**result, "tools": [*result["tools"], *decoys]}}
 
     @staticmethod
     def _filter_tool_list(body: dict[str, Any], context: GatewayContext) -> dict[str, Any]:
@@ -333,6 +411,7 @@ class McpGateway:
         result_size_bytes: int | None = None,
         redaction_count: int = 0,
         result: Any = None,
+        capture: bool = True,
     ) -> None:
         record_obj = self.audit.record(
             trace_id=uuid4().hex,
@@ -357,7 +436,9 @@ class McpGateway:
             # Reuse the ledger record's own digest: raw arguments are never stored (CLAUDE.md §10),
             # and the audit logger already computed the name list and the SHA-256 the same way.
             event = replace(event, argument_keys=record_obj.argument_keys, arguments_sha256=record_obj.arguments_sha256)
-            if context.payload_capture:
+            # Never capture the payload of a trip: it may hold the bait itself, and the password format is
+            # not something the redaction patterns can recognise.
+            if context.payload_capture and capture:
                 event = self._with_payloads(event, arguments, result)
             self.recorder.record(event)
 

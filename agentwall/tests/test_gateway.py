@@ -28,6 +28,7 @@ from agentwall.src.gateway.context import CoreContextClient
 from agentwall.src.gateway.identity import AgentTokenVerifier
 from agentwall.src.gateway.metrics import GatewayMetrics
 from agentwall.src.gateway.recorder import EventRecorder
+from agentwall.src.gateway.trips import Outcome, Trip, TripDispatcher
 from agentwall.src.gateway.service import (
     JSONRPC_GATEWAY_UNAVAILABLE,
     JSONRPC_METHOD_NOT_FOUND,
@@ -65,6 +66,18 @@ class FakeReporter:
             raise RuntimeError("reporter exploded")
         self.reports.append(items)
         return self.accept
+
+
+class FakeTripReporter:
+    """Stands in for core's /internal/v1/trips."""
+
+    def __init__(self) -> None:
+        self.trips: list[Trip] = []
+        self.outcomes: list[Outcome] = []  # answers to give in order; "ok" once they run out
+
+    async def send(self, trip: Trip) -> Outcome:
+        self.trips.append(trip)
+        return self.outcomes.pop(0) if self.outcomes else "ok"
 
 
 class FakeEventReporter:
@@ -179,6 +192,8 @@ class Harness:
         self.budget = BudgetMeter(instance_id="test-gateway-0001", reporter=self.reporter, clock=self.clock, jitter=lambda: 0.5)
         self.event_reporter = FakeEventReporter()
         self.recorder = EventRecorder(instance_id="test-gateway-0001", reporter=self.event_reporter)
+        self.trip_reporter = FakeTripReporter()
+        self.trips = TripDispatcher(reporter=self.trip_reporter, retry_delays=())
         self.gateway = McpGateway(
             verifier=AgentTokenVerifier(public_key_pem=public_pem, jwks_url=None),
             contexts=CoreContextClient(
@@ -195,17 +210,20 @@ class Harness:
             metrics=GatewayMetrics(),
             budget=self.budget,
             recorder=self.recorder,
+            trips=self.trips,
         )
 
     def add_agent(
         self, scopes: list[dict[str, str]], status: str = "active", org: UUID = ORG, safe_mode: bool = False,
         limit: int | None = None, used_by_others: int = 0, payload_capture: bool = False,
+        honeytokens: list[dict[str, str]] | None = None, honey_tools: list[dict[str, str]] | None = None,
     ) -> UUID:
         agent_id = uuid4()
         self.core.agents[str(agent_id)] = {
             "id": str(agent_id), "organization_id": str(org), "status": status, "version": 1,
             "scopes": scopes, "expires_at": "2099-01-01T00:00:00+00:00", "safe_mode": safe_mode,
             "payload_capture": payload_capture,
+            "honeytokens": honeytokens or [], "honey_tools": honey_tools or [],
             "budget": {
                 "daily_call_limit": limit, "used_by_other_instances": used_by_others, "day_key": "2026-11-04",
                 "resets_at": "2026-11-04T16:00:00+00:00", "action": "deny",

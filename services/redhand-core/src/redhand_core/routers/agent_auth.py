@@ -213,6 +213,21 @@ def require_internal_service(
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid service credentials.")
 
 
+class GatewayHoneytoken(BaseModel):
+    """What the gateway needs to spot a honeytoken: its id and SHA-256 digest. Never the value."""
+
+    id: UUID
+    digest: str
+
+
+class GatewayHoneyTool(BaseModel):
+    """A decoy tool to add to this agent's tools/list on this server."""
+
+    id: UUID
+    name: str
+    description: str
+
+
 class GatewayAgentContext(BaseModel):
     id: UUID
     organization_id: UUID
@@ -224,6 +239,10 @@ class GatewayAgentContext(BaseModel):
     # Whether the gateway should build Black Box payload excerpts. Anything but an explicit true is false.
     payload_capture: bool
     budget: GatewayBudgetContext
+    # The organization's active honeytoken digests and this agent's decoy tools on the requested server. The
+    # gateway requires both fields and denies if they are missing (an older core), like safe_mode and budget.
+    honeytokens: list[GatewayHoneytoken]
+    honey_tools: list[GatewayHoneyTool]
 
 
 class GatewayBudgetContext(BaseModel):
@@ -335,6 +354,22 @@ async def gateway_context(
         action="freeze" if agent.get("budget_action") == "freeze" else "deny",
     )
 
+    try:
+        tokens_res = await (
+            supabase.table("honeytokens").select("id,digest")
+            .eq("organization_id", str(organization_id)).eq("status", "active").execute()
+        )
+        tools_res = await (
+            supabase.table("honey_tools").select("id,name,description")
+            .eq("organization_id", str(organization_id)).eq("agent_id", str(agent_id))
+            .eq("server_slug", server).eq("status", "active").execute()
+        )
+        honeytokens = [GatewayHoneytoken(id=r["id"], digest=r["digest"]) for r in (tokens_res.data or [])]
+        honey_tools = [GatewayHoneyTool(id=r["id"], name=r["name"], description=r["description"]) for r in (tools_res.data or [])]
+    except Exception as exc:  # noqa: BLE001  without the bait list the gateway cannot decide, so it denies
+        logger.error("Honeytoken lookup failed: %s", type(exc).__name__)
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "Honeytoken lookup failed.") from None
+
     await (
         supabase.table("agents")
         .update({"last_seen_at": now.isoformat()})
@@ -354,6 +389,8 @@ async def gateway_context(
             safe_mode=safe_mode,
             payload_capture=payload_capture,
             budget=budget,
+            honeytokens=honeytokens,
+            honey_tools=honey_tools,
         ),
         server=GatewayServerContext(slug=server_row["slug"], url=server_row["url"]) if server_row else None,
     )

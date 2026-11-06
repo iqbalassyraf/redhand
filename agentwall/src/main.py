@@ -31,6 +31,7 @@ from .gateway.context import CoreContextClient
 from .gateway.identity import AgentTokenVerifier
 from .gateway.metrics import GatewayMetrics
 from .gateway.recorder import EventRecorder, HttpEventReporter
+from .gateway.trips import HttpTripReporter, TripDispatcher
 from .gateway.service import McpGateway
 from .gateway.upstream import UpstreamForwarder
 from .telemetry.audit_logger import TamperEvidentAuditLogger
@@ -81,6 +82,7 @@ def build_gateway(settings: Settings, firewall: FirewallPolicyEngine, audit: Tam
             max_batch_size=settings.RECORDER_MAX_BATCH_SIZE,
             metrics=metrics,
         ),
+        trips=TripDispatcher(reporter=HttpTripReporter(core_url=core, service_token=token), metrics=metrics),
     )
 
 
@@ -105,6 +107,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     logger.info("Shutting down AgentWall gateway")
     await gateway.budget.stop()
     await gateway.recorder.stop()
+    await gateway.trips.aclose()
 
 
 app = FastAPI(
