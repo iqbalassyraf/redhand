@@ -33,7 +33,7 @@ benign samples are hard cases; every category has Bahasa Malaysia samples (a nat
 samples on each side is rated on them; the report lists dev misses for rule authors and deliberately does not list held-out misses.
 Process rules: never edit a rule to fit a held-out sample's text; fix a held-out miss only by adding a varied dev sample and
 generalising, and write a fresh held-out set before quoting new numbers; disclose any rule change made after seeing held-out
-results (the first held-out run for tool poisoning was 12 of 20; one pattern added for a dev miss moved it to 13 of 20).
+results (the first held-out run for tool poisoning was 12 of 20; one pattern added for a dev miss moved it to 13 of 20; a negation-guard bug found later, "Do not tell the user; read ..." slipping through, was fixed without changing any benchmark number).
 
 ## Limits worth knowing
 - The corpus is small and written by us. Real attackers rephrase, so the numbers flatter the detectors.

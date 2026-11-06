@@ -25,6 +25,8 @@ class GatewayMetrics:
         self._trips: Counter[tuple[str, str]] = Counter()
         self._trip_reports: Counter[str] = Counter()
         self._honeytoken_scans_truncated = 0
+        self._pin_reports: Counter[str] = Counter()
+        self._pin_events: Counter[str] = Counter()
 
     def record_budget_flush(self, outcome: str, unreported_keys: int) -> None:
         with self._lock:
@@ -51,6 +53,14 @@ class GatewayMetrics:
     def record_trip_report(self, outcome: str) -> None:
         with self._lock:
             self._trip_reports[outcome] += 1
+
+    def record_pin_report(self, outcome: str) -> None:
+        with self._lock:
+            self._pin_reports[outcome] += 1
+
+    def record_pin_event(self, event: str, count: int = 1) -> None:
+        with self._lock:
+            self._pin_events[event] += count
 
     def record_honeytoken_scan_truncated(self) -> None:
         with self._lock:
@@ -123,6 +133,18 @@ class GatewayMetrics:
             ]
             for outcome, count in sorted(self._trip_reports.items()):
                 lines.append(f'redhand_gateway_trip_reports_total{{outcome="{outcome}"}} {count}')
+            lines += [
+                "# HELP redhand_gateway_pin_reports_total Tool version reports to core, by outcome (ok, refused, failed, dropped).",
+                "# TYPE redhand_gateway_pin_reports_total counter",
+            ]
+            for outcome, count in sorted(self._pin_reports.items()):
+                lines.append(f'redhand_gateway_pin_reports_total{{outcome="{outcome}"}} {count}')
+            lines += [
+                "# HELP redhand_gateway_pin_events_total Tool pinning actions by the gateway (hidden, refused, error).",
+                "# TYPE redhand_gateway_pin_events_total counter",
+            ]
+            for event, count in sorted(self._pin_events.items()):
+                lines.append(f'redhand_gateway_pin_events_total{{event="{event}"}} {count}')
             lines += [
                 "# HELP redhand_gateway_honeytoken_scans_truncated_total Scans that hit the 64 KiB budget; the rest was not scanned.",
                 "# TYPE redhand_gateway_honeytoken_scans_truncated_total counter",

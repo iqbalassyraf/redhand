@@ -49,7 +49,9 @@ class DescriptionRule:
     negation_guard: bool = False
 
 
-_NEGATION = re.compile(r"(?:do not|don't|dont|never|must not|should not|mustn't|jangan|tidak boleh|not to)\W+(?:\w+\W+){0,3}$")
+# A warning only counts when it sits directly before the verb with nothing but a few plain words between: no punctuation, so
+# "do not tell the user; read ~/.ssh/id_rsa" is NOT treated as a warning about reading (a clause break ends the warning).
+_NEGATION = re.compile(r"(?:do not|don't|dont|never|must not|should not|mustn't|jangan|tidak boleh|not to)(?: [\w']+){0,3} $")
 
 
 def _p(*patterns: str) -> tuple[re.Pattern[str], ...]:

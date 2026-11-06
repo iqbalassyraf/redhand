@@ -256,9 +256,19 @@ class GatewayBudgetContext(BaseModel):
     action: Literal["deny", "freeze"]
 
 
+class GatewayApprovedTool(BaseModel):
+    tool: str
+    digest: str
+
+
 class GatewayServerContext(BaseModel):
     slug: str
     url: str
+    # Tool pinning (Phase 4 M3). The gateway requires both fields: an older core that sends neither makes the lookup fail
+    # and the call is denied, rather than running with no pin checks. `approved_tools` is only filled in enforce mode
+    # (alert mode needs no list), which keeps the context small.
+    pin_mode: Literal["off", "alert", "enforce"]
+    approved_tools: list[GatewayApprovedTool]
 
 
 class GatewayContextResponse(BaseModel):
@@ -307,7 +317,7 @@ async def gateway_context(
 
     server_res = await (
         supabase.table("mcp_servers")
-        .select("slug, url, is_active")
+        .select("id, slug, url, is_active, pin_mode")
         .eq("organization_id", str(organization_id))
         .eq("slug", server)
         .eq("is_active", True)
@@ -315,6 +325,22 @@ async def gateway_context(
         .execute()
     )
     server_row = server_res.data if server_res else None
+    pin_mode: Literal["off", "alert", "enforce"] = "enforce"  # anything unexpected is read the restrictive way
+    approved_tools: list[GatewayApprovedTool] = []
+    if server_row:
+        if server_row.get("pin_mode") in ("off", "alert", "enforce"):
+            pin_mode = server_row["pin_mode"]
+        if pin_mode == "enforce":
+            try:
+                pins_res = await (
+                    supabase.table("mcp_tool_pins").select("tool_name, digest")
+                    .eq("organization_id", str(organization_id)).eq("server_id", str(server_row["id"])).eq("status", "approved")
+                    .execute()
+                )
+                approved_tools = [GatewayApprovedTool(tool=r["tool_name"], digest=r["digest"]) for r in (pins_res.data or [])]
+            except Exception as exc:  # noqa: BLE001  without the approved list the gateway cannot enforce, so it denies
+                logger.error("Tool pin lookup failed: %s", type(exc).__name__)
+                raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "Tool pin lookup failed.") from None
 
     # Safe Mode is on when the agent's flag OR the organization's flag is on. Anything that is not
     # an explicit false (a missing row, null, a non-boolean) counts as ON: the restrictive reading.
@@ -392,5 +418,7 @@ async def gateway_context(
             honeytokens=honeytokens,
             honey_tools=honey_tools,
         ),
-        server=GatewayServerContext(slug=server_row["slug"], url=server_row["url"]) if server_row else None,
+        server=GatewayServerContext(
+            slug=server_row["slug"], url=server_row["url"], pin_mode=pin_mode, approved_tools=approved_tools
+        ) if server_row else None,
     )

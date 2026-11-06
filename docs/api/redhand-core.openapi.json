@@ -286,6 +286,44 @@
         "title": "AgentUsageView",
         "type": "object"
       },
+      "ApproveAllRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "confirm": {
+            "default": false,
+            "description": "Required: this approves every pending tool on the server.",
+            "title": "Confirm",
+            "type": "boolean"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          }
+        },
+        "title": "ApproveAllRequest",
+        "type": "object"
+      },
+      "ApproveAllResponse": {
+        "properties": {
+          "approved": {
+            "title": "Approved",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "approved"
+        ],
+        "title": "ApproveAllResponse",
+        "type": "object"
+      },
       "BlackBoxCapabilities": {
         "description": "What the caller's role allows, computed by the server. It exists so the dashboard can hide buttons it\nwould be refused; the server still enforces every action, so ignoring this field grants nothing.",
         "properties": {
@@ -2104,6 +2142,115 @@
         "title": "PayloadExcerpt",
         "type": "object"
       },
+      "PinDecisionRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "decision": {
+            "enum": [
+              "approve",
+              "reject"
+            ],
+            "title": "Decision",
+            "type": "string"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          }
+        },
+        "required": [
+          "decision"
+        ],
+        "title": "PinDecisionRequest",
+        "type": "object"
+      },
+      "PinDecisionResponse": {
+        "properties": {
+          "status": {
+            "enum": [
+              "pending",
+              "approved",
+              "rejected",
+              "superseded"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "PinDecisionResponse",
+        "type": "object"
+      },
+      "PinModeRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "confirm": {
+            "default": false,
+            "description": "Required for any change: off removes the check, enforce can hide tools from agents.",
+            "title": "Confirm",
+            "type": "boolean"
+          },
+          "mode": {
+            "enum": [
+              "off",
+              "alert",
+              "enforce"
+            ],
+            "title": "Mode",
+            "type": "string"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          }
+        },
+        "required": [
+          "mode"
+        ],
+        "title": "PinModeRequest",
+        "type": "object"
+      },
+      "PinModeResponse": {
+        "properties": {
+          "changed": {
+            "title": "Changed",
+            "type": "boolean"
+          },
+          "pin_mode": {
+            "enum": [
+              "off",
+              "alert",
+              "enforce"
+            ],
+            "title": "Pin Mode",
+            "type": "string"
+          }
+        },
+        "required": [
+          "pin_mode",
+          "changed"
+        ],
+        "title": "PinModeResponse",
+        "type": "object"
+      },
       "RenewRequest": {
         "additionalProperties": false,
         "properties": {
@@ -2753,6 +2900,140 @@
           "recorded_security_events_count"
         ],
         "title": "TelemetryIngestResponse",
+        "type": "object"
+      },
+      "ToolPinView": {
+        "properties": {
+          "approved_description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "What the currently approved version says, to compare against.",
+            "title": "Approved Description"
+          },
+          "approved_schema_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Approved Schema Text"
+          },
+          "change_kind": {
+            "enum": [
+              "new",
+              "changed"
+            ],
+            "title": "Change Kind",
+            "type": "string"
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "first_seen_at": {
+            "format": "date-time",
+            "title": "First Seen At",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "last_seen_at": {
+            "format": "date-time",
+            "title": "Last Seen At",
+            "type": "string"
+          },
+          "rules": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Rules",
+            "type": "array"
+          },
+          "schema_text": {
+            "title": "Schema Text",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "pending",
+              "approved",
+              "rejected",
+              "superseded"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "tool_name": {
+            "title": "Tool Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "tool_name",
+          "status",
+          "change_kind",
+          "description",
+          "schema_text",
+          "rules",
+          "first_seen_at",
+          "last_seen_at"
+        ],
+        "title": "ToolPinView",
+        "type": "object"
+      },
+      "ToolPinsResponse": {
+        "properties": {
+          "pending_count": {
+            "title": "Pending Count",
+            "type": "integer"
+          },
+          "pin_mode": {
+            "enum": [
+              "off",
+              "alert",
+              "enforce"
+            ],
+            "title": "Pin Mode",
+            "type": "string"
+          },
+          "pins": {
+            "items": {
+              "$ref": "#/components/schemas/ToolPinView"
+            },
+            "title": "Pins",
+            "type": "array"
+          },
+          "server_id": {
+            "format": "uuid",
+            "title": "Server Id",
+            "type": "string"
+          },
+          "server_slug": {
+            "title": "Server Slug",
+            "type": "string"
+          }
+        },
+        "required": [
+          "server_id",
+          "server_slug",
+          "pin_mode",
+          "pending_count",
+          "pins"
+        ],
+        "title": "ToolPinsResponse",
         "type": "object"
       },
       "TraceSpanItem": {
@@ -5392,6 +5673,92 @@
         ]
       }
     },
+    "/v1/mcp-servers/{server_id}/pin-mode": {
+      "put": {
+        "description": "off: no checks. alert (default): changes are reported. enforce: tools whose current version is not approved are hidden\nfrom agents and refused. Every change needs confirm: true.",
+        "operationId": "set_pin_mode_v1_mcp_servers__server_id__pin_mode_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "server_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Server Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-RedHand-Org",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Redhand-Org"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PinModeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PinModeResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Set Pin Mode",
+        "tags": [
+          "Tool pinning"
+        ]
+      }
+    },
     "/v1/mcp-servers/{server_id}/scan": {
       "post": {
         "description": "Scans one registered, active server of the caller's organization. The result is returned, not stored.",
@@ -5465,6 +5832,167 @@
         "summary": "Scan Registered Server",
         "tags": [
           "MCP Scanner"
+        ]
+      }
+    },
+    "/v1/mcp-servers/{server_id}/tool-pins": {
+      "get": {
+        "operationId": "list_tool_pins_v1_mcp_servers__server_id__tool_pins_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "server_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Server Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-RedHand-Org",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Redhand-Org"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ToolPinsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Tool Pins",
+        "tags": [
+          "Tool pinning"
+        ]
+      }
+    },
+    "/v1/mcp-servers/{server_id}/tool-pins/approve-all": {
+      "post": {
+        "description": "For the first baseline: approves the newest pending version of every tool on the server. Needs confirm: true.",
+        "operationId": "approve_all_tool_pins_v1_mcp_servers__server_id__tool_pins_approve_all_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "server_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Server Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-RedHand-Org",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Redhand-Org"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ApproveAllRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApproveAllResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Approve All Tool Pins",
+        "tags": [
+          "Tool pinning"
         ]
       }
     },
@@ -7206,6 +7734,92 @@
         "summary": "Ingest Agent Reasoning Traces, Firewall Verdicts, and HITL Checkpoints",
         "tags": [
           "Telemetry & Security Ingestion"
+        ]
+      }
+    },
+    "/v1/tool-pins/{pin_id}/decision": {
+      "post": {
+        "description": "Approve or reject one pending tool version. Approving it supersedes the previously approved version of that tool.",
+        "operationId": "decide_tool_pin_v1_tool_pins__pin_id__decision_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "pin_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Pin Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-RedHand-Org",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Redhand-Org"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PinDecisionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PinDecisionResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Decide Tool Pin",
+        "tags": [
+          "Tool pinning"
         ]
       }
     },

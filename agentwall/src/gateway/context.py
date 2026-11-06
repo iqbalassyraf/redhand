@@ -96,11 +96,22 @@ class _AgentPayload(BaseModel):
     honey_tools: list[_HoneyToolPayload]
 
 
+class _ApprovedToolPayload(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    tool: str = Field(min_length=1, max_length=128)
+    digest: str = Field(pattern=r"^[0-9a-f]{64}$")
+
+
 class _ServerPayload(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
     slug: str
     url: str
+    # Required, with no default: a core that does not send them (an older version) makes the lookup fail and the gateway
+    # deny, rather than running with no pin checks. `approved_tools` is only filled in enforce mode.
+    pin_mode: Literal["off", "alert", "enforce"]
+    approved_tools: list[_ApprovedToolPayload]
 
 
 class _ContextPayload(BaseModel):
@@ -124,6 +135,8 @@ class GatewayContext:
     payload_capture: bool
     honeytokens: tuple[HoneytokenRef, ...]
     honey_tools: tuple[HoneyTool, ...]
+    pin_mode: str = "off"
+    approved_tools: frozenset[tuple[str, str]] = frozenset()
 
     def honey_tool(self, name: str) -> HoneyTool | None:
         return next((t for t in self.honey_tools if t.name == name), None)
@@ -238,6 +251,8 @@ class CoreContextClient:
                 resets_at=payload.agent.budget.resets_at,
             ),
             payload_capture=payload.agent.payload_capture,
+            pin_mode=payload.server.pin_mode if payload.server else "off",
+            approved_tools=frozenset((t.tool, t.digest) for t in payload.server.approved_tools) if payload.server else frozenset(),
             honeytokens=tuple(HoneytokenRef(h.id, h.digest) for h in payload.agent.honeytokens),
             honey_tools=tuple(HoneyTool(id=t.id, name=t.name, description=t.description) for t in payload.agent.honey_tools),
         )

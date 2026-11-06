@@ -405,7 +405,9 @@ def test_gateway_context_reflects_status_scopes_and_server(env: Env) -> None:
         "/v1/mcp-servers", json={"slug": "xero", "name": "Xero", "url": "http://localhost:9100/mcp"},
         headers=env.h("admin"),
     )
-    assert env.context(agent_id).json()["server"] == {"slug": "xero", "url": "http://localhost:9100/mcp"}
+    assert env.context(agent_id).json()["server"] == {
+        "slug": "xero", "url": "http://localhost:9100/mcp", "pin_mode": "alert", "approved_tools": [],
+    }
 
     env.client.post(f"/v1/passports/{agent_id}/freeze", json={}, headers=env.h())
     frozen = env.context(agent_id).json()["agent"]
