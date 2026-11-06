@@ -36,3 +36,10 @@ Thumbs.db
 *.sqlite3
 battleground/database/data/*.db
 
+
+# Credential files must never be committed
+*-key.json
+*.pem
+.env
+.env.*
+!.env.example
