@@ -36,7 +36,7 @@ RedHand is a security product. Our customers trust us to stop their AI agents fr
 | 5 | Prove it | Compliance reports (PDPA, ISO/IEC 42001, questionnaires), Trust Score |
 | Parked | Higher tiers | Red Team service, Shadow Agent Finder, Cross-agent firewall, Policy marketplace |
 
-**Current phase:** Phase 1. Do not build features from later phases unless explicitly asked. Design Phase 1 so later phases can plug in (e.g., the gateway emits events Phase 3 will record), but don't implement them.
+**Current phase:** Phase 4 (Check inputs) is next. Phases 1 to 3 are built and deployed to a staging environment (Supabase Postgres, Cloud Run, a Vercel dashboard); Phase 3's last done tests await staging verification (`docs/plans/phase3-plan.md`). Do not build features from later phases unless explicitly asked. Design each phase so later ones can plug in (e.g., the gateway already emits the events Phase 3 records), but don't implement them.
 
 **Product truth we must never violate in code or copy:** RedHand only controls what flows through RedHand. Never imply protection over agents or credentials outside the gateway.
 
@@ -54,7 +54,7 @@ RedHand is a security product. Our customers trust us to stop their AI agents fr
 | redhand-sidecar | `packages/redhand-sidecar/` | In-VPC sidecar, Helm | Self-hosted / higher tier |
 | battleground | `battleground/` | Red vs. blue simulation | Demos and testing only |
 
-**Known Phase 1 gaps (to be confirmed by review):** Agent Passport as a stored first-class entity (owner, status, expiry); freeze / revoke / freeze-all; multi-tenancy and tenant isolation; production persistence for core and ledger.
+**Phase 1 gaps from the original review (now built; see `docs/briefing.md` and the ADRs):** the Agent Passport as a stored entity, freeze / revoke / freeze-all, multi-tenancy with tenant isolation, and persistence in Postgres. Still open: production (as opposed to staging) hosting and launch checks, and the gateway's own in-memory ledger remaining separate from the Black Box.
 
 **Positioning:** much of the current build (SCIM, multi-cloud STS, Helm, OCSF) targets enterprise buyers. The Starter Suite is a simplified, hosted slice of the same engine. Don't remove enterprise capabilities; gate them by tier instead.
 
@@ -387,7 +387,7 @@ Be concise. Don't narrate every step; don't pad.
 
 ---
 
-## 19. Phase 1 reference
+## 19. Phase 1 reference (built; kept as the definition of its done tests)
 
 **Goal:** RedHand can identify every agent, control what it touches, and stop it instantly.
 
