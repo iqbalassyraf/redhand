@@ -840,7 +840,7 @@ export default function RedHandCommandCenterPage() {
   if (!session) return null;
 
   return (
-    <div className="flex h-screen w-screen flex-col bg-[#FFFFFF] text-[#0F0F0F] select-none">
+    <div className="flex h-screen w-screen flex-col overflow-hidden bg-[#FFFFFF] text-[#0F0F0F] select-none">
       <div
         role="status"
         className="shrink-0 bg-[#FFF4E5] px-4 py-1.5 text-center text-[12px] font-medium text-[#8A4B00]"
