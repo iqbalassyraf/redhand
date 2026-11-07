@@ -63,6 +63,17 @@ After the dashboard has a URL, allow it in both services:
 SUPABASE_URL=https://qxxiksevqfmkqstrdkxi.supabase.co DASHBOARD_ORIGIN=https://<dashboard-url> deploy/cloudrun/deploy.sh cors
 ```
 
+`DASHBOARD_ORIGIN` takes several origins separated by commas. **Every deploy replaces the whole list**
+(`core`, `gateway` and `cors` alike), so always pass every origin that should work, for example:
+
+```bash
+DASHBOARD_ORIGIN=https://redhand.archtificial.com,https://redhand-dashboard.vercel.app
+```
+
+Each entry must be a bare `https://` origin: no `*`, path, query, user info or `http://`, at most five. The script
+checks this before it calls Google Cloud and refuses anything else, because the list allows credentialed browser
+requests. `http://localhost:3000` is always added. Test: `uv run pytest tests/deploy`.
+
 ## Check it in the Google Cloud console
 
 Open https://console.cloud.google.com and make sure the project selector (top bar) shows your

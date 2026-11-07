@@ -2,6 +2,10 @@
 
 ## Unreleased: Phase 3 (See things), in progress
 
+- `deploy/cloudrun/deploy.sh`: `DASHBOARD_ORIGIN` now accepts several comma-separated origins. Each must be a bare
+  https origin (no wildcard, path or http, at most five) and is checked before any gcloud call
+  (`deploy/cloudrun/origins.sh`, tests in `tests/deploy`). Fixes a deploy silently dropping the second dashboard domain.
+
 ### Added
 - Black Box Recorder (M1): a durable, tamper-evident, per-organization record of every tool call the
   gateway allowed, refused or failed to forward. Dashboard -> **Black Box**: a timeline (filterable by
