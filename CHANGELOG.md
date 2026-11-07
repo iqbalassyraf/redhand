@@ -2,6 +2,10 @@
 
 ## Unreleased: Phase 3 (See things), in progress
 
+- Dashboard: password reset. A **Forgot password?** link on the login page and a `/reset-password` page where an operator
+  sets a new password from the emailed link. Same answer whether or not the account exists; recovery tokens are removed from
+  the address bar on load; a successful reset signs out the user's other sessions. Runbook: `docs/runbooks/operator-password-reset.md`.
+
 - `deploy/cloudrun/deploy.sh`: `DASHBOARD_ORIGIN` now accepts several comma-separated origins. Each must be a bare
   https origin (no wildcard, path or http, at most five) and is checked before any gcloud call
   (`deploy/cloudrun/origins.sh`, tests in `tests/deploy`). Fixes a deploy silently dropping the second dashboard domain.

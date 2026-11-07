@@ -15,6 +15,7 @@ import React, { createContext, useCallback, useContext, useEffect, useMemo, useS
 import { createClient } from "@supabase/supabase-js";
 
 import { apiFetch } from "@/lib/api";
+import type { RecoveryTokens } from "@/lib/passwordReset";
 
 const STORAGE_KEY = "redhand.operator.session";
 
@@ -31,6 +32,10 @@ interface AuthContextValue {
   supabaseConfigured: boolean;
   signInWithPassword: (email: string, password: string) => Promise<void>;
   signInDevelopment: (user: string) => Promise<void>;
+  /** Emails a reset link. Resolves the same way whether or not the account exists. */
+  requestPasswordReset: (email: string) => Promise<void>;
+  /** Sets a new password using the one-time recovery session from the emailed link. */
+  completePasswordReset: (tokens: RecoveryTokens, newPassword: string) => Promise<void>;
   signOut: () => void;
 }
 
@@ -84,6 +89,33 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     [update]
   );
 
+  const requestPasswordReset = useCallback(async (email: string) => {
+    if (!SUPABASE_URL || !SUPABASE_ANON_KEY) throw new Error("Supabase is not configured.");
+    const client = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, { auth: { persistSession: false } });
+    const { error } = await client.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}/reset-password`,
+    });
+    // Supabase answers success for unknown emails. Only a rate limit or outage reaches here; say so without
+    // revealing anything about the account.
+    if (error) throw new Error("Could not send the email right now. Wait a minute and try again.");
+  }, []);
+
+  const completePasswordReset = useCallback(async (tokens: RecoveryTokens, newPassword: string) => {
+    if (!SUPABASE_URL || !SUPABASE_ANON_KEY) throw new Error("Supabase is not configured.");
+    const client = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+      auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
+    });
+    const { error: sessionError } = await client.auth.setSession({
+      access_token: tokens.accessToken,
+      refresh_token: tokens.refreshToken,
+    });
+    if (sessionError) throw new Error("This reset link is invalid or has expired. Request a new one.");
+    const { error } = await client.auth.updateUser({ password: newPassword });
+    if (error) throw new Error(error.message || "Could not change the password.");
+    // The recovery session is single-purpose: end it everywhere so the user signs in with the new password.
+    await client.auth.signOut({ scope: "global" });
+  }, []);
+
   const signInDevelopment = useCallback(
     async (user: string) => {
       const res = await apiFetch<{ access_token: string; email: string; role: string }>(
@@ -105,9 +137,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       supabaseConfigured: Boolean(SUPABASE_URL && SUPABASE_ANON_KEY),
       signInWithPassword,
       signInDevelopment,
+      requestPasswordReset,
+      completePasswordReset,
       signOut,
     }),
-    [session, ready, signInWithPassword, signInDevelopment, signOut]
+    [session, ready, signInWithPassword, signInDevelopment, requestPasswordReset, completePasswordReset, signOut]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

@@ -14,7 +14,9 @@ const DEV_USERS: Array<{ id: string; label: string }> = [
 ];
 
 export default function LoginPage() {
-  const { supabaseConfigured, signInWithPassword, signInDevelopment } = useAuth();
+  const { supabaseConfigured, signInWithPassword, signInDevelopment, requestPasswordReset } = useAuth();
+  const [mode, setMode] = useState<"signin" | "forgot">("signin");
+  const [notice, setNotice] = useState<string | null>(null);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -43,7 +45,58 @@ export default function LoginPage() {
           <span className="text-[20px] font-bold tracking-tight">RedHand</span>
         </div>
 
-        {supabaseConfigured ? (
+        {supabaseConfigured && mode === "forgot" ? (
+          <form
+            onSubmit={async (e) => {
+              e.preventDefault();
+              setBusy(true);
+              setError(null);
+              setNotice(null);
+              try {
+                await requestPasswordReset(email);
+                setNotice(
+                  "If an account exists for that email, a reset link is on its way. The link works once and expires quickly."
+                );
+              } catch (err) {
+                setError(err instanceof Error ? err.message : "Could not send the email.");
+              } finally {
+                setBusy(false);
+              }
+            }}
+            className="flex flex-col gap-3"
+          >
+            <label className="text-[12px] font-semibold text-[#606060]" htmlFor="reset-email">
+              Email
+            </label>
+            <input
+              id="reset-email"
+              type="email"
+              autoComplete="username"
+              required
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className="h-[38px] rounded-[8px] border border-[#E5E5E5] px-3 text-[14px] focus:border-[#0F0F0F] focus:outline-none"
+            />
+            <button
+              type="submit"
+              disabled={busy}
+              className="mt-2 h-[38px] rounded-full bg-[#0F0F0F] text-[14px] font-semibold text-[#FFFFFF] disabled:opacity-50"
+            >
+              Send reset link
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setMode("signin");
+                setError(null);
+                setNotice(null);
+              }}
+              className="text-[13px] text-[#606060] underline"
+            >
+              Back to sign in
+            </button>
+          </form>
+        ) : supabaseConfigured ? (
           <form
             onSubmit={(e) => {
               e.preventDefault();
@@ -82,6 +135,16 @@ export default function LoginPage() {
             >
               Sign in
             </button>
+            <button
+              type="button"
+              onClick={() => {
+                setMode("forgot");
+                setError(null);
+              }}
+              className="text-[13px] text-[#606060] underline"
+            >
+              Forgot password?
+            </button>
           </form>
         ) : (
           <div className="flex flex-col gap-2">
@@ -102,6 +165,11 @@ export default function LoginPage() {
           </div>
         )}
 
+        {notice && (
+          <p role="status" className="mt-4 text-[13px] text-[#0F0F0F]">
+            {notice}
+          </p>
+        )}
         {error && (
           <p role="alert" className="mt-4 text-[13px] text-[#CC0000]">
             {error}

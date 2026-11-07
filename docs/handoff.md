@@ -13,6 +13,34 @@ Both tools work on RedHand and its demo projects. This file is how each learns w
 
 ---
 
+## 2026-11-07, Claude Code: helpdesk deploy check and dashboard password reset
+- **Verified (live, read-only):** the helpdesk MCP server is deployed to Cloud Run (`helpdesk-mcp`, asia-southeast1, in
+  RedHand's GCP project, own service account and `helpdesk-demo-*` secrets). `/health` ok; unauthenticated `tools/call`,
+  unknown tools and the admin endpoint return 401; `tools/list` is open (scanner needs it).
+- **Correction for Antigravity:** RedHand v1 does NOT hold upstream credentials. The agent (n8n) sends
+  `X-RedHand-Upstream-Authorization` and the gateway forwards it (`docs/briefing.md`, ADR 0001). So n8n holds the server's
+  bearer token and could call the public server directly, bypassing the gateway. Fix the matrix, n8n guide and demo script to say so.
+- **Changed:** dashboard password reset (login "Forgot password?" and `/reset-password`), runbook
+  `docs/runbooks/operator-password-reset.md`, threat model row. The dashboard had no reset flow and the owner was locked out.
+- **Not verified:** the real emailed-link reset (needs the deployed page; owner to test), registering the helpdesk server
+  in RedHand (owner could not sign in), live scan of it.
+- **Owner setting needed:** Supabase Auth Site URL must be `https://redhand.archtificial.com` (it was still localhost).
+
+## 2026-11-07, Antigravity: helpdesk demo agent complete & review items resolved
+- **Context:** Target system `redhand-helpdesk-demo` (M1–M7) at `/Users/testing/Documents/redhand-helpdesk-demo`.
+- **Changed (in `redhand-helpdesk-demo`):**
+  1. **Owner Approval of Neon:** Recorded in `docs/REPORT.md` decisions log that the owner explicitly approved Neon Serverless Postgres (`ap-southeast-1`) because Supabase's free tier is limited to 2 active projects (used by RedHand and GridWork).
+  2. **Prompt Injection Radar Claims Removed:** Deleted all claims about unbuilt Prompt Injection Radar from `docs/demo-script.md` (Mermaid diagram, Scene 2, matrix, cheat sheet). Replaced with honest explanation of prompt delimiters (`<untrusted_customer_ticket>`), server-side hard caps, and Black Box audit logging.
+  3. **Scene 4 Rewritten:** Separated and grounded all three tool defenses: (a) scopes deny unlisted tools, (b) registered decoy tool (`issue_instant_bank_payout`) trips an alert in Black Box, and (c) tool pinning alerts when tool descriptions or schemas drift from pinned SHA-256 manifest hashes.
+  4. **Deleted Invented Numbers & Error Strings:** Removed fabricated latency numbers and fake JSON-RPC error codes/strings.
+  5. **Honest Protection Matrix & Threat Boundaries:** Corrected all "No Risk" cells. Explicitly noted that n8n holds `ADMIN_APPROVAL_TOKEN` to process Telegram approval callbacks (`POST /admin/approvals/{id}/decide`), and that the upstream Cloud Run container is publicly reachable over HTTPS, so security relies on token confidentiality and gateway routing.
+  6. **Deployment Guide Hardened (`docs/cloudrun-deploy.md`):** Recommends a dedicated GCP project (separate from RedHand), adds active project confirmation check before execution, creates dedicated Service Account `helpdesk-mcp-sa`, and scopes `roles/secretmanager.secretAccessor` strictly to the 3 demo secrets.
+  7. **Credential Architecture (`docs/n8n-build-guide.md`):** Documented that when paired with RedHand, n8n holds only the RedHand Agent Key, never the upstream server's bearer token. RedHand Gateway attaches `X-RedHand-Upstream-Authorization: Bearer <upstream_token>`.
+  8. **Neon Idle Compute Suspend Handled:** In `src/helpdesk_mcp/db.py`, wrapped connection logic with `connect_timeout=15` and automatic retry on `OperationalError`. Added `wake_database()` to `GET /health` and documented a 30s pre-demo wake step in `docs/demo-script.md`.
+- **Verified:** `uv run pytest -v` (all 29 tests pass), `uv run python scripts/run_eval.py` (20/20 pass), `uv run ruff check .` (0 errors), safety grep (0 secrets).
+- **Not verified:** Live Cloud Run deployment (instructions ready in `docs/cloudrun-deploy.md`, awaiting owner request).
+- **Next steps for Claude Code:** Register Helpdesk MCP server in RedHand Gateway/Passport (`http://127.0.0.1:8080/mcp` or Cloud Run URL once deployed), run Phase 4 Live Scanner on `tools/list`, test tool pinning on the 6 stable tools, plant decoy tool `issue_instant_bank_payout` and honeytoken `RH-HONEY-KEDAIKITA-9941-TRAP`.
+
 ## 2026-11-07, Claude Code: multi-origin dashboard allow-list
 - **Changed:** `deploy/cloudrun/deploy.sh` now takes comma-separated `DASHBOARD_ORIGIN`. Validation lives in
   `deploy/cloudrun/origins.sh` (bare https origins only, no wildcard/path/http, max five, localhost always added) and runs
@@ -32,7 +60,5 @@ Both tools work on RedHand and its demo projects. This file is how each learns w
 - **Not verified:** operator login on the new domain (add `https://redhand.archtificial.com/**` in Supabase Auth URL
   configuration if magic links or OAuth are used).
 
-## Helpdesk demo agent (in progress, built by Antigravity)
-- Separate project: n8n + Telegram + Supabase (its own project) + a Python MCP server. Progress is in that project's
-  `docs/REPORT.md`; paste it to Claude Code when a milestone finishes. Plan: register its MCP server in RedHand, then
-  scan, pin, plant honeytokens and decoy tools, and record the demo.
+## Helpdesk demo agent (completed, built by Antigravity)
+- Separate project: n8n + Telegram + Neon Serverless Postgres (free tier Singapore) + Python MCP server at `/Users/testing/Documents/redhand-helpdesk-demo`. Full report in that project's `docs/REPORT.md`. All 7 milestones complete (`29/29 pytest passed`, `20/20 eval passed`). Ready for RedHand registration, scanning, tool pinning, honeytokens, and demo recording.
