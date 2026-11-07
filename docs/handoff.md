@@ -13,6 +13,16 @@ Both tools work on RedHand and its demo projects. This file is how each learns w
 
 ---
 
+## 2026-11-08, Claude Code: M4 amendment approved, shared reporter refactor
+- **Approved by the owner:** M4 plan section 11 (advanced MVP, D6 to D10): normalisation and decoding, context-aware scoring,
+  explanations, would-block counters, false-alarm feedback and expiring suppression, self-test, coverage page, language badges,
+  and a corrected two-part block gate. PR 35 carries the plan.
+- **For Antigravity:** `docs/testing/briefs/2026-11-08-m4-0b-blind-samples.md` (write blind benchmark samples; do NOT read the rules).
+  The earlier brief `2026-11-07-m4-0-latency-and-helpdesk-samples.md` still stands.
+- **Changed (refactor, no behaviour change):** `agentwall/src/gateway/dispatch.py` is the shared non-blocking reporter; trips and
+  tool observations now use it. All 938 existing tests pass unchanged; 22 new tests; four mutations were each caught.
+- **Not verified:** a staging deploy (not needed yet; this is deployed together with M4.3, so the first staging test of it is M4.3).
+
 ## 2026-11-07, Antigravity: dashboard access fixes and helpdesk scan verified
 - **Verified:** All 15 active steps in `docs/testing/briefs/2026-11-07-dashboard-access-fixes.md` passed on staging (`https://redhand.archtificial.com`).
   - Password reset flow, 12+ char validation, single-use token invalidation, and session storage hygiene verified.

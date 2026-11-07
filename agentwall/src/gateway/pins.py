@@ -9,18 +9,18 @@ about a tool is untrusted: it is size-capped before it leaves here, and core sto
 
 from __future__ import annotations
 
-import asyncio
 from collections import OrderedDict
 from dataclasses import dataclass
 import hashlib
 import json
-from typing import Any, Literal, Protocol
+from typing import Any, Protocol
 from uuid import UUID
 
 import httpx
 import structlog
 
 from ..firewall.description_rules import scan_description
+from .dispatch import SHUTDOWN_WAIT_SECONDS, Outcome, ReportDispatcher, outcome_for_status
 from .metrics import GatewayMetrics
 
 logger = structlog.get_logger(__name__)
@@ -31,9 +31,8 @@ MAX_DESCRIPTION_CHARS = 2000
 MAX_SCHEMA_CHARS = 8000
 MAX_IN_FLIGHT = 20
 RETRY_DELAYS = (0.5, 1.0, 2.0, 4.0)
-SHUTDOWN_WAIT_SECONDS = 3.0
 
-Outcome = Literal["ok", "drop", "retry"]
+__all__ = ["MAX_IN_FLIGHT", "Outcome", "PinCoordinator", "PinReport", "PinReporter", "HttpPinReporter", "tool_digest"]
 
 
 def tool_digest(tool: dict[str, Any]) -> str:
@@ -86,10 +85,9 @@ class HttpPinReporter:
         except httpx.HTTPError as exc:
             logger.warning("Tool report failed: core unreachable", error_type=type(exc).__name__)
             return "retry"
-        if response.status_code == 200:
-            return "ok"
-        logger.warning("Tool report refused", status=response.status_code)
-        return "drop" if 400 <= response.status_code < 500 and response.status_code != 429 else "retry"
+        if response.status_code != 200:
+            logger.warning("Tool report refused", status=response.status_code)
+        return outcome_for_status(response.status_code)
 
 
 class PinCoordinator:
@@ -100,10 +98,17 @@ class PinCoordinator:
     ) -> None:
         self._reporter = reporter
         self._metrics = metrics
-        self._delays = retry_delays
         self._reported: OrderedDict[tuple[UUID, str, str, str], None] = OrderedDict()
         self._observed: OrderedDict[tuple[UUID, str, str], str] = OrderedDict()
-        self._tasks: set[asyncio.Task[None]] = set()
+        # A report that could not be sent is forgotten, so the next listing of the same tools reports it again.
+        self._dispatcher: ReportDispatcher[PinReport] = ReportDispatcher(
+            name="tool", send=lambda report: self._reporter.send(report), count=self._count, retry_delays=retry_delays,
+            max_in_flight=lambda: MAX_IN_FLIGHT, on_failed=self._forget,
+        )
+
+    @property
+    def _tasks(self) -> set[Any]:
+        return self._dispatcher.tasks
 
     # -- what the gateway has seen --------------------------------------------------------------------------
     def last_digest(self, organization_id: UUID, server: str, tool: str) -> str | None:
@@ -136,52 +141,18 @@ class PinCoordinator:
 
     # -- reporting ---------------------------------------------------------------------------------------
     def _dispatch(self, report: PinReport) -> None:
-        if len(self._tasks) >= MAX_IN_FLIGHT:
+        if not self._dispatcher.submit(report):
             self._forget(report)  # try again at the next listing rather than lose it
-            self._count("dropped")
-            return
-        try:
-            task = asyncio.get_running_loop().create_task(self._deliver(report))
-        except RuntimeError:
-            self._forget(report)
-            self._count("dropped")
-            return
-        self._tasks.add(task)
-        task.add_done_callback(self._tasks.discard)
 
     def _forget(self, report: PinReport) -> None:
         for tool in report.tools:
             self._reported.pop((report.organization_id, report.server, tool["name"], tool["digest"]), None)
 
-    async def _deliver(self, report: PinReport) -> None:
-        for attempt in range(len(self._delays) + 1):
-            try:
-                outcome = await self._reporter.send(report)
-            except Exception as exc:  # noqa: BLE001  a reporter must never take the gateway down
-                logger.warning("Tool report failed", error_type=type(exc).__name__)
-                outcome = "retry"
-            if outcome == "ok":
-                self._count("ok")
-                return
-            if outcome == "drop":
-                self._count("refused")
-                return
-            if attempt < len(self._delays):
-                await asyncio.sleep(self._delays[attempt])
-        self._forget(report)  # so the next listing reports it again
-        self._count("failed")
-
     async def wait_idle(self) -> None:
-        while self._tasks:
-            await asyncio.wait(list(self._tasks))
+        await self._dispatcher.wait_idle()
 
     async def aclose(self, timeout: float = SHUTDOWN_WAIT_SECONDS) -> None:
-        pending = list(self._tasks)
-        if not pending:
-            return
-        _, still = await asyncio.wait(pending, timeout=timeout)
-        for task in still:
-            task.cancel()
+        await self._dispatcher.aclose(timeout)
 
     def _count(self, outcome: str) -> None:
         if self._metrics is not None:
