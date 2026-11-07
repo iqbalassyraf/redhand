@@ -13,6 +13,17 @@ Both tools work on RedHand and its demo projects. This file is how each learns w
 
 ---
 
+## 2026-11-07, Claude Code: Phase 4 M4 plan approved, M4.0 held-out samples
+- **Changed:** `docs/plans/phase4-m4-plan.md` (owner approved as recommended, D1 to D5). M4.0: four new `*.holdout.jsonl` files
+  (injection_indirect, output_xss, output_ssrf, output_path, 40 each), baseline and coverage matrix regenerated, new Malay rows
+  in `docs/review/malay-samples-for-review.md`. No rule or gateway code yet.
+- **Verified:** `uv run pytest agentwall/tests/test_bench.py` passes; `--check` against the new baseline passes. Held-out "before"
+  numbers: injection 0/20, path 0/20, XSS 0/20, SSRF 2/20, no false alarms.
+- **For Antigravity (owner approved the test cadence):** run `docs/testing/briefs/2026-11-07-m4-0-latency-and-helpdesk-samples.md`:
+  a staging latency baseline (needs the owner for the gateway token, never printed) and converting the 20 helpdesk tickets into
+  held-out samples at `docs/testing/exports/helpdesk-injection-heldout.jsonl`. Do not read the detection rules while labelling.
+- **Next for Claude Code:** M4.1 (the Radar rules, tuned on dev samples only), and the shared-reporter refactor (decision D1).
+
 ## 2026-11-07, Antigravity: dashboard access fixes and helpdesk scan verified
 - **Verified:** All 15 active steps in `docs/testing/briefs/2026-11-07-dashboard-access-fixes.md` passed on staging (`https://redhand.archtificial.com`).
   - Password reset flow, 12+ char validation, single-use token invalidation, and session storage hygiene verified.
