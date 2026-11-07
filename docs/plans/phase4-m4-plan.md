@@ -1,7 +1,7 @@
 # Phase 4 M4 plan: Prompt Injection Radar and output checks
 
-Status: **proposed, awaiting owner approval** (2026-11-07). Refines section 3 and 7 of `docs/plans/phase4-plan.md`; where this
-file is more specific, it wins once approved. No code is written until the owner says "approved".
+Status: **approved by the owner as recommended (2026-11-07), decisions D1 to D5 below**. Refines section 3 and 7 of
+`docs/plans/phase4-plan.md`; where this file is more specific, it wins.
 
 ## 1. Goal
 Tool results that carry an injection attack, or output that is dangerous to whatever renders or fetches it, are detected at
@@ -117,7 +117,10 @@ running cost is expected to be negligible; Telegram alerts are rate limited.
 - Results can be large or streamed; non-text content (images, blobs) is skipped, and the skip is counted and shown.
 - Honest ceiling: the benchmark may show "partial" for injection even after M4. That is a result, not a failure to hide.
 
-## Decisions needed from the owner
+## Decisions (owner approved as recommended, 2026-11-07)
+D1 extract one shared background reporter first. D2 two switches. D3 use the helpdesk attack tickets as held-out samples.
+D4 Scanner page. D5 neutral block message. The options considered:
+
 - **D1 reporters:** first extract one shared background reporter from `trips.py` and `pins.py` (a pure refactor, existing tests
   unchanged, recommended), or add a third copy now and refactor later.
 - **D2 switches:** two (injection and output, recommended) or one.
