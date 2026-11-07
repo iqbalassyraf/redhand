@@ -129,7 +129,7 @@ D4 Scanner page. D5 neutral block message. The options considered:
 - **D4 UI home:** Radar settings and findings on the Scanner page (recommended) or a new page.
 - **D5 block message:** neutral policy-violation error (recommended) or a message naming the finding family.
 
-## 11. MVP ambition amendment (proposed 2026-11-07, pending owner approval)
+## 11. MVP ambition amendment (owner approved D6 to D10 as recommended, 2026-11-08)
 
 **Owner direction:** the MVP should be advanced enough to impress, built around the idea of honest, measured, explainable
 detection. "Impressive" here means things a buyer can check, not bigger claims. We still never say "protected from prompt
@@ -211,7 +211,7 @@ The owner can stop after M4.4 and still have a working, honest Radar; M4.5 and M
 - Sophisticated, adaptive attacks will still get through. The coverage page lists the families we miss.
 - Suppression and feedback can be misused by a compromised admin; they are audited, expiring and visible.
 
-### 11.8 New decisions needed
+### 11.8 Decisions (approved as recommended, 2026-11-08)
 - **D6 scope:** include A1 to A9 as above (recommended), or a smaller set.
 - **D7 block gate:** the two-part gate in 11.2 (recommended), or a stricter 1% upper bound before any block.
 - **D8 corpus:** have Antigravity write the blind samples (recommended), and use only our own docs and licence-checked data.
