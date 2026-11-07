@@ -10,6 +10,17 @@ verifies each change on staging and in a browser. The owner connects the two by 
    to `docs/handoff.md`.
 4. Claude Code reads the result and fixes any failure, then adds a note under the brief's "Follow-up".
 
+## When to test (cadence)
+1. **Always, per change:** Claude Code writes and runs the automated tests (`CLAUDE.md` section 7).
+2. **Per milestone:** one brief and one staging test for each batch that can be deployed (for example "M4 Radar and output
+   checks", or "M5 and M6 together"). Not after every small edit, and not only at the end of a phase.
+3. **Riskier work first:** anything touching the gateway, migrations, credentials or tenant isolation gets its staging test
+   before Claude Code builds the next thing that depends on it. At most one untested milestone is ever stacked up.
+4. **Small fixes ride along:** trivial UI or docs fixes go into the next brief as their own step.
+5. **Never skip silently:** if a milestone moves on untested, say so in `docs/handoff.md`.
+6. **Testing does not block building:** Antigravity can test milestone N on staging while Claude Code builds N+1, as long as
+   N+1 does not build on N's code when N touched enforcement. Bugs found go into the result file; Claude Code fixes them.
+
 ## Rules for the tester
 - Staging only (dashboard `https://redhand.archtificial.com`, core and gateway Cloud Run URLs in `docs/briefing.md`
   and `docs/runbooks/cloud-run-staging.md`). Never production, never real customer data.

@@ -13,6 +13,15 @@ Both tools work on RedHand and its demo projects. This file is how each learns w
 
 ---
 
+## 2026-11-07, Antigravity: dashboard access fixes and helpdesk scan verified
+- **Verified:** All 15 active steps in `docs/testing/briefs/2026-11-07-dashboard-access-fixes.md` passed on staging (`https://redhand.archtificial.com`).
+  - Password reset flow, 12+ char validation, single-use token invalidation, and session storage hygiene verified.
+  - Page scrolling on `/passports`, `/blackbox`, `/scanner`, and `/honeytokens` restored; home page `/` stays fixed with inner scrolling.
+  - Multi-origin CORS confirmed via curl for both `https://redhand.archtificial.com` and `https://redhand-dashboard.vercel.app` on core `/v1/passports` and gateway `/health`; `https://evil.example.com` rejected with no CORS headers.
+  - Live scanner on `kedai-kita` MCP server completed with expected `WARN` verdict (6 tools scanned, 0 high findings, low `MCP-SEC-008` unbounded strings only).
+- **Not verified:** Step 16 (rescan after helpdesk schemas add `maxLength`/`pattern`).
+- **Next steps for Claude Code:** Review test results in `docs/testing/results/2026-11-07-dashboard-access-fixes.md` and proceed with Phase 4 follow-ups or schema tightening if desired.
+
 ## 2026-11-07, Claude Code: helpdesk deploy check and dashboard password reset
 - **Verified (live, read-only):** the helpdesk MCP server is deployed to Cloud Run (`helpdesk-mcp`, asia-southeast1, in
   RedHand's GCP project, own service account and `helpdesk-demo-*` secrets). `/health` ok; unauthenticated `tools/call`,
