@@ -128,3 +128,92 @@ D4 Scanner page. D5 neutral block message. The options considered:
   JSONL; recommended).
 - **D4 UI home:** Radar settings and findings on the Scanner page (recommended) or a new page.
 - **D5 block message:** neutral policy-violation error (recommended) or a message naming the finding family.
+
+## 11. MVP ambition amendment (proposed 2026-11-07, pending owner approval)
+
+**Owner direction:** the MVP should be advanced enough to impress, built around the idea of honest, measured, explainable
+detection. "Impressive" here means things a buyer can check, not bigger claims. We still never say "protected from prompt
+injection". This section adds to sections 3 to 9; where it conflicts with them (the block gate, the milestone table, the corpus),
+this section wins once approved.
+
+### 11.1 What makes it advanced (and credible)
+| # | Capability | Why it impresses, and why it stays honest | Cost |
+|---|---|---|---|
+| A1 | **Layered normalisation and decoding** before any rule: NFKC, zero-width and bidi stripping, Unicode tag characters, homoglyph folding, leetspeak folding, and one bounded level of base64, hex, URL and HTML-entity decoding | Beats the cheap evasions most keyword filters miss; each step's gain is measured on the benchmark and reported | small, bounded |
+| A2 | **Context-aware scoring.** A result that tells the agent to call a tool the agent actually holds (names from the passport already in the gateway context), or names a destination, raises confidence; a result that only mentions the idea in prose (an article about prompt injection) does not | Deterministic and cheap, uses data we already have, and attacks the main weakness of pattern filters, false alarms on security documentation | small |
+| A3 | **Finding explanations:** rule family, severity, confidence, a plain reason, and what to do next, never the matched text | Operators trust what they can understand | small |
+| A4 | **Would-block counters in observe mode:** every finding records whether block mode would have stopped it | Gives each organization its own false alarm evidence before it enables block | small |
+| A5 | **"Mark as false alarm" feedback and an expiring suppression** (per agent and rule, admin only, confirmed, audited, never for honeytokens, never for block-eligible families without a second admin) | The product learns from its owners, and the reviewed false alarms become candidate benign samples | medium |
+| A6 | **Security self-test:** one button replays a bundled safe sample set through the organization's live settings and shows detection and false alarm rates with confidence intervals and the known misses | A live, repeatable demonstration that cannot be faked; also catches a misconfigured gateway | medium |
+| A7 | **Detection coverage page:** the coverage matrix (held-out first, with intervals, per language and per family) generated from the committed baseline | Few vendors publish measured gaps; this is a trust signal and a sales asset | small |
+| A8 | **Language coverage badges:** English, Malay, and (new) Indonesian and Simplified Chinese, each marked "native-reviewed: yes or no" | Fits the Southeast Asian market and says plainly what has been reviewed | medium |
+| A9 | **Pluggable detector interface** so a measured classifier can be added later without touching the gateway flow | Keeps the door open for 4.5 without building it now (P4-D8 stands) | small |
+
+**Deliberately not in the MVP:** a local ML classifier (P4-D8), an LLM judge (no LLM on the hot path), a free-text "test this
+string" box (it would let anyone with access tune an evasion against the live rules; the self-test uses bundled samples only),
+and a per-agent destination allowlist for arguments. The allowlist is the strongest defence against exfiltration, but it is a
+separate control with its own settings and false alarm profile, so it is recommended as the first follow-up after M4.
+
+### 11.2 The block gate, corrected (replaces "at most 1% false alarms on at least 50 benign samples")
+With 50 benign samples and zero false alarms, the true rate could still be 7%; 1% needs about 380 clean benign samples. The new
+gate has two parts, both required:
+1. **Global:** a rule family is block-eligible only if, on the held-out benign set, its false alarm rate has a 95% upper bound of
+   at most 3% (needs at least 100 benign held-out samples, at least 40 of them hard or realistic, with zero or one false alarm) and its detection
+   rate on held-out attacks is at least 50%. A test enforces it from the committed baseline.
+2. **Per organization:** block can be switched on only after the organization has run observe for at least 7 days or 200 results,
+   whichever is later, with every would-block finding reviewed (confirmed or marked false alarm). The settings page shows the
+   would-block count and the reviewed false alarm rate.
+The stricter 1% upper bound stays the target for calling a family "covered".
+
+### 11.3 Corpus growth plan (replaces nothing; adds M4.0b)
+| Source | What it adds | Rule |
+|---|---|---|
+| Antigravity writes blind samples | Independent authorship (a different model, no sight of the rules): 100 attack and 150 benign samples per category from a brief that contains no rule text | Held-out only; Claude does not read or edit them |
+| The 20 helpdesk tickets | Realistic customer text | Already in the M4.0 brief |
+| RedHand's own docs and runbooks | Realistic hard benign (security text that quotes attacks) | We own the text |
+| Reviewed false alarms from observe mode (A5) | Real-world benign, per organization, opt-in and redacted | Admin review, no matched text stored; only text an owner chooses to contribute |
+| Public datasets | Breadth | Only after a licence check (P4-D10); no share-alike or non-commercial licences in the shipped corpus |
+| New languages | Indonesian and Simplified Chinese attack and benign sets | Marked "not native-reviewed" until a native speaker checks them |
+Targets before block mode is offered for any family: at least 100 benign held-out samples (the 3% upper bound) and a reviewed
+plan for reaching about 380 (the 1% bound). Attack coverage is reported as measured, whatever it turns out to be.
+
+### 11.4 Security impact of the additions
+- **Suppression weakens a control:** admin only, confirmation, reason, scoped to one agent and one rule, expires (default 30 days),
+  audited, listed on the settings page, and cannot target honeytoken checks.
+- **Feedback and contributed samples are untrusted input:** schema-validated, size-capped, organization-scoped, rate limited; a
+  contributed sample is never added to the shipped corpus without a human review in the repo.
+- **Self-test:** admin only, rate limited, bundled samples only, no custom text, results are counts and rule names.
+- **Context-aware scoring** reads the tool names already in the gateway context; it adds no new data flow and no new trust.
+- **Decoding** is bounded (one level, at most 8 blobs of 4 KiB per result) and timing-tested.
+
+### 11.5 Cost and performance
+Added work per result stays inside the plan's budget (target under 2 ms at 64 KiB for the whole Radar, measured before and after).
+Decoding is the main extra cost and is capped. Self-test and coverage page are on demand. Storage grows with feedback rows only
+(capped per organization). No new services or dependencies.
+
+### 11.6 Revised milestones (each a PR; staging tests per the cadence)
+| | Work | Staging test |
+|---|---|---|
+| M4.0 | Held-out samples (built, PR 36) | latency baseline and helpdesk export (brief written) |
+| M4.0b | Blind samples from Antigravity (100 attack, 150 benign per category) and the shared-reporter refactor (D1) | no |
+| M4.1 | `radar.py`: rules, A1 normalisation and decoding, A2 context scoring, A3 explanations, A9 interface; measured on dev, reported on held-out | no |
+| M4.2 | Migration and core: findings, settings, would-block flag, feedback and suppression, audit actions, SQL tests | with M4.3 |
+| M4.3 | Gateway integration, reporter, metrics, e2e | **yes** |
+| M4.4 | Dashboard: findings with explanations, settings with would-block evidence, false alarm marking and suppression list | **yes** |
+| M4.5 | A6 self-test and A7 coverage page, A8 language badges, Indonesian and Chinese samples and rules (unreviewed badges) | **yes** |
+| M4.6 | Block gate (11.2) enforced in code and UI, ADR 0015, runbook, threat model | **yes** |
+The owner can stop after M4.4 and still have a working, honest Radar; M4.5 and M4.6 are what make it stand out.
+
+### 11.7 Risks
+- More scope means a longer M4. Mitigation: the milestones are independent and each is releasable.
+- Rules for Indonesian and Chinese written without a native speaker may be weak; the badge says "not native-reviewed" and the
+  benchmark shows the real numbers.
+- Sophisticated, adaptive attacks will still get through. The coverage page lists the families we miss.
+- Suppression and feedback can be misused by a compromised admin; they are audited, expiring and visible.
+
+### 11.8 New decisions needed
+- **D6 scope:** include A1 to A9 as above (recommended), or a smaller set.
+- **D7 block gate:** the two-part gate in 11.2 (recommended), or a stricter 1% upper bound before any block.
+- **D8 corpus:** have Antigravity write the blind samples (recommended), and use only our own docs and licence-checked data.
+- **D9 languages:** add Indonesian and Simplified Chinese as unreviewed in M4.5 (recommended), or keep English and Malay only.
+- **D10 follow-up:** schedule the per-agent destination allowlist right after M4 (recommended).
