@@ -148,13 +148,97 @@
       "status": "covered"
     }
   },
-  "corpus": "a3a8ab1cb6da9019",
+  "corpus": "b278af0b89cd00aa",
   "detectors": [
     "egress_guardrail",
     "manifest_auditor",
     "description_auditor"
   ],
   "holdout": {
+    "injection_indirect": {
+      "benign": 20,
+      "by_lang": {
+        "en": {
+          "detected": 0,
+          "malicious": 16
+        },
+        "ms": {
+          "detected": 0,
+          "malicious": 4
+        }
+      },
+      "detected": 0,
+      "false_alarms": 0,
+      "families": 13,
+      "hard_benign": 10,
+      "hard_false_alarms": 0,
+      "malicious": 20,
+      "owasp": "LLM01",
+      "status": "not covered"
+    },
+    "output_path": {
+      "benign": 20,
+      "by_lang": {
+        "en": {
+          "detected": 0,
+          "malicious": 18
+        },
+        "ms": {
+          "detected": 0,
+          "malicious": 2
+        }
+      },
+      "detected": 0,
+      "false_alarms": 0,
+      "families": 5,
+      "hard_benign": 10,
+      "hard_false_alarms": 0,
+      "malicious": 20,
+      "owasp": "LLM05",
+      "status": "not covered"
+    },
+    "output_ssrf": {
+      "benign": 20,
+      "by_lang": {
+        "en": {
+          "detected": 1,
+          "malicious": 18
+        },
+        "ms": {
+          "detected": 1,
+          "malicious": 2
+        }
+      },
+      "detected": 2,
+      "false_alarms": 0,
+      "families": 6,
+      "hard_benign": 10,
+      "hard_false_alarms": 0,
+      "malicious": 20,
+      "owasp": "LLM05",
+      "status": "weak"
+    },
+    "output_xss": {
+      "benign": 20,
+      "by_lang": {
+        "en": {
+          "detected": 0,
+          "malicious": 17
+        },
+        "ms": {
+          "detected": 0,
+          "malicious": 3
+        }
+      },
+      "detected": 0,
+      "false_alarms": 0,
+      "families": 9,
+      "hard_benign": 10,
+      "hard_false_alarms": 0,
+      "malicious": 20,
+      "owasp": "LLM05",
+      "status": "not covered"
+    },
     "tool_poisoning": {
       "benign": 20,
       "by_lang": {
