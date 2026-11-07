@@ -16,7 +16,9 @@
 #   PROJECT_ID          [gcloud's current project]
 #   REGION              [asia-southeast1]
 #   SUPABASE_URL        [required: https://<project-ref>.supabase.co]
-#   DASHBOARD_ORIGIN    [required for all/core/gateway: the dashboard's https origin]
+#   DASHBOARD_ORIGIN    [required for all/core/gateway/cors: the dashboard's https origin; several may be given,
+#                        comma-separated, e.g. https://redhand.archtificial.com,https://redhand-dashboard.vercel.app.
+#                        Each deploy REPLACES the list, so always pass every origin that should work.]
 #
 # Secrets are never printed. The Supabase secret key is read with hidden input, the internal
 # service token and the agent-token signing key are generated here and sent straight to
@@ -44,6 +46,9 @@ TELEGRAM_BOT_USERNAME="${TELEGRAM_BOT_USERNAME:-}"
 die() { echo "error: $*" >&2; exit 1; }
 say() { echo "==> $*"; }
 
+# shellcheck source=deploy/cloudrun/origins.sh
+. deploy/cloudrun/origins.sh
+
 preflight() {
   command -v gcloud >/dev/null || die "gcloud is not installed"
   command -v openssl >/dev/null || die "openssl is not installed"
@@ -59,6 +64,8 @@ preflight() {
     all|core|gateway) [ -n "$DASHBOARD_ORIGIN" ] || [ "${ALLOW_LOCALHOST_ONLY:-}" = "1" ] \
       || die "set DASHBOARD_ORIGIN (for example https://redhand-dashboard.vercel.app) or the dashboard will be blocked; ALLOW_LOCALHOST_ONLY=1 overrides";;
   esac
+  # Validate before any gcloud call so a bad origin can never reach a service's CORS setting.
+  clean_dashboard_origins "$DASHBOARD_ORIGIN" >/dev/null || exit 1
   case "$SUPABASE_URL" in ""|https://*.supabase.co) ;; *) die "SUPABASE_URL must look like https://<ref>.supabase.co";; esac
   echo "Account : $(gcloud auth list --filter=status:ACTIVE --format='value(account)')"
   echo "Project : $PROJECT_ID"
@@ -86,13 +93,7 @@ gateway_env_args() {
   if [ -n "$url" ]; then printf '@GATEWAY_URL=%s' "$url"; fi
 }
 
-cors_json() {
-  if [ -n "$DASHBOARD_ORIGIN" ]; then
-    printf '["http://localhost:3000","%s"]' "${DASHBOARD_ORIGIN%/}"
-  else
-    printf '["http://localhost:3000"]'
-  fi
-}
+cors_json() { dashboard_cors_json "$DASHBOARD_ORIGIN"; }
 
 sa_email() { echo "$1@${PROJECT_ID}.iam.gserviceaccount.com"; }
 
@@ -256,7 +257,7 @@ setup_telegram() {
 
 update_cors() {
   [ -n "$DASHBOARD_ORIGIN" ] || die "set DASHBOARD_ORIGIN (for example https://your-dashboard.vercel.app)"
-  say "Allowing the dashboard origin $DASHBOARD_ORIGIN"
+  say "Allowing the dashboard origins $(clean_dashboard_origins "$DASHBOARD_ORIGIN" | paste -sd, -) (this replaces the previous list)"
   gcloud run services update redhand-core --region "$REGION" --project "$PROJECT_ID" \
     --update-env-vars "^@^CORS_ALLOWED_ORIGINS=$(cors_json)"
   gcloud run services update redhand-gateway --region "$REGION" --project "$PROJECT_ID" \
