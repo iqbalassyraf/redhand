@@ -2,6 +2,8 @@
 
 ## Unreleased: Phase 3 (See things), in progress
 
+- Phase 4 M4.0: 160 held-out benchmark samples (indirect injection and the three output categories, 40 each, written before any Radar rule exists), the coverage matrix and baseline regenerated, 29 new Malay rows for native-speaker review. Held-out "before" numbers: injection 0/20, path 0/20, XSS 0/20, SSRF 2/20, no false alarms.
+
 - Docs: `docs/testing/` testing handoff (briefs written by Claude Code, results written by Antigravity), with a first brief for the dashboard access fixes.
 
 - Dashboard: Passports, Black Box, Scanner and Honeytokens pages can scroll again. A global `overflow: hidden` on the page body (meant only for the full-screen home view) blocked scrolling everywhere; it now applies to the home view only.
