@@ -10,7 +10,6 @@ body {
   background-color: #ffffff;
   color: #0f0f0f;
   font-family: var(--font-roboto), system-ui, -apple-system, sans-serif;
-  overflow: hidden;
 }
 
 code,

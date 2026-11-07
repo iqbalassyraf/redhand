@@ -2,6 +2,8 @@
 
 ## Unreleased: Phase 3 (See things), in progress
 
+- Dashboard: Passports, Black Box, Scanner and Honeytokens pages can scroll again. A global `overflow: hidden` on the page body (meant only for the full-screen home view) blocked scrolling everywhere; it now applies to the home view only.
+
 - Dashboard: password reset. A **Forgot password?** link on the login page and a `/reset-password` page where an operator
   sets a new password from the emailed link. Same answer whether or not the account exists; recovery tokens are removed from
   the address bar on load; a successful reset signs out the user's other sessions. Runbook: `docs/runbooks/operator-password-reset.md`.
