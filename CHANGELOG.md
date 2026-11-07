@@ -2,6 +2,8 @@
 
 ## Unreleased: Phase 3 (See things), in progress
 
+- Docs: `docs/testing/` testing handoff (briefs written by Claude Code, results written by Antigravity), with a first brief for the dashboard access fixes.
+
 - Dashboard: Passports, Black Box, Scanner and Honeytokens pages can scroll again. A global `overflow: hidden` on the page body (meant only for the full-screen home view) blocked scrolling everywhere; it now applies to the home view only.
 
 - Dashboard: password reset. A **Forgot password?** link on the login page and a `/reset-password` page where an operator
