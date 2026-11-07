@@ -51,4 +51,4 @@ Production, real customer data, creating or resetting accounts yourself, changin
 helpdesk agent's n8n/Telegram flow (covered by its own project). Do not run `deploy.sh`.
 
 ## Follow-up
-(Claude Code fills in after reading the result.)
+2026-11-07, Claude Code read `results/2026-11-07-dashboard-access-fixes.md`: 15 of 16 steps PASS, no bugs. Step 14 evidence covered core only, so Claude Code also checked the gateway with a disallowed origin: no allow-origin header (correct). Step 16 stays NOT RUN until the helpdesk tool schemas publish their length limits (the server enforces them in `schemas.py`, but `tools/list` does not show them) and the server is redeployed.
