@@ -107,7 +107,15 @@ def summarise(before: dict[str, object], after: dict[str, object]) -> dict[str, 
 
     d_count = float(after["count"]) - float(before["count"])  # type: ignore[arg-type]
     mean = (float(after["sum"]) - float(before["sum"])) / d_count if d_count > 0 else float("nan")  # type: ignore[arg-type]
-    return {"calls": int(n), "p50_upper_ms": upper(0.50), "p99_upper_ms": upper(0.99), "mean_ms": round(mean, 3)}
+    c_100 = next((c for edge, c in delta if edge == 100.0), n)
+    over_100 = max(0, int(round(n - c_100)))
+    return {
+        "calls": int(n),
+        "p50_upper_ms": upper(0.50),
+        "p99_upper_ms": upper(0.99),
+        "mean_ms": round(mean, 3),
+        "calls_over_100ms": over_100,
+    }
 
 
 def verdict(summary: dict[str, object]) -> str:
@@ -168,6 +176,7 @@ def main() -> int:
         status, body = agent.call_tool(args.tool, arguments)
         if status != 200 or not isinstance(body, dict) or "result" not in body:
             failures += 1
+            sys.stderr.write(f"\n[Call #{i+1} failed]: status={status}, body={str(body)[:150]}\n")
         time.sleep(args.interval)
     after_text = fetch_metrics(gateway, token)
     after, after_stages = parse_overhead(after_text), parse_stages(after_text)

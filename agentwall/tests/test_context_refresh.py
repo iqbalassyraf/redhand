@@ -168,3 +168,71 @@ async def test_a_slow_refresh_is_stamped_with_when_it_was_requested_not_when_it_
     await settle(h)
     key = (str(agent), str(ORG), "xero")
     assert h.gateway.contexts._cache[key][0] == requested_at
+
+
+async def test_a_refresh_starts_a_quarter_of_the_way_through_the_lifetime() -> None:
+    h, agent = setup()
+    await get(h, agent)
+    h.clock.now += TTL * REFRESH_AHEAD_FRACTION + 0.01
+    await get(h, agent)
+    await settle(h)
+    assert REFRESH_AHEAD_FRACTION == 0.25 and h.core.calls == 2
+
+
+async def test_a_call_after_expiry_waits_for_the_refresh_already_running_instead_of_looking_up_again() -> None:
+    h, agent = setup()
+    await get(h, agent)
+    h.clock.now += 1.5
+    await get(h, agent)  # starts a refresh at t=1.5 that has not run yet
+    h.clock.now += 0.6  # t=2.1: the first entry has expired; the refresh (stamped 1.5) is still inside its lifetime
+    served = await get(h, agent)
+    assert served.status == "active" and h.core.calls == 2  # one lookup at the start, one refresh, no third
+    assert 'stage="context_wait_refresh"' in h.metrics.render()
+
+
+async def test_if_the_refresh_failed_the_call_looks_up_for_itself_and_is_denied_when_core_is_down() -> None:
+    h, agent = setup()
+    await get(h, agent)
+    h.clock.now += 1.5
+    await get(h, agent)
+    h.core.mode = "down"
+    h.clock.now += 0.6
+    with pytest.raises(ContextUnavailableError):
+        await get(h, agent)  # never served from the expired entry
+
+
+async def test_a_refresh_older_than_the_lifetime_is_not_used_when_a_call_waits_for_it() -> None:
+    h, agent = setup()
+    await get(h, agent)
+    h.clock.now += 1.0
+    await get(h, agent)  # refresh requested at t=1.0
+    h.clock.now += 2.5  # t=3.5: even the refresh's entry (stamped 1.0) is past the lifetime
+    h.core.agents[str(agent)]["status"] = "frozen"
+    assert (await get(h, agent)).status == "frozen"  # a fresh lookup, not the old entry
+
+
+async def test_the_wait_for_a_stuck_refresh_is_limited_and_the_call_then_looks_up_for_itself(monkeypatch: pytest.MonkeyPatch) -> None:
+    from agentwall.src.gateway import context as context_module
+
+    monkeypatch.setattr(context_module, "REFRESH_WAIT_SECONDS", 0.05)
+    h, agent = setup()
+    await get(h, agent)
+    release = asyncio.Event()
+    real = h.core.handler
+    state = {"n": 0}
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        state["n"] += 1
+        if state["n"] == 1:  # the background refresh hangs until the test lets it go
+            await release.wait()
+        return real(request)
+
+    h.gateway.contexts._http = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    h.clock.now += 1.5
+    await get(h, agent)  # starts the refresh, which will hang
+    await asyncio.sleep(0)  # let it begin
+    h.clock.now += 0.6  # the original entry has expired
+    served = await asyncio.wait_for(get(h, agent), timeout=3)  # would hang for good if the wait were not limited
+    assert served.status == "active" and state["n"] == 2  # the call did its own lookup
+    release.set()
+    await settle(h)
