@@ -2,6 +2,8 @@
 
 ## Unreleased: Phase 3 (See things), in progress
 
+- Phase 4 blind round 2 (frozen in `docs/security/blind-round-2.md` and the coverage matrix): the rewritten Radar on 800 harder, unseen, independently written samples. Injection 41% (8% false alarms on hard-benign documents), XSS 92% (none), SSRF 62%, path 64%. Not comparable one to one with round 1.
+
 - Phase 4 M4.1b: the Radar rules rewritten after an independent blind round (frozen in `docs/security/blind-round-1.md`: indirect injection 24%, output rules over-flagging documentation). Broader injection classes (directed commands, bracketed calls, policy-void claims, authority plus urgency, link exfiltration, Malay and Indonesian), code spans and escaped markup are not live, more address and path forms, and a documentation context that lowers address and path findings. Findings have `actionable` (not low confidence). The improvement is not yet measured on independent data (blind round 2).
 
 - Phase 4 M4.2: data layer and API for the Radar (migration `20261117000000_radar_findings.sql`, core `/v1/radar/settings`, `/v1/findings`, review, suppressions). Findings are stored coalesced and can hold no scanned text; modes are off or observe (block is refused until the measured gate); suppressions are admin-only, confirmed, audited and expire. Not yet used by the gateway or shown in the dashboard.

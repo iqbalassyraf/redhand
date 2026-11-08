@@ -13,6 +13,22 @@ Both tools work on RedHand and its demo projects. This file is how each learns w
 
 ---
 
+## 2026-11-08, Antigravity: Blind Round 2 completed (M4.1b) and untracked scripts removed
+- **Changed:**
+  - Deleted untracked round-1 generator scripts in `scripts/` (`build_blind_samples.py`, `generate_injection_indirect.py`, `generate_output_path.py`, `generate_output_ssrf.py`, `generate_output_xss.py`) per brief item 3.
+  - Authored 800 blind round-2 samples (200 each across 4 categories: `injection_indirect`, `output_xss`, `output_ssrf`, `output_path`) in `docs/testing/exports/blind2-*.jsonl`. IDs 601 to 800, exactly 80 malicious and 120 benign (45 hard benign) per category; 60% EN (120), 25% MS (50), 15% ID (30).
+  - Test result file created at `docs/testing/results/2026-11-08-m4-1b-blind-round-2.md`.
+- **Verified:**
+  - Schema validity, JSON integrity, ID sequences (601 to 800), kind (`tool_result`), 60/25/15 language split, and zero secret or rule leaks.
+  - Strict independence: rules in `agentwall/src/firewall/`, `agentwall/src/bench/`, `agentwall/bench/`, `docs/security/`, and `docs/plans/phase4*.md` were never read.
+  - Advanced variety: includes polite/bureaucratic phrasing, split-field directives, long operational runbooks (500-2000 chars), rare HTML5 tags/handlers, IPv6/decimal SSRF bypasses, and complex path traversals.
+- **Not verified / Open items for Owner:**
+  - Item 1 (Staging latency baseline): steps 1–5 of `2026-11-07-m4-0-latency-and-helpdesk-samples.md` await owner reading `redhand-internal-service-token` from Secret Manager without printing.
+  - Item 2 (Helpdesk schema limits & rescan): step 16 of `2026-11-07-dashboard-access-fixes.md` awaits owner approval to redeploy `helpdesk-mcp` with schema length limits and rescan `kedai-kita`.
+- **Next for Claude Code:**
+  - Score blind round 2 against the rewritten Radar rules (frozen evaluation without changes).
+
+
 ## 2026-11-08, Antigravity: blind benchmark samples and helpdesk export completed
 - **Changed:**
   - Exported 20 helpdesk held-out samples (8 malicious, 12 benign) to `docs/testing/exports/helpdesk-injection-heldout.jsonl`. Honeytoken bait sanitized to `[BAIT-VALUE]`.
@@ -27,6 +43,14 @@ Both tools work on RedHand and its demo projects. This file is how each learns w
 - **Next for Claude Code:**
   - Ingest the blind samples and helpdesk export into benchmark evaluation, compare against Radar rules, and proceed with M4.3 gateway integration.
 
+
+## 2026-11-08, Claude Code: blind round 2 scored (rules unchanged)
+- **Scored once, report only:** injection 33/80 (41%) with 10/120 false alarms, XSS 74/80 (92%) with 0/120, SSRF 50/80 (62%) with 3/120, path 51/80 (64%) with 6/120.
+  Frozen in `docs/security/blind-round-2.md` and in the coverage matrix. Round 2 was harder than round 1, so the two are not directly comparable.
+- **Conclusion:** XSS is solid. Indirect injection is still weak and false-alarms on hard-benign operational documents; pattern rules are close to their limit.
+  Decision for the owner: improve the rules again (then a round 3 is needed), or reopen the classifier decision (P4-D8) with a measured prototype.
+- **Antigravity:** thank you. Samples are at `docs/testing/exports/blind2-<category>.jsonl` and are still UNSEEN by the rules; do not edit them. The two owner-assisted
+  items (latency baseline, helpdesk schema limits and rescan) remain open.
 
 ## 2026-11-08, Claude Code: Radar rules rewritten after blind round 1
 - **Read your results (thank you):** the independent measurement was poor (indirect injection 24%, output rules flagged documentation): frozen in

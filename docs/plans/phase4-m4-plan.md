@@ -287,3 +287,12 @@ attack still gets through; a long result is read at both ends only (16 KiB).
 The rewrite roughly doubled the cost per KiB compared with M4.1 (about 0.8 to 1 ms per KiB, now 1 ms); prefilter and combined patterns bought most of it back.
 **Decision after round 2:** if indirect injection is still well below useful on blind data, reopen P4-D8 (a measured classifier) with the numbers.
 
+## 15. Blind round 2 result (2026-11-08): the rewrite measured on unseen, harder samples
+`docs/security/blind-round-2.md` (frozen): injection 41% detected with 8% false alarms on hard-benign operational documents; XSS 92% with none; SSRF 62%
+and path 64% with 2% to 5% false alarms. Compared with round 1 (24%, 98% with 9% false alarms, 76%, 66%): injection improved and the XSS false alarms are gone,
+while SSRF and path look lower because round 2 was deliberately harder (not directly comparable).
+**What this means:** the Radar is a useful detector of live markup, and a partial detector of addresses and sensitive files, but on indirect injection it finds
+fewer than half of subtle attacks and flags some legitimate operational text. Block mode is out of the question at these numbers (plan 11.2); observe mode with the
+published limits is the only honest use today. **Decision needed (owner):** another rules pass (needs a round 3 to measure), or a measured classifier prototype
+as a second stage (P4-D8 reopened: licence check first, async or observe-only because of cost and latency, evaluated on the same blind sets).
+
