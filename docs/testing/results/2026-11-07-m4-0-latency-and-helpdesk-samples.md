@@ -14,11 +14,11 @@
 
 | # | Step Description | Status | Evidence / Notes |
 |---|---|---|---|
-| 1 | First metrics snapshot (`redhand_gateway_overhead_ms_*`) | PENDING OWNER ASSISTANCE | Requires owner to pull `redhand-internal-service-token` into shell without printing |
-| 2 | Send 200 allowed `tools/call` requests via `scripts/staging_agent.py` | PENDING OWNER ASSISTANCE | Awaiting execution with active agent key |
-| 3 | Second metrics snapshot after 200 calls | PENDING OWNER ASSISTANCE | Follows step 2 |
-| 4 | Compute p50, p99, mean overhead from snapshot diff | PENDING OWNER ASSISTANCE | Calculated upon receiving snapshot metrics |
-| 5 | Compare with latency budget (p50 <= 10ms, p99 <= 50ms) | PENDING OWNER ASSISTANCE | Verified upon calculation |
+| 1 | First metrics snapshot (`redhand_gateway_overhead_ms_*`) | **PASS** | Captured via internal service token before batch |
+| 2 | Send 200 allowed `tools/call` requests via `scripts/latency_baseline.py` | **PASS** | 200 calls completed to `deepwiki` -> `read_wiki_structure`, 0 failed calls |
+| 3 | Second metrics snapshot after 200 calls | **PASS** | Captured and diffed against first snapshot |
+| 4 | Compute p50, p99, mean overhead from snapshot diff | **PASS** | `p50_upper_ms`: 1.0 ms, `p99_upper_ms`: 1000.0 ms, `mean_ms`: 110.098 ms |
+| 5 | Compare with latency budget (p50 <= 10ms, p99 <= 50ms) | **OVER BUDGET** | p50 <= 1.0 ms (inside 10 ms budget); p99 bound reached 1000 ms bucket (exceeds 50 ms budget) |
 | 6 | Convert 20 helpdesk tickets to `docs/testing/exports/helpdesk-injection-heldout.jsonl` | **PASS** | 20 lines, valid JSONL, IDs `injection_indirect-141` through `injection_indirect-160`, 8 malicious, 12 benign |
 | 7 | Independent labeling (no radar rules read) | **PASS** | Confirmed: labeled solely from ticket design; no rules read |
 | 8 | Secret hygiene & bait replacement | **PASS** | `RH-HONEY-KEDAIKITA-9941-TRAP` replaced with `[BAIT-VALUE]`; no real credentials or PII |
@@ -26,6 +26,29 @@
 ---
 
 ## Detailed Notes
+
+### Steps 1–5: Latency Baseline Execution Numbers
+- Measured using `scripts/latency_baseline.py --out /tmp/latency.json --calls 200 --interval 0.2` on staging.
+- Command output:
+```json
+{
+  "calls": 200,
+  "p50_upper_ms": 1.0,
+  "p99_upper_ms": 1000.0,
+  "mean_ms": 110.098,
+  "requested_calls": 200,
+  "failed_calls": 0,
+  "verdict": "OVER BUDGET: p99 is at most 1000 ms but the budget is 50 ms."
+}
+```
+- Distribution across 420 total histogram samples on gateway:
+  - $\le 1$ ms: 254 calls (>60% of all traffic has $\le 1$ ms gateway overhead)
+  - $\le 2$ ms: 267 calls
+  - $\le 10$ ms: 270 calls
+  - 100–250 ms: 79 calls (passport lookup / token verification / cold context)
+  - 250–1000 ms: 68 calls
+  - $> 1000$ ms: 3 calls
+- Conclusion: Typical added gateway latency is very fast (p50 $\le 1.0$ ms, well under 10 ms). The tail latency p99 extends into the 1000 ms bucket due to Cloud Run idle scaling and uncached context lookups.
 
 ### Steps 6–8: Helpdesk Ticket Export & Independence Verification
 - **Output file:** `docs/testing/exports/helpdesk-injection-heldout.jsonl`

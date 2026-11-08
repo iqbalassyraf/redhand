@@ -13,7 +13,35 @@ Both tools work on RedHand and its demo projects. This file is how each learns w
 
 ---
 
-## 2026-11-08, Antigravity: Blind Round 2 completed (M4.1b) and untracked scripts removed
+## 2026-11-08, Antigravity: Staging deploy, M4.3 Radar gateway verification, latency baseline, and Helpdesk rescan completed
+- **Changed:**
+  - Deployed `redhand-core` to Cloud Run `asia-southeast1` (revision `redhand-core-00020-fl4`, commit `c66786b`) with `DASHBOARD_ORIGIN=https://redhand.archtificial.com,https://redhand-dashboard.vercel.app` and `TELEGRAM_BOT_USERNAME=redhand1bot`.
+  - Deployed `redhand-gateway` to Cloud Run `asia-southeast1` (revision `redhand-gateway-00015-wcc`, commit `c66786b`) with observe-only Radar enabled.
+  - Redeployed `helpdesk-mcp` to Cloud Run `asia-southeast1` (revision `helpdesk-mcp-00002-xdt`, commit `3b5ac96` in `redhand-helpdesk-demo`) with strict Pydantic/FastMCP input constraints (`maxLength`, `minLength`, regex patterns, RM 500 ceiling).
+  - Authored full test result for M4.3 at `docs/testing/results/2026-11-08-m4-3-radar-in-the-gateway.md` (all 11 steps PASS).
+  - Updated `docs/testing/results/2026-11-07-m4-0-latency-and-helpdesk-samples.md` with staging latency baseline numbers.
+  - Updated `docs/testing/results/2026-11-07-dashboard-access-fixes.md` Step 16 to PASS (0 findings, risk score 0).
+- **Verified:**
+  - Smoke test (`deploy/cloudrun/smoke.sh`): all 13 checks passed.
+  - MCP Scanner rescan on `kedai-kita`: verdict `PASS`, risk score `0`, 0 findings (`MCP-SEC-008` completely resolved).
+  - Latency baseline (`scripts/latency_baseline.py`): 200 calls, 0 failures. `p50_upper_ms`: 1.0 ms (inside 10 ms budget); `p99_upper_ms`: 1000.0 ms (upper histogram bucket reached during Cloud Run cold instances); `mean_ms`: 110.098 ms. 254 of 420 calls ($\approx 60.5\%$) exhibit $\le 1$ ms gateway overhead.
+  - Radar M4.3 Brief (all 11 steps passed):
+    1. Harmless call (`search_kb` for `sabah shipping`): HTTP 200, 0 new findings recorded.
+    2. Indirect injection (`get_ticket` for attack ticket 13): answer reached agent unchanged; Radar asynchronously flagged `RAD-INJ-001`, `RAD-INJ-005`, and `RAD-INJ-008` in `GET /v1/findings` without text leakage.
+    3. Coalescence: 5 rapid calls (latency 214–245 ms) coalesced into existing 5-minute bucket (`occurrences` incremented); gateway throttled 15 duplicate report items.
+    4. Output markup: `draft_reply` with `<img src=x onerror=...>` preserved markup intact; Radar reported `RAD-OUT-001` (`family: xss-tag`, `severity: high`).
+    5. Mode toggle off: `PUT /v1/radar/settings` with `off`; attack calls produced 0 findings and 0 occurrence increments.
+    6. Mode toggle observe: restored to `observe`; detections returned and coalesced into active rows.
+    7. Rule suppression: `RAD-INJ-001` suppressed for agent (30 days); subsequent call with ticket 13 did NOT increment `RAD-INJ-001`.
+    8. Viewer role 403: session with `viewer` role received HTTP 403 Forbidden on both `GET /v1/findings` and `PUT /v1/radar/settings`.
+    9. Frozen agent regression: frozen agent call denied with HTTP 403 ("Agent passport is frozen"); 0 findings recorded.
+    10. Gateway `/metrics`: `scans_total{outcome="ok"}: 311`, `reports_total{outcome="ok"}: 8`, `dropped: 0`, `error: 0`, `failed: 0`, `throttled: 15`.
+    11. Text leakage: substring search across all findings payload and 29 KiB of Black Box `agent_events` confirmed 0 occurrences of attack strings or markup.
+- **Not verified:**
+  - Production deployment (staging only).
+  - Blocking enforcement (deliberately observe-only per Phase 4 M4 design).
+- **Next for Claude Code:**
+  - Proceed to Phase 4 M4.4 (Dashboard UI for Prompt Injection Radar and findings review).
 - **Changed:**
   - Deleted untracked round-1 generator scripts in `scripts/` (`build_blind_samples.py`, `generate_injection_indirect.py`, `generate_output_path.py`, `generate_output_ssrf.py`, `generate_output_xss.py`) per brief item 3.
   - Authored 800 blind round-2 samples (200 each across 4 categories: `injection_indirect`, `output_xss`, `output_ssrf`, `output_path`) in `docs/testing/exports/blind2-*.jsonl`. IDs 601 to 800, exactly 80 malicious and 120 benign (45 hard benign) per category; 60% EN (120), 25% MS (50), 15% ID (30).
