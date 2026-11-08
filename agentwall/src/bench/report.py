@@ -34,6 +34,15 @@ def _interval(pair: tuple[float, float]) -> str:
     return f"{_pct(pair[0])}-{_pct(pair[1])}"
 
 
+def _quotable(count: int, total: int, rate: float, interval: tuple[float, float]) -> str:
+    """A rate that is meant to be quoted. A flat 100% or 0% from a few samples is a bound, not a measurement, so it is shown as one."""
+    if count == total:
+        return f"{count}/{total} (at least {_pct(interval[0])} with 95% confidence)"
+    if count == 0:
+        return f"{count}/{total} (at most {_pct(interval[1])} with 95% confidence)"
+    return f"{count}/{total} = {_pct(rate)} ({_interval(interval)})"
+
+
 def _text_rows(results: dict[str, CategoryResult]) -> list[str]:
     rows = ["category              mal  ben  fams  detected  95% CI      false alarms  95% CI     status"]
     for r in results.values():
@@ -119,18 +128,28 @@ def render_markdown(ev: Evaluation, digest: str) -> str:
     if ev.holdout:
         lines += [
             "", "## Held-out results (never tuned on: quote these)", "",
-            "Held-out samples were written separately and rules are never adjusted to fit them. A category with a "
-            "held-out set is rated on it; the dev table above is what the rules were written against.", "",
+            "Held-out samples are not used to write or tune rules (a change made after seeing them is disclosed where it happens). "
+            "A held-out set written by the same author as the rules is less independent than one written by someone else, and 20 "
+            "samples can only prove so much: read the confidence interval, not the point estimate. A category with a held-out set "
+            "is rated on it; the dev table above is what the rules were written against.", "",
             "| Category | OWASP | Malicious | Benign | Detection (95% CI) | False alarms (95% CI) | Hard benign false alarms | Status |",
             "|---|---|---|---|---|---|---|---|",
         ]
         for c in ev.holdout.values():
             lines.append(
                 f"| `{c.category}` | {c.owasp} | {c.n_malicious} | {c.n_benign} | "
-                f"{c.detected}/{c.n_malicious} = {_pct(c.detection_rate)} ({_interval(c.detection_interval)}) | "
-                f"{c.false_alarms}/{c.n_benign} = {_pct(c.false_alarm_rate)} ({_interval(c.false_alarm_interval)}) | "
+                f"{_quotable(c.detected, c.n_malicious, c.detection_rate, c.detection_interval)} | "
+                f"{_quotable(c.false_alarms, c.n_benign, c.false_alarm_rate, c.false_alarm_interval)} | "
                 f"{c.hard_false_alarms}/{c.hard_benign} | **{c.status}** |"
             )
+    if ev.holdout:
+        lines += [
+            "",
+            "Status is assigned from point estimates, by rules fixed in M1. With 20 benign samples the false alarm rate is only known "
+            "to be below about 16%, so read **covered** here as \"no misses found yet\", not as a guarantee. The corpus grows with "
+            "independently written samples (plan `docs/plans/phase4-m4-plan.md`, section 11.3) and the status rule moves to the upper "
+            "confidence bound at M4.6.",
+        ]
     lines += ["", "### Detection by language (dev malicious samples)", "", "| Category | English | Bahasa Malaysia |", "|---|---|---|"]
     for c in ev.categories.values():
         en, ms = c.by_lang.get("en", (0, 0)), c.by_lang.get("ms", (0, 0))

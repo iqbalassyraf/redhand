@@ -4,22 +4,22 @@
       "benign": 24,
       "by_lang": {
         "en": {
-          "detected": 0,
+          "detected": 20,
           "malicious": 20
         },
         "ms": {
-          "detected": 0,
+          "detected": 8,
           "malicious": 8
         }
       },
-      "detected": 0,
+      "detected": 28,
       "false_alarms": 0,
       "families": 15,
       "hard_benign": 16,
       "hard_false_alarms": 0,
       "malicious": 28,
       "owasp": "LLM01",
-      "status": "not covered"
+      "status": "covered"
     },
     "manifest_risk": {
       "benign": 20,
@@ -46,28 +46,28 @@
       "benign": 20,
       "by_lang": {
         "en": {
-          "detected": 0,
+          "detected": 18,
           "malicious": 18
         },
         "ms": {
-          "detected": 0,
+          "detected": 2,
           "malicious": 2
         }
       },
-      "detected": 0,
+      "detected": 20,
       "false_alarms": 0,
       "families": 5,
       "hard_benign": 10,
       "hard_false_alarms": 0,
       "malicious": 20,
       "owasp": "LLM05",
-      "status": "not covered"
+      "status": "covered"
     },
     "output_ssrf": {
       "benign": 20,
       "by_lang": {
         "en": {
-          "detected": 6,
+          "detected": 19,
           "malicious": 19
         },
         "ms": {
@@ -75,35 +75,35 @@
           "malicious": 1
         }
       },
-      "detected": 7,
+      "detected": 20,
       "false_alarms": 0,
       "families": 6,
       "hard_benign": 10,
       "hard_false_alarms": 0,
       "malicious": 20,
       "owasp": "LLM05",
-      "status": "weak"
+      "status": "covered"
     },
     "output_xss": {
       "benign": 20,
       "by_lang": {
         "en": {
-          "detected": 0,
+          "detected": 18,
           "malicious": 18
         },
         "ms": {
-          "detected": 0,
+          "detected": 2,
           "malicious": 2
         }
       },
-      "detected": 0,
+      "detected": 20,
       "false_alarms": 0,
       "families": 8,
       "hard_benign": 13,
       "hard_false_alarms": 0,
       "malicious": 20,
       "owasp": "LLM05",
-      "status": "not covered"
+      "status": "covered"
     },
     "secret_leak": {
       "benign": 20,
@@ -151,6 +151,7 @@
   "corpus": "b278af0b89cd00aa",
   "detectors": [
     "egress_guardrail",
+    "radar",
     "manifest_auditor",
     "description_auditor"
   ],
@@ -159,85 +160,85 @@
       "benign": 20,
       "by_lang": {
         "en": {
-          "detected": 0,
+          "detected": 14,
           "malicious": 16
         },
         "ms": {
-          "detected": 0,
+          "detected": 3,
           "malicious": 4
         }
       },
-      "detected": 0,
+      "detected": 17,
       "false_alarms": 0,
       "families": 13,
       "hard_benign": 10,
       "hard_false_alarms": 0,
       "malicious": 20,
       "owasp": "LLM01",
-      "status": "not covered"
+      "status": "partial"
     },
     "output_path": {
       "benign": 20,
       "by_lang": {
         "en": {
-          "detected": 0,
+          "detected": 17,
           "malicious": 18
         },
         "ms": {
-          "detected": 0,
+          "detected": 2,
           "malicious": 2
         }
       },
-      "detected": 0,
+      "detected": 19,
       "false_alarms": 0,
       "families": 5,
       "hard_benign": 10,
       "hard_false_alarms": 0,
       "malicious": 20,
       "owasp": "LLM05",
-      "status": "not covered"
+      "status": "covered"
     },
     "output_ssrf": {
       "benign": 20,
       "by_lang": {
         "en": {
-          "detected": 1,
+          "detected": 18,
           "malicious": 18
         },
         "ms": {
-          "detected": 1,
+          "detected": 2,
           "malicious": 2
         }
       },
-      "detected": 2,
+      "detected": 20,
       "false_alarms": 0,
       "families": 6,
       "hard_benign": 10,
       "hard_false_alarms": 0,
       "malicious": 20,
       "owasp": "LLM05",
-      "status": "weak"
+      "status": "covered"
     },
     "output_xss": {
       "benign": 20,
       "by_lang": {
         "en": {
-          "detected": 0,
+          "detected": 17,
           "malicious": 17
         },
         "ms": {
-          "detected": 0,
+          "detected": 3,
           "malicious": 3
         }
       },
-      "detected": 0,
+      "detected": 20,
       "false_alarms": 0,
       "families": 9,
       "hard_benign": 10,
       "hard_false_alarms": 0,
       "malicious": 20,
       "owasp": "LLM05",
-      "status": "not covered"
+      "status": "covered"
     },
     "tool_poisoning": {
       "benign": 20,

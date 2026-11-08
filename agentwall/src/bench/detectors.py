@@ -10,6 +10,7 @@ from dataclasses import dataclass
 
 from ..firewall.ast_guardrails import EgressTaintGuardrail
 from ..firewall.mcp_vetting import MCPServerAuditor
+from ..firewall.radar import category_of, scan_result
 from .corpus import Kind, Sample
 
 
@@ -46,8 +47,15 @@ def _description_auditor(sample: Sample) -> bool:
     return bool(MCPServerAuditor.audit_manifest(manifest).findings)
 
 
+def _radar(sample: Sample) -> bool:
+    """Radar findings count only for the category they inform: an XSS rule does not get credit for an injection sample."""
+    assert sample.text is not None
+    return any(category_of(f) == sample.category for f in scan_result(sample.text).findings)
+
+
 DETECTORS: tuple[Detector, ...] = (
     Detector("egress_guardrail", frozenset({"tool_result"}), _egress),
+    Detector("radar", frozenset({"tool_result"}), _radar),
     Detector("manifest_auditor", frozenset({"manifest"}), _manifest_auditor),
     Detector("description_auditor", frozenset({"tool_description"}), _description_auditor),
 )
