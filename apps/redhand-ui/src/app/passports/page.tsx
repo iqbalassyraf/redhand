@@ -166,14 +166,14 @@ export default function PassportsPage() {
   return (
     <div className="min-h-screen bg-[#F8F8F8] text-[#0F0F0F]">
       <header className="flex h-[56px] items-center justify-between border-b border-[#E5E5E5] bg-[#FFFFFF] px-4">
-        <div className="flex items-center gap-4">
+        <div className="flex min-w-0 items-center gap-4">
           <div className="flex items-center gap-2">
             <div className="flex h-7 w-9 items-center justify-center rounded-[8px] bg-[#FF0000]">
               <Hand className="h-4 w-4 text-[#FFFFFF]" />
             </div>
             <span className="text-[20px] font-bold tracking-tight">RedHand</span>
           </div>
-          <nav className="flex gap-1 text-[13px]">
+          <nav className="flex gap-1 overflow-x-auto whitespace-nowrap text-[13px]">
             <Link href="/passports" className="rounded-full bg-[#0F0F0F] px-3 py-1.5 font-semibold text-[#FFFFFF]">
               Passports
             </Link>
@@ -189,13 +189,16 @@ export default function PassportsPage() {
             <Link href="/radar" className="rounded-full px-3 py-1.5 font-medium text-[#606060] hover:bg-[#F2F2F2]">
               Radar
             </Link>
+            <Link href="/coverage" className="rounded-full px-3 py-1.5 font-medium text-[#606060] hover:bg-[#F2F2F2]">
+              Coverage
+            </Link>
             <Link href="/" className="rounded-full px-3 py-1.5 font-medium text-[#606060] hover:bg-[#F2F2F2]">
               Command center (demo)
             </Link>
           </nav>
         </div>
         <div className="flex items-center gap-3 text-[12px]">
-          <span className="text-[#606060]">
+          <span className="hidden text-[#606060] sm:inline">
             {session.email}
             {session.role ? ` · ${session.role.replace("_", " ")}` : ""}
             {session.mode === "development" ? " · dev login" : ""}

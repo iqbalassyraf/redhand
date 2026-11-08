@@ -20,12 +20,13 @@ from agentwall.src.bench.metrics import (
     MIN_SAMPLES_PER_SIDE, CategoryResult, evaluate, wilson,
 )
 from agentwall.src.bench.report import (
-    baseline_is_current, compare_with_baseline, render_markdown, to_json,
+    BLIND3_LANGUAGES, BLIND_ROUNDS, LANGUAGES, baseline_is_current, compare_with_baseline, render_markdown, render_ui_json, to_json,
 )
 
 ROOT = Path(__file__).resolve().parents[2]
 BASELINE = ROOT / "agentwall" / "bench" / "baseline.json"
 MATRIX = ROOT / "docs" / "security" / "coverage-matrix.md"
+UI_COVERAGE = ROOT / "apps" / "redhand-ui" / "public" / "coverage.json"
 
 
 def _sample(i: int, label: str = "malicious", category: str = "injection_indirect", **over: Any) -> Sample:
@@ -319,3 +320,71 @@ def test_the_report_labels_dev_results_as_flattering_and_keeps_held_out_misses_u
     held = ev.holdout["tool_poisoning"]
     assert held.missed  # there are held-out misses...
     assert not any(missed_id in markdown for missed_id in held.missed)  # ...and they are deliberately not listed
+
+
+# --- the dashboard's Coverage page data (M4.5a) -----------------------------------------------------------------
+
+def test_the_dashboards_coverage_file_is_exactly_what_the_benchmark_generates() -> None:
+    ev, digest = _current()
+    assert UI_COVERAGE.read_text(encoding="utf-8") == render_ui_json(ev, digest)
+
+
+def test_frozen_blind_rounds_still_print_the_numbers_their_records_gave() -> None:
+    """The intervals are computed from the counts; they must equal what the frozen documents printed when the rounds were scored."""
+    printed = {
+        ("round1", "injection_indirect"): ("24/100 = 24% (17% to 33%)", "5/150 = 3% (1% to 8%)"),
+        ("round1", "output_xss"): ("98/100 = 98% (93% to 99%)", "13/150 = 9% (5% to 14%)"),
+        ("round1", "output_ssrf"): ("76/100 = 76% (67% to 83%)", "4/150 = 3% (1% to 7%)"),
+        ("round1", "output_path"): ("66/100 = 66% (56% to 75%)", "7/150 = 5% (2% to 9%)"),
+        ("round2", "injection_indirect"): ("33/80 = 41% (31% to 52%)", "10/120 = 8% (5% to 15%)"),
+        ("round2", "output_xss"): ("74/80 = 92% (85% to 97%)", "0/120 = 0% (0% to 3%)"),
+        ("round2", "output_ssrf"): ("50/80 = 62% (52% to 72%)", "3/120 = 2% (1% to 7%)"),
+        ("round2", "output_path"): ("51/80 = 64% (53% to 73%)", "6/120 = 5% (2% to 10%)"),
+    }
+    ev, digest = _current()
+    data = json.loads(render_ui_json(ev, digest))
+    for rnd in data["blind_rounds"]:
+        for row in rnd["rows"]:
+            if (rnd["key"], row["category"]) in printed:
+                assert (row["detection"], row["false_alarms"]) == printed[(rnd["key"], row["category"])], (rnd["key"], row["category"])
+
+
+def test_round_3_is_recorded_as_the_frozen_document_says_and_its_languages_add_up() -> None:
+    round3 = next(r for r in BLIND_ROUNDS if r.key == "round3")
+    (row,) = round3.rows
+    assert (row.detected, row.malicious, row.false_alarms, row.benign, row.hard_false_alarms, row.hard_benign) == (34, 94, 10, 146, 5, 48)
+    assert tuple(sum(v[i] for v in BLIND3_LANGUAGES.values()) for i in range(4)) == (34, 94, 10, 146)
+    record = (ROOT / round3.record).read_text(encoding="utf-8")
+    assert "34 of 94 (36%)" in record and "10 of 146 (7%)" in record
+
+
+def test_every_blind_row_is_internally_consistent() -> None:
+    for rnd in BLIND_ROUNDS:
+        for row in rnd.rows:
+            assert 0 <= row.detected <= row.malicious and 0 <= row.false_alarms <= row.benign
+            assert 0 <= row.hard_false_alarms <= row.false_alarms and row.hard_false_alarms <= row.hard_benign <= row.benign
+
+
+def test_no_language_is_claimed_as_reviewed_and_chinese_and_indonesian_attacks_are_not_claimed() -> None:
+    by_code = {lang["code"]: lang for lang in LANGUAGES}
+    assert all(lang["native_reviewed"] is False for lang in LANGUAGES)
+    assert [lang["code"] for lang in LANGUAGES] == ["en", "ms", "id", "zh"]
+    assert "not covered" in by_code["zh"]["note"].lower() and "zh" not in BLIND3_LANGUAGES
+    assert BLIND3_LANGUAGES["id"][1] == 0 and "not measured" in by_code["id"]["note"].lower()
+
+
+def test_the_coverage_data_carries_counts_and_names_only_never_sample_text() -> None:
+    ev, digest = _current()
+    data = json.loads(render_ui_json(ev, digest))
+    corpus_texts = [s.text for s in load_corpus() if s.text and len(s.text) > 40]
+    blob = json.dumps(data)
+    assert not any(text in blob for text in corpus_texts)
+
+    def keys(value: Any) -> set[str]:
+        if isinstance(value, dict):
+            return set(value) | {k for v in value.values() for k in keys(v)}
+        if isinstance(value, list):
+            return {k for v in value for k in keys(v)}
+        return set()
+
+    assert not ({"text", "samples", "missed", "false_alarm_ids"} & keys(data))
