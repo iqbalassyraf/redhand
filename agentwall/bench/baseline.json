@@ -1,25 +1,25 @@
 {
   "categories": {
     "injection_indirect": {
-      "benign": 174,
+      "benign": 294,
       "by_lang": {
         "en": {
-          "detected": 90,
-          "malicious": 90
+          "detected": 138,
+          "malicious": 138
         },
         "ms": {
-          "detected": 38,
-          "malicious": 38
+          "detected": 70,
+          "malicious": 70
         }
       },
-      "detected": 128,
-      "false_alarms": 0,
-      "families": 41,
-      "hard_benign": 51,
-      "hard_false_alarms": 0,
-      "malicious": 128,
+      "detected": 208,
+      "false_alarms": 10,
+      "families": 121,
+      "hard_benign": 96,
+      "hard_false_alarms": 10,
+      "malicious": 208,
       "owasp": "LLM01",
-      "status": "covered"
+      "status": "partial"
     },
     "manifest_risk": {
       "benign": 20,
@@ -43,65 +43,65 @@
       "status": "partial"
     },
     "output_path": {
-      "benign": 170,
+      "benign": 290,
       "by_lang": {
         "en": {
-          "detected": 88,
-          "malicious": 88
+          "detected": 112,
+          "malicious": 136
         },
         "ms": {
-          "detected": 32,
-          "malicious": 32
+          "detected": 59,
+          "malicious": 64
         }
       },
-      "detected": 120,
-      "false_alarms": 0,
-      "families": 105,
-      "hard_benign": 45,
-      "hard_false_alarms": 0,
-      "malicious": 120,
+      "detected": 171,
+      "false_alarms": 6,
+      "families": 185,
+      "hard_benign": 90,
+      "hard_false_alarms": 6,
+      "malicious": 200,
       "owasp": "LLM05",
-      "status": "covered"
+      "status": "partial"
     },
     "output_ssrf": {
-      "benign": 170,
+      "benign": 290,
       "by_lang": {
         "en": {
-          "detected": 89,
-          "malicious": 89
+          "detected": 122,
+          "malicious": 137
         },
         "ms": {
-          "detected": 31,
-          "malicious": 31
+          "detected": 49,
+          "malicious": 63
         }
       },
-      "detected": 120,
-      "false_alarms": 2,
-      "families": 106,
-      "hard_benign": 45,
-      "hard_false_alarms": 2,
-      "malicious": 120,
+      "detected": 171,
+      "false_alarms": 8,
+      "families": 186,
+      "hard_benign": 90,
+      "hard_false_alarms": 8,
+      "malicious": 200,
       "owasp": "LLM05",
       "status": "partial"
     },
     "output_xss": {
-      "benign": 170,
+      "benign": 290,
       "by_lang": {
         "en": {
-          "detected": 88,
-          "malicious": 88
+          "detected": 132,
+          "malicious": 136
         },
         "ms": {
-          "detected": 32,
-          "malicious": 32
+          "detected": 62,
+          "malicious": 64
         }
       },
-      "detected": 120,
+      "detected": 194,
       "false_alarms": 0,
-      "families": 63,
-      "hard_benign": 48,
+      "families": 143,
+      "hard_benign": 93,
       "hard_false_alarms": 0,
-      "malicious": 120,
+      "malicious": 200,
       "owasp": "LLM05",
       "status": "covered"
     },
@@ -148,10 +148,11 @@
       "status": "covered"
     }
   },
-  "corpus": "48cefd55ec4abbb6",
+  "corpus": "1eef50813cce3eaa",
   "detectors": [
     "egress_guardrail",
     "radar",
+    "radar_model",
     "manifest_auditor",
     "description_auditor"
   ],
@@ -160,7 +161,7 @@
       "benign": 32,
       "by_lang": {
         "en": {
-          "detected": 19,
+          "detected": 20,
           "malicious": 23
         },
         "ms": {
@@ -168,7 +169,7 @@
           "malicious": 5
         }
       },
-      "detected": 23,
+      "detected": 24,
       "false_alarms": 0,
       "families": 14,
       "hard_benign": 10,

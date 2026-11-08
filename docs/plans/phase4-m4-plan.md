@@ -296,3 +296,16 @@ fewer than half of subtle attacks and flags some legitimate operational text. Bl
 published limits is the only honest use today. **Decision needed (owner):** another rules pass (needs a round 3 to measure), or a measured classifier prototype
 as a second stage (P4-D8 reopened: licence check first, async or observe-only because of cost and latency, evaluated on the same blind sets).
 
+## 16. M4.1c (2026-11-08): the second-stage injection model (decision P4-D8 reopened by the owner)
+**Decision (owner):** build the classifier prototype and fix it. **Done as an experiment first**, in a throwaway environment, on the cross-round folds:
+generic sentence embeddings were a negative result (AUC 0.76 to 0.88); n-gram TF-IDF over whole documents gave AUC about 0.90; scoring three-sentence windows with
+top-two pooling gave about 0.93 and found 57% to 66% of attacks at 5% false alarms (rules: 41% at 8%).
+**Built:** `scripts/train_injection_model.py` (training-time only; scikit-learn is not a dependency), `agentwall/src/firewall/injection_model.py` (pure-Python scorer reading a plain JSON
+model, tiers 0.7 recorded low, 0.9 actionable medium, 0.95 high), rule `RAD-INJ-012` (family `model`), a `radar_model` bench detector, and the model card
+`docs/security/injection-model.md`. Round 2 moved into the corpus as development data (`*.dev3.jsonl`) because it trained the model. Model: about 2 MiB, no new runtime dependency, no third-party model or data.
+**Not in the hot path:** about 2.4 ms per KiB (6 ms at 4 KiB, 8 ms at 16 KiB). Plan for M4.3: run the second stage on a bounded background queue with a worker thread; findings are recorded when ready; a full queue drops
+work and counts it; it never delays a call.
+**NOT measured on independent data:** the final model saw rounds 1 and 2, the rules saw round 1 and the author saw round 2. Held-out (the author's set plus the helpdesk tickets, none used in training): injection 24 of 28
+with 0 of 32 false alarms (rules alone 23 of 28). That set is small. **A blind round 3 is required** (`docs/testing/briefs/2026-11-08-m4-1c-blind-round-3-injection.md`), ideally written by a different AI than Gemini to widen the author diversity.
+**Decision after round 3:** if combined detection is still low or false alarms stay high, the remaining levers are more diverse training data (several authors) or a larger pretrained model (licence check first), not more rules.
+
