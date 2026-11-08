@@ -94,6 +94,10 @@ class _AgentPayload(BaseModel):
     # fail and the call is denied, rather than running with no bait checks. Deploy core before the gateway.
     honeytokens: list[_HoneytokenPayload]
     honey_tools: list[_HoneyToolPayload]
+    # Required, with no default, like the fields above: an older core that does not send the Radar modes makes the lookup fail
+    # and the call is denied. Deploy core before the gateway. "block" does not exist and is not accepted.
+    radar_mode: Literal["off", "observe"]
+    output_check_mode: Literal["off", "observe"]
 
 
 class _ApprovedToolPayload(BaseModel):
@@ -137,6 +141,8 @@ class GatewayContext:
     honey_tools: tuple[HoneyTool, ...]
     pin_mode: str = "off"
     approved_tools: frozenset[tuple[str, str]] = frozenset()
+    radar_mode: str = "off"
+    output_check_mode: str = "off"
 
     def honey_tool(self, name: str) -> HoneyTool | None:
         return next((t for t in self.honey_tools if t.name == name), None)
@@ -255,4 +261,6 @@ class CoreContextClient:
             approved_tools=frozenset((t.tool, t.digest) for t in payload.server.approved_tools) if payload.server else frozenset(),
             honeytokens=tuple(HoneytokenRef(h.id, h.digest) for h in payload.agent.honeytokens),
             honey_tools=tuple(HoneyTool(id=t.id, name=t.name, description=t.description) for t in payload.agent.honey_tools),
+            radar_mode=payload.agent.radar_mode,
+            output_check_mode=payload.agent.output_check_mode,
         )

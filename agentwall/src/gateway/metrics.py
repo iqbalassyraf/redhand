@@ -27,6 +27,11 @@ class GatewayMetrics:
         self._honeytoken_scans_truncated = 0
         self._pin_reports: Counter[str] = Counter()
         self._pin_events: Counter[str] = Counter()
+        self._radar_scans: Counter[str] = Counter()
+        self._radar_findings: Counter[str] = Counter()
+        self._radar_reports: Counter[str] = Counter()
+        self._radar_ms_sum = 0.0
+        self._radar_ms_count = 0
 
     def record_budget_flush(self, outcome: str, unreported_keys: int) -> None:
         with self._lock:
@@ -57,6 +62,23 @@ class GatewayMetrics:
     def record_pin_report(self, outcome: str) -> None:
         with self._lock:
             self._pin_reports[outcome] += 1
+
+    def record_radar_scan(self, outcome: str) -> None:
+        with self._lock:
+            self._radar_scans[outcome] += 1
+
+    def record_radar_finding(self, kind: str) -> None:
+        with self._lock:
+            self._radar_findings[kind] += 1
+
+    def record_radar_report(self, outcome: str) -> None:
+        with self._lock:
+            self._radar_reports[outcome] += 1
+
+    def record_radar_duration(self, ms: float) -> None:
+        with self._lock:
+            self._radar_ms_sum += ms
+            self._radar_ms_count += 1
 
     def record_pin_event(self, event: str, count: int = 1) -> None:
         with self._lock:
@@ -145,6 +167,30 @@ class GatewayMetrics:
             ]
             for event, count in sorted(self._pin_events.items()):
                 lines.append(f'redhand_gateway_pin_events_total{{event="{event}"}} {count}')
+            lines += [
+                "# HELP redhand_gateway_radar_scans_total Background Radar scans by outcome (ok, error, dropped, throttled, truncated).",
+                "# TYPE redhand_gateway_radar_scans_total counter",
+            ]
+            for outcome, count in sorted(self._radar_scans.items()):
+                lines.append(f'redhand_gateway_radar_scans_total{{outcome="{outcome}"}} {count}')
+            lines += [
+                "# HELP redhand_gateway_radar_findings_total Radar findings by kind (injection, output), before throttling.",
+                "# TYPE redhand_gateway_radar_findings_total counter",
+            ]
+            for kind, count in sorted(self._radar_findings.items()):
+                lines.append(f'redhand_gateway_radar_findings_total{{kind="{kind}"}} {count}')
+            lines += [
+                "# HELP redhand_gateway_radar_reports_total Findings reports to core, by outcome (ok, refused, failed, dropped).",
+                "# TYPE redhand_gateway_radar_reports_total counter",
+            ]
+            for outcome, count in sorted(self._radar_reports.items()):
+                lines.append(f'redhand_gateway_radar_reports_total{{outcome="{outcome}"}} {count}')
+            lines += [
+                "# HELP redhand_gateway_radar_scan_ms Time spent scanning one result on the background worker (not added to calls).",
+                "# TYPE redhand_gateway_radar_scan_ms summary",
+                f"redhand_gateway_radar_scan_ms_sum {self._radar_ms_sum}",
+                f"redhand_gateway_radar_scan_ms_count {self._radar_ms_count}",
+            ]
             lines += [
                 "# HELP redhand_gateway_honeytoken_scans_truncated_total Scans that hit the 64 KiB budget; the rest was not scanned.",
                 "# TYPE redhand_gateway_honeytoken_scans_truncated_total counter",

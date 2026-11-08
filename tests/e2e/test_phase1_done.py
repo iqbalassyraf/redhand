@@ -32,6 +32,7 @@ from agentwall.src.gateway.identity import AgentTokenVerifier
 from agentwall.src.gateway.metrics import GatewayMetrics
 from agentwall.src.gateway.recorder import EventRecorder, HttpEventReporter
 from agentwall.src.gateway.pins import HttpPinReporter, PinCoordinator
+from agentwall.src.gateway.radar_scan import HttpFindingsReporter, RadarScanner
 from agentwall.src.gateway.trips import HttpTripReporter, TripDispatcher
 from agentwall.src.gateway.service import McpGateway
 from agentwall.src.gateway.upstream import UpstreamForwarder
@@ -99,6 +100,9 @@ class Stack:
             ),
             pins=PinCoordinator(
                 reporter=HttpPinReporter(core_url="http://core", service_token=SERVICE_TOKEN, http_client=self.core), retry_delays=(),
+            ),
+            radar=RadarScanner(
+                reporter=HttpFindingsReporter(core_url="http://core", service_token=SERVICE_TOKEN, http_client=self.core), retry_delays=(),
             ),
         )
         monkeypatch.setattr(gateway_main, "gateway", self.gateway)

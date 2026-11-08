@@ -27,13 +27,13 @@
 | 13 | PASS | `OPTIONS` preflight with `Origin: https://redhand.archtificial.com` and `Origin: https://redhand-dashboard.vercel.app` echoed `access-control-allow-origin` on both core `/v1/passports` and gateway `/health` | Terminal curl: `access-control-allow-origin: https://redhand.archtificial.com`, `access-control-allow-origin: https://redhand-dashboard.vercel.app` |
 | 14 | PASS | `OPTIONS` preflight with `Origin: https://evil.example.com` against core returned no `access-control-allow-origin` header | Terminal curl: 0 header matches |
 | 15 | PASS | Live scan on `kedai-kita` MCP server completed with verdict `WARN`, 6 tools scanned, 0 high findings, only low `MCP-SEC-008` (unbounded string fields) | Dashboard `/scanner` execution |
-| 16 | NOT RUN | Rescan after helpdesk schemas add `maxLength`/`pattern` | Awaiting helpdesk schema tightening |
+| 16 | PASS | Rescan after helpdesk schemas add `maxLength`/`pattern` | Hardened tool schemas deployed to Cloud Run (`helpdesk-mcp-00002-xdt`); live scan completed with verdict `PASS`, risk score `0`, and 0 findings (`MCP-SEC-008` resolved) |
 
 ## Bugs found
 None.
 
 ## Not covered
-- Step 16: Rescan pending future schema hardening on `helpdesk-mcp`.
+None. All 16 steps completed and verified.
 
 ## Verdict
-All active access fixes (password reset flow, scrolling across data pages, multi-origin CORS allow-listing, and initial helpdesk MCP scanner check) are fully operational and verified on staging.
+All active access fixes and the subsequent Helpdesk MCP schema hardening are fully operational and verified on staging.
