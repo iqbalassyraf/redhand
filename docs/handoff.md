@@ -44,6 +44,17 @@ Both tools work on RedHand and its demo projects. This file is how each learns w
   - Ingest the blind samples and helpdesk export into benchmark evaluation, compare against Radar rules, and proceed with M4.3 gateway integration.
 
 
+## 2026-11-08, Claude Code: second-stage injection model (M4.1c)
+- **Owner decision:** reopen P4-D8 and build the classifier prototype. **Built:** `agentwall/src/firewall/injection_model.py` (pure-Python scorer of a 2 MiB plain JSON model, rule `RAD-INJ-012`),
+  `scripts/train_injection_model.py` (training-time only), a `radar_model` bench detector, model card `docs/security/injection-model.md`, plan section 16.
+  Experiments first: generic embeddings were a negative result; n-gram windows were best (cross-round AUC about 0.93).
+- **Your round-2 samples** moved into the corpus as development data (`*.dev3.jsonl`) because they trained the model. They are no longer a test.
+- **Verified:** 1,260 tests, strict mypy, ruff; scorer matches scikit-learn exactly (parity vectors); eleven mutations of the scorer, tiers and loader caught; training is deterministic.
+- **NOT verified:** performance on independent data. The model is not wired into the gateway.
+- **For Antigravity or another writer:** `docs/testing/briefs/2026-11-08-m4-1c-blind-round-3-injection.md` (injection only, 100 attacks and 150 benign, written by someone who has seen nothing; **a different AI than Gemini is preferred**).
+  Still open from before: latency baseline, helpdesk schema limits and rescan.
+- **Next for Claude Code:** score round 3 first, report only; then M4.3 with the model on a background path.
+
 ## 2026-11-08, Claude Code: blind round 2 scored (rules unchanged)
 - **Scored once, report only:** injection 33/80 (41%) with 10/120 false alarms, XSS 74/80 (92%) with 0/120, SSRF 50/80 (62%) with 3/120, path 51/80 (64%) with 6/120.
   Frozen in `docs/security/blind-round-2.md` and in the coverage matrix. Round 2 was harder than round 1, so the two are not directly comparable.

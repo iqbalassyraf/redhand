@@ -2,6 +2,8 @@
 
 ## Unreleased: Phase 3 (See things), in progress
 
+- Phase 4 M4.1c: a second-stage indirect-injection model for the Radar (`agentwall/src/firewall/injection_model.py`, `RAD-INJ-012`): a logistic regression over word and character n-grams of three-sentence windows, shipped as a 2 MiB plain JSON file and scored in pure Python (no new runtime dependency, no third-party model or data). Cross-round AUC about 0.93; only a score of 0.9 or more is actionable; not in the hot path. Blind round 2 moved into the corpus as development data. Model card: `docs/security/injection-model.md`. Not yet measured on a fresh blind round.
+
 - Phase 4 blind round 2 (frozen in `docs/security/blind-round-2.md` and the coverage matrix): the rewritten Radar on 800 harder, unseen, independently written samples. Injection 41% (8% false alarms on hard-benign documents), XSS 92% (none), SSRF 62%, path 64%. Not comparable one to one with round 1.
 
 - Phase 4 M4.1b: the Radar rules rewritten after an independent blind round (frozen in `docs/security/blind-round-1.md`: indirect injection 24%, output rules over-flagging documentation). Broader injection classes (directed commands, bracketed calls, policy-void claims, authority plus urgency, link exfiltration, Malay and Indonesian), code spans and escaped markup are not live, more address and path forms, and a documentation context that lowers address and path findings. Findings have `actionable` (not low confidence). The improvement is not yet measured on independent data (blind round 2).

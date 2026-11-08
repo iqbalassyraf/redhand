@@ -10,6 +10,7 @@ from dataclasses import dataclass
 
 from ..firewall.ast_guardrails import EgressTaintGuardrail
 from ..firewall.mcp_vetting import MCPServerAuditor
+from ..firewall.injection_model import SECOND_STAGE
 from ..firewall.radar import category_of, scan_result
 from .corpus import Kind, Sample
 
@@ -53,9 +54,16 @@ def _radar(sample: Sample) -> bool:
     return any(category_of(f) == sample.category for f in scan_result(sample.text).actionable)
 
 
+def _radar_model(sample: Sample) -> bool:
+    """The second-stage model (trained on the development samples: its dev numbers are NOT evidence; held-out and blind rounds are)."""
+    assert sample.text is not None
+    return any(category_of(f) == sample.category for f in scan_result(sample.text, detectors=SECOND_STAGE).actionable)
+
+
 DETECTORS: tuple[Detector, ...] = (
     Detector("egress_guardrail", frozenset({"tool_result"}), _egress),
     Detector("radar", frozenset({"tool_result"}), _radar),
+    Detector("radar_model", frozenset({"tool_result"}), _radar_model),
     Detector("manifest_auditor", frozenset({"manifest"}), _manifest_auditor),
     Detector("description_auditor", frozenset({"tool_description"}), _description_auditor),
 )

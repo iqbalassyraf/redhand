@@ -130,7 +130,7 @@ def render_markdown(ev: Evaluation, digest: str) -> str:
         f"**weak** = detects something but misses the partial bar; **not covered** = detects nothing. A category with "
         f"fewer than {MIN_SAMPLES_PER_SIDE} samples on either side is **insufficient data**.",
         "",
-        "## Dev results (the rules were written and tuned against these, so they flatter them)",
+        "## Dev results (the rules were written and tuned against these, and the `radar_model` detector was trained on them, so they flatter them)",
         "",
         "| Category | OWASP | Malicious | Benign | Families | Detection (95% CI) | False alarms (95% CI) | Hard benign false alarms | Status |",
         "|---|---|---|---|---|---|---|---|---|",

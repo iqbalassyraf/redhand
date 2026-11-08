@@ -127,10 +127,11 @@ def load_corpus(directory: Path = DEFAULT_CORPUS_DIR) -> list[Sample]:
             stem, _, kind = path.stem.partition(".")
             if sample.category != stem:
                 raise ValueError(f"{path.name}:{number}: category {sample.category!r} does not match the file name")
-            if kind not in ("", "dev2", "holdout"):
+            if kind != "holdout" and not re.fullmatch(r"|dev\d+", kind):
                 raise ValueError(f"{path.name}: unknown corpus file kind {kind!r}")
-            # "dev2" holds independently written samples that were measured once as blind round 1 (docs/security/blind-round-1.md)
-            # and then used to improve the rules, so from then on they are development data like any other.
+            # "dev2" and "dev3" hold independently written samples that were measured once as blind rounds 1 and 2
+            # (docs/security/blind-round-1.md, blind-round-2.md) and then used to improve the rules or train the model, so from then
+            # on they are development data like any other.
             sample = sample.model_copy(update={"split": "holdout" if kind == "holdout" else "dev"})
             if sample.id in seen:
                 raise ValueError(f"{path.name}:{number}: duplicate id {sample.id}")

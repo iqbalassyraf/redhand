@@ -101,6 +101,7 @@ RULES: dict[str, tuple[str, Kind, Level, str]] = {
     "RAD-INJ-009": ("hidden", "injection", "high", "The text hides instructions in characters a person cannot see."),
     "RAD-INJ-010": ("encoded", "injection", "high", "An encoded block in the text decodes to instructions for the agent."),
     "RAD-INJ-011": ("direction", "injection", "medium", "The text uses text-direction controls, which can make displayed text differ from what the agent reads."),
+    "RAD-INJ-012": ("model", "injection", "medium", "A statistical model rates this text as likely to contain an instruction aimed at the agent (second stage, no matched text)."),
     "RAD-OUT-001": ("xss", "output", "high", "The content contains script or an event handler that runs when rendered."),
     "RAD-OUT-002": ("xss", "output", "high", "The content contains a link or source with a script-running URL scheme."),
     "RAD-OUT-003": ("xss", "output", "medium", "The content contains active markup (frame, object, redirect, external form or style import)."),
