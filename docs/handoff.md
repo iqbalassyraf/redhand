@@ -49,7 +49,7 @@ Both tools work on RedHand and its demo projects. This file is how each learns w
   `scripts/train_injection_model.py` (training-time only), a `radar_model` bench detector, model card `docs/security/injection-model.md`, plan section 16.
   Experiments first: generic embeddings were a negative result; n-gram windows were best (cross-round AUC about 0.93).
 - **Your round-2 samples** moved into the corpus as development data (`*.dev3.jsonl`) because they trained the model. They are no longer a test.
-- **Verified:** 1,260 tests, strict mypy, ruff; scorer matches scikit-learn exactly (parity vectors); eleven mutations of the scorer, tiers and loader caught; training is deterministic.
+- **Verified:** 1,240 tests, strict mypy, ruff; scorer matches scikit-learn exactly (parity vectors); eleven mutations of the scorer, tiers and loader caught; training is deterministic.
 - **NOT verified:** performance on independent data. The model is not wired into the gateway.
 - **For Antigravity or another writer:** `docs/testing/briefs/2026-11-08-m4-1c-blind-round-3-injection.md` (injection only, 100 attacks and 150 benign, written by someone who has seen nothing; **a different AI than Gemini is preferred**).
   Still open from before: latency baseline, helpdesk schema limits and rescan.
