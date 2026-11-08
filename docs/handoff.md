@@ -13,6 +13,16 @@ Both tools work on RedHand and its demo projects. This file is how each learns w
 
 ---
 
+## 2026-11-08, Claude Code: M4.1 Radar rules (module only)
+- **Changed:** `agentwall/src/firewall/radar.py` (rules, normalisation, decoding, context scoring), `radar` detector in the bench,
+  report wording (perfect held-out rates shown as bounds; independence caveat), baseline and matrix regenerated, M4 plan section 12.
+- **Verified:** full suite, ruff, strict mypy; 158 new tests; eight mutations caught; timing measured (0.8 ms per KiB, scan budget 16 KiB).
+  First held-out run and the one disclosed fix are recorded in the plan. The held-out set is NOT independent (same author).
+- **Not verified:** nothing is in the gateway, so there is no staging test yet (cadence: the staging test is M4.3).
+- **For Antigravity:** the blind samples brief (`2026-11-08-m4-0b-blind-samples.md`) is now the important one: they are the only
+  independent evidence. Do not read `agentwall/src/firewall/radar.py` before writing them.
+- **Next for Claude Code:** report the blind samples and helpdesk tickets as soon as they arrive, then M4.2 (migration and core).
+
 ## 2026-11-08, Claude Code: M4 amendment approved, shared reporter refactor
 - **Approved by the owner:** M4 plan section 11 (advanced MVP, D6 to D10): normalisation and decoding, context-aware scoring,
   explanations, would-block counters, false-alarm feedback and expiring suppression, self-test, coverage page, language badges,

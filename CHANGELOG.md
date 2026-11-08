@@ -2,6 +2,8 @@
 
 ## Unreleased: Phase 3 (See things), in progress
 
+- Phase 4 M4.1: the Radar rules module (`agentwall/src/firewall/radar.py`): injection and output rules, normalisation and decoding, context-aware confidence, fixed-wording findings, pluggable detectors; a `radar` detector in the benchmark. Not wired into the gateway yet. Held-out first run: injection 17/20 (1 false alarm, since fixed), path 19/20, SSRF 20/20, XSS 20/20, with the independence limits stated in `docs/plans/phase4-m4-plan.md` section 12. The benchmark report now shows perfect held-out rates as confidence bounds.
+
 - Phase 4 M4.0: 160 held-out benchmark samples (indirect injection and the three output categories, 40 each, written before any Radar rule exists), the coverage matrix and baseline regenerated, 29 new Malay rows for native-speaker review. Held-out "before" numbers: injection 0/20, path 0/20, XSS 0/20, SSRF 2/20, no false alarms.
 
 - Docs: `docs/testing/` testing handoff (briefs written by Claude Code, results written by Antigravity), with a first brief for the dashboard access fixes.

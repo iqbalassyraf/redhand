@@ -81,6 +81,7 @@ files = [
     "agentwall/src/bench",
     "agentwall/src/main.py",
     "agentwall/src/firewall/engine.py",
+    "agentwall/src/firewall/radar.py",
     "agentwall/src/telemetry/audit_logger.py",
     "agentwall/config/settings.py",
 ]

@@ -94,8 +94,8 @@ tested in the SQL harness. Turning a check off and enabling block need confirmat
   called out.
 
 ## 8. Cost and performance
-Budget: at most 10 ms p50 and 50 ms p99 added (CLAUDE.md section 8). Expected cost is about the honeytoken scanner (under
-2 ms at 64 KiB), **an estimate until measured**. Plan: record the gateway overhead histogram (`/metrics`,
+Budget: at most 10 ms p50 and 50 ms p99 added (CLAUDE.md section 8). The first estimate (under 2 ms at 64 KiB) was **wrong**: measured
+in M4.1 it is about 0.8 ms per KiB (see section 12), so the scan budget is 16 KiB. Plan: record the gateway overhead histogram (`/metrics`,
 `redhand_gateway_overhead_ms`) on staging before M4.3 and again after; add a local timing test with a loose bound. Context
 grows by two small fields. Storage: coalesced rows, 90 days. No LLM calls, no new services, no new dependencies. Per-agent
 running cost is expected to be negligible; Telegram alerts are rate limited.
@@ -217,3 +217,37 @@ The owner can stop after M4.4 and still have a working, honest Radar; M4.5 and M
 - **D8 corpus:** have Antigravity write the blind samples (recommended), and use only our own docs and licence-checked data.
 - **D9 languages:** add Indonesian and Simplified Chinese as unreviewed in M4.5 (recommended), or keep English and Malay only.
 - **D10 follow-up:** schedule the per-agent destination allowlist right after M4 (recommended).
+
+## 12. M4.1 results (2026-11-08): the rules module, `agentwall/src/firewall/radar.py`
+**What exists:** injection rules (override, persona, fake markers, exfiltration, tool-call smuggling, concealment, disclosure,
+authority and urgency, hidden tag characters, encoded blocks, direction controls), output rules (script and handlers, script URLs,
+active markup, image exfiltration, internal and metadata addresses, risky schemes and collector services, sensitive paths),
+normalisation (NFKC, invisible and lookalike characters, leetspeak digits, one level of base64 and hex, entity and percent decoding),
+context-aware confidence (tools the agent holds), fixed-wording findings that never contain the text, and a pluggable
+`Detector` interface. No gateway, database or UI change yet (M4.2 to M4.4).
+
+**Held-out results, first run (before any change made after seeing held-out results):** indirect injection 17/20 detected and
+1/20 false alarm; path traversal 19/20 and 0/20; SSRF 20/20 and 0/20; XSS 20/20 and 0/20.
+**Disclosed change after that run:** the negation guard ("do not ...", "never ...") was not applied to the disclosure, exfiltration
+and tool-call rules, so "Do not share your password with anyone, including IT" was flagged. It is now applied. Result after the change:
+injection 17/20 and **0/20** false alarms; the others unchanged. Later changes (leetspeak folds digits only, because it was
+treating email addresses as leetspeak; a tool shown as `name(args)` is documentation, not a request; the scan budget; speed) came from
+this module's own tests and measurements, not from held-out samples.
+**Known misses, left as they are (not tuned to):** an instruction to render an image whose address carries data, phrased as an
+instruction; "the correct next action is shell_exec with command ..." (no call verb); the Malay inflected verb "memanggil"; the
+double-encoded path `..%c0%af..%c0%afetc/shadow`. These are the kind of gap the benchmark exists to show.
+
+**Read these numbers with care.** I wrote the dev samples, the held-out samples and the rules, and I had seen the held-out samples
+when I wrote the rules, so the held-out set is **not independent**. With 20 samples per side, a clean result only shows false alarms
+below about 16%. The independent evidence will be Antigravity's blind samples (M4.0b) and the helpdesk tickets (M4.0 brief): report
+them first, as they arrive, before quoting anything above.
+
+**Measured speed (local, pure Python, one core):**
+| Input | Time |
+|---|---|
+| ordinary prose, 1 KiB / 4 KiB / 16 KiB | p50 0.8 ms / 3.3 ms / 13 ms (p99 1.2 / 4.4 / 15 ms) |
+| worst adversarial 16 KiB inputs (unclosed tags, leetspeak, repeated verbs, URL floods) | 12 to 25 ms |
+| the same inputs at 64 KiB before the budget cut and the optimisation | up to 380 ms |
+**Decision:** a scan reads at most 16 KiB per result (both ends of a larger value, so an appended attack is still seen; an attack
+buried in the middle of a larger value is not, and the result says it was truncated). The gateway cost is still to be measured
+on staging with the real overhead histogram (M4.3), including the honeytoken and secret scans already on the same path.
