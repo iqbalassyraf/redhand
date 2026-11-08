@@ -128,6 +128,7 @@ export default function ScannerPage() {
             <NavLink href="/blackbox" label="Black Box" />
             <NavLink href="/honeytokens" label="Honeytokens" />
             <NavLink href="/scanner" label="MCP Scanner" active />
+            <NavLink href="/radar" label="Radar" />
           </nav>
         </div>
         <div className="flex items-center gap-3 text-[12px]">

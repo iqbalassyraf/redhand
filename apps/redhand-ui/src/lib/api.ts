@@ -540,3 +540,83 @@ export const pinsApi = {
       body: { mode, reason: reason || null, confirm: true },
     }),
 };
+
+// --- Prompt Injection Radar and output checks (Phase 4 M4.2 API, M4.4 page) ------------------------------------------------
+
+export type RadarLevel = "low" | "medium" | "high";
+export type RadarMode = "off" | "observe" | "block";
+export type FindingReviewStatus = "open" | "confirmed" | "false_alarm";
+
+export interface RadarSummary {
+  findings?: number;
+  occurrences?: number;
+  would_block?: number;
+  open?: number;
+  confirmed?: number;
+  false_alarm?: number;
+  would_block_open?: number;
+}
+
+export interface RadarSettings {
+  radar_mode: RadarMode;
+  output_check_mode: RadarMode;
+  radar_mode_changed_at: string | null;
+  output_check_mode_changed_at: string | null;
+  block_available: boolean;
+  last_7_days: RadarSummary;
+  capabilities: { can_change_modes: boolean; can_review: boolean; can_suppress: boolean };
+}
+
+/** A finding never carries the scanned text: only a rule id, tags, counts and where it was seen. */
+export interface RadarFinding {
+  id: string;
+  agent_id: string;
+  agent_name: string | null;
+  rule_id: string;
+  family: string;
+  kind: "injection" | "output";
+  severity: RadarLevel;
+  confidence: RadarLevel;
+  place: "text" | "hidden" | "decoded";
+  evasion: string[];
+  tool_name: string;
+  server_slug: string;
+  would_block: boolean;
+  occurrences: number;
+  first_seen_at: string;
+  last_seen_at: string;
+  review_status: FindingReviewStatus;
+  reviewed_at: string | null;
+  review_note: string | null;
+}
+
+export interface RadarSuppression {
+  id: string;
+  agent_id: string;
+  agent_name: string | null;
+  rule_id: string;
+  reason: string;
+  created_at: string;
+  expires_at: string;
+}
+
+export const radarApi = {
+  settings: (t: string) => apiFetch<RadarSettings>("/v1/radar/settings", t),
+  saveSettings: (
+    t: string,
+    body: { radar_mode: "off" | "observe"; output_check_mode: "off" | "observe"; confirm: boolean }
+  ) => apiFetch<RadarSettings>("/v1/radar/settings", t, { method: "PUT", body }),
+  findings: (t: string, params: { review_status?: string; kind?: string; before?: string; limit?: number }) => {
+    const query = new URLSearchParams();
+    for (const [key, value] of Object.entries(params)) if (value !== undefined && value !== "") query.set(key, String(value));
+    const suffix = query.toString();
+    return apiFetch<{ findings: RadarFinding[]; next_before: string | null }>(`/v1/findings${suffix ? `?${suffix}` : ""}`, t);
+  },
+  review: (t: string, id: string, body: { status: "confirmed" | "false_alarm"; note?: string }) =>
+    apiFetch<{ review_status: FindingReviewStatus; changed: boolean }>(`/v1/findings/${id}/review`, t, { method: "POST", body }),
+  suppressions: (t: string) => apiFetch<{ suppressions: RadarSuppression[] }>("/v1/radar/suppressions", t),
+  suppress: (t: string, body: { agent_id: string; rule_id: string; days: number; reason: string; confirm: boolean }) =>
+    apiFetch<{ id: string; created: boolean; expires_at: string }>("/v1/radar/suppressions", t, { method: "POST", body }),
+  removeSuppression: (t: string, id: string) =>
+    apiFetch<{ revoked: boolean }>(`/v1/radar/suppressions/${id}`, t, { method: "DELETE" }),
+};

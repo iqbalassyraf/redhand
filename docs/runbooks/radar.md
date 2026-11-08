@@ -5,7 +5,7 @@ risky output (script, odd links, internal addresses, file paths). It records a f
 call. It only sees what passes through the gateway.
 
 ## Turn it on or off
-Dashboard settings are not built yet (M4.4). Until then an admin uses the API: `PUT /v1/radar/settings` with
+In the dashboard open **Radar** (an admin changes the two switches; turning one off needs the tick). The same through the API: `PUT /v1/radar/settings` with
 `{"radar_mode": "observe"|"off", "output_check_mode": "observe"|"off", "confirm": true}` (`confirm` is required for off). Takes effect
 on the next call after the gateway's context cache expires (2 to 4 seconds). New organizations start on `observe`.
 
@@ -29,3 +29,6 @@ the text. Mark one `confirmed` or `false_alarm` with `POST /v1/findings/{id}/rev
 Measured on unseen samples (blind round 2): injection 41% found with 8% false alarms on hard benign documents; markup about 92%;
 addresses about 62%; file paths about 64%. It misses rephrased and long buried attacks. It is a smoke detector, not a wall, and
 block mode will not exist until a measured gate is passed.
+
+## The Radar page
+**Radar** in the header. *Checks*: the two switches and a 7-day summary. *Findings*: newest first, filter by review or kind, **Real** / **False alarm** (optional note), **Silence this rule for this agent** (reason of 3 to 300 characters, 1 to 90 days, tick the box; admin only). *Active silences*: **Remove** (admin). A security operator reviews but cannot change switches or silences; a viewer is told the role cannot see the page. A finding never shows the scanned text; "No findings" means the Radar recognised nothing, not that nothing is wrong. If the page stays empty while you expect findings, check the two switches first, then `docs/runbooks/radar.md` "Problems".

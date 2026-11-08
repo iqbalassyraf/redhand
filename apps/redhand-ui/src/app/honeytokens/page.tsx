@@ -156,6 +156,9 @@ export default function HoneytokensPage() {
             <Link href="/scanner" className="rounded-full px-3 py-1.5 font-medium text-[#606060] hover:bg-[#F2F2F2]">
               MCP Scanner
             </Link>
+            <Link href="/radar" className="rounded-full px-3 py-1.5 font-medium text-[#606060] hover:bg-[#F2F2F2]">
+              Radar
+            </Link>
           </nav>
         </div>
         <div className="flex items-center gap-3 text-[12px]">
