@@ -27,6 +27,9 @@ class GatewayMetrics:
         self._honeytoken_scans_truncated = 0
         self._pin_reports: Counter[str] = Counter()
         self._pin_events: Counter[str] = Counter()
+        self._stage_buckets: dict[str, Counter[float]] = {}
+        self._stage_sum: dict[str, float] = {}
+        self._stage_count: Counter[str] = Counter()
         self._radar_scans: Counter[str] = Counter()
         self._radar_findings: Counter[str] = Counter()
         self._radar_reports: Counter[str] = Counter()
@@ -62,6 +65,16 @@ class GatewayMetrics:
     def record_pin_report(self, outcome: str) -> None:
         with self._lock:
             self._pin_reports[outcome] += 1
+
+    def record_stage(self, stage: str, ms: float) -> None:
+        """Time spent in one named step of a call (same buckets as the overhead histogram). Stage names are fixed in code."""
+        with self._lock:
+            buckets = self._stage_buckets.setdefault(stage, Counter())
+            self._stage_count[stage] += 1
+            self._stage_sum[stage] = self._stage_sum.get(stage, 0.0) + ms
+            for bucket in LATENCY_BUCKETS_MS:
+                if ms <= bucket:
+                    buckets[bucket] += 1
 
     def record_radar_scan(self, outcome: str) -> None:
         with self._lock:
@@ -205,4 +218,14 @@ class GatewayMetrics:
             lines.append(f'redhand_gateway_overhead_ms_bucket{{le="+Inf"}} {self._latency_count}')
             lines.append(f"redhand_gateway_overhead_ms_sum {self._latency_sum_ms:.3f}")
             lines.append(f"redhand_gateway_overhead_ms_count {self._latency_count}")
+            lines += [
+                "# HELP redhand_gateway_stage_ms Time in one step of a call, by stage (verify, context_hit, context_miss, honeytoken_scan, guardrails, budget, budget_flush_now, jwks_refresh, context_refresh, context_refresh_failed).",
+                "# TYPE redhand_gateway_stage_ms histogram",
+            ]
+            for stage in sorted(self._stage_buckets):
+                for bucket in LATENCY_BUCKETS_MS:
+                    lines.append(f'redhand_gateway_stage_ms_bucket{{stage="{stage}",le="{bucket}"}} {self._stage_buckets[stage][bucket]}')
+                lines.append(f'redhand_gateway_stage_ms_bucket{{stage="{stage}",le="+Inf"}} {self._stage_count[stage]}')
+                lines.append(f'redhand_gateway_stage_ms_sum{{stage="{stage}"}} {self._stage_sum[stage]:.3f}')
+                lines.append(f'redhand_gateway_stage_ms_count{{stage="{stage}"}} {self._stage_count[stage]}')
             return "\n".join(lines) + "\n"

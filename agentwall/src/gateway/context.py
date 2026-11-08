@@ -198,6 +198,15 @@ class CoreContextClient:
         self._cache: OrderedDict[tuple[str, str, str], tuple[float, GatewayContext]] = OrderedDict()
         self._refreshing: dict[tuple[str, str, str], asyncio.Task[None]] = {}
         self._generation = 0
+        self._metrics: Any = None
+
+    def attach_metrics(self, metrics: Any) -> None:
+        """Lets the gateway time lookups (hit, miss, background refresh). Optional: without it nothing is timed."""
+        self._metrics = metrics
+
+    def _stage(self, stage: str, started: float) -> None:
+        if self._metrics is not None:
+            self._metrics.record_stage(stage, (time.perf_counter() - started) * 1000)
 
     def invalidate(self) -> None:
         self._generation += 1  # a refresh already running must not put its (older) answer back
@@ -211,13 +220,16 @@ class CoreContextClient:
     async def get(self, agent_id: UUID, organization_id: UUID, server: str) -> GatewayContext:
         key = (str(agent_id), str(organization_id), server)
         now = self._clock()
+        timer = time.perf_counter()
         cached = self._cache.get(key)
         if cached is not None and now - cached[0] < self._ttl:
             if now - cached[0] >= self._ttl * REFRESH_AHEAD_FRACTION:
                 self._start_refresh(key, agent_id, organization_id, server)
+            self._stage("context_hit", timer)
             return cached[1]
 
         context = await self._fetch(agent_id, organization_id, server)
+        self._stage("context_miss", timer)
         self._cache[key] = (now, context)
         self._cache.move_to_end(key)
         while len(self._cache) > CACHE_MAX_ENTRIES:
@@ -243,13 +255,17 @@ class CoreContextClient:
         self, key: tuple[str, str, str], agent_id: UUID, organization_id: UUID, server: str, started: float, generation: int,
     ) -> None:
         # The entry is stamped with the time the refresh was REQUESTED, so it is never treated as fresher than it is (revocation SLO).
+        timer = time.perf_counter()
         try:
             context = await self._fetch(agent_id, organization_id, server)
         except (ContextUnavailableError, AgentUnknownError):
+            self._stage("context_refresh_failed", timer)
             return  # a failure is never cached and never extends the old entry's life
         except Exception as exc:  # noqa: BLE001  background work: log the type only, keep the old entry, never raise into the loop
             logger.warning("Passport refresh failed", error_type=type(exc).__name__)
+            self._stage("context_refresh_failed", timer)
             return
+        self._stage("context_refresh", timer)
         current = self._cache.get(key)
         if generation != self._generation or (current is not None and current[0] >= started):
             return

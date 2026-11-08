@@ -233,3 +233,10 @@ Both tools work on RedHand and its demo projects. This file is how each learns w
 - **Not done:** step 3, keeping one instance always warm (costs money, owner decides).
 - **Deploy order when merged:** core, then gateway. Then re-run `scripts/latency_baseline.py` (brief: `docs/testing/briefs/2026-11-08-gateway-latency-retest.md`).
 - **Found, not fixed:** gateway-context never selects `organizations.utc_offset_minutes`, so the budget day always uses the default offset (SQL uses the stored one).
+
+## 2026-11-08, Claude Code: stage timings (branch perf/gateway-stage-timings)
+- **Why:** the retest of the lookup fix (core median 232 to 118 ms, mean overhead 110 to 21.5 ms, freeze seen in under 1 s) still had 10 of 200 calls at 250 to 1000 ms. The total cannot say where; guesses (CPU throttling between requests, key refresh, budget flush) are not evidence.
+- **Changed:** per-stage histograms in the gateway and a per-stage breakdown in `scripts/latency_baseline.py`. No behaviour change.
+- **Verified:** tests and 6 mutation checks. **Not verified:** real numbers; needs a deploy (core is unchanged, gateway only) and the 200-call run again.
+- **Note:** the retest's revisions 00022/00017 were redeployed by the owner from the same commit 866dcfc.
+- **Retest:** rerun brief `docs/testing/briefs/2026-11-08-gateway-latency-retest.md` step 1 and read the `stages` section.

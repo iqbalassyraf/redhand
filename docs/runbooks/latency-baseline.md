@@ -17,3 +17,5 @@ Reading the result: **PASS** means the gateway adds at most 10 ms (typical) and 
 The percentiles are upper bounds from histogram buckets, and the number covers one gateway instance (see the caveat the script prints).
 
 **What it does not measure:** the gateway takes this number before the call goes upstream. It covers sign-in checks, the passport lookup and the guardrails, but not the work done on the answer afterwards (secret redaction, honeytoken scan, the Radar hand-off). It is a "before" figure for the checking cost, not the whole added time.
+
+**Per-stage breakdown:** the printed result has a `stages` section: for each step inside a call (verify, context_hit, context_miss, guardrails, budget, jwks_refresh, ...) how many times it ran and its p50/p99 upper bounds. Read it to see which step the slow calls were in. `context_miss` is a wait for core; `context_refresh` and `context_refresh_failed` are background and are not added to a call. An older gateway prints an empty `stages`.
