@@ -251,3 +251,14 @@ them first, as they arrive, before quoting anything above.
 **Decision:** a scan reads at most 16 KiB per result (both ends of a larger value, so an appended attack is still seen; an attack
 buried in the middle of a larger value is not, and the result says it was truncated). The gateway cost is still to be measured
 on staging with the real overhead histogram (M4.3), including the honeytoken and secret scans already on the same path.
+
+## 13. M4.2 status (2026-11-08): data layer and core API (no gateway change)
+**Built:** migration `20261117000000_radar_findings.sql` (with rollback and SQL tests): `security_findings` (coalesced per agent, rule,
+tool, place and 5-minute window; fixed vocabularies only, so no scanned text can be stored), `radar_suppressions`, per-organization
+`radar_mode` and `output_check_mode` (off or observe; **block is refused** until the M4.6 gate), `record_security_findings`,
+`control_radar_settings`, `control_finding_review`, suppression create and revoke, `radar_summary`, `purge_findings`, four audit actions.
+Core: `/v1/radar/settings` (GET security operator, PUT admin), `/v1/findings` and review (security operator), suppressions (admin,
+confirmation, reason), `/internal/v1/findings` (service token), a Telegram alert per agent at most every 10 minutes with rule ids only.
+**Not built (next):** the gateway side (M4.3: context fields for modes and suppressions, the scan hook, the reporter, `would_block`),
+the dashboard (M4.4), the block gate (M4.6). Deploy order for M4.2 alone is migration then core; the gateway is unaffected.
+**Decision made while building:** an oversized occurrence count in a report is clamped to 1,000 rather than treated as 1.

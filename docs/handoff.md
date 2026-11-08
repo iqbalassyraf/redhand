@@ -13,6 +13,15 @@ Both tools work on RedHand and its demo projects. This file is how each learns w
 
 ---
 
+## 2026-11-08, Claude Code: M4.2 data layer and core API for the Radar
+- **Changed:** migration `20261117000000_radar_findings.sql` (+ rollback + SQL tests), core `radar/` package and `routers/radar.py`, local-store
+  emulation, OpenAPI spec regenerated, threat model rows, tenant-deletion runbook, M4 plan section 13.
+- **Verified:** SQL harness (apply, tests, rollback, re-apply) passes; core tests (53) and mutation checks; ruff and strict mypy.
+- **Not verified:** staging (nothing deployed). The gateway does not use any of this yet. Cadence: the staging test is M4.3, after the
+  gateway hook exists. Deploy order when it ships: migration, then core, then gateway.
+- **For Antigravity:** nothing new. The two M4.0 briefs (helpdesk export and blind samples) are still the priority.
+- **Next for Claude Code:** M4.3 (gateway integration), unless the blind samples change the rules first.
+
 ## 2026-11-08, Claude Code: threat intelligence (CTI) split documented
 - **Decided by the owner:** split CTI into A (technique labels, soon), B (indicator cache, after M4, one or two licence-cleared feeds) and
   C (LLM triage, gated). Written into `docs/plans/phase4.5-build-plan.md` Part 3; A is cross-referenced from M4 plan A3.

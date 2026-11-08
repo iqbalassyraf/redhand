@@ -289,6 +289,8 @@ def apply_insert_defaults(table: str, row: dict[str, Any]) -> None:
         row.setdefault("blackbox_retention_days", 30)
         row.setdefault("payload_capture_enabled", False)
         row.setdefault("payload_retention_days", 7)
+        row.setdefault("radar_mode", "observe")
+        row.setdefault("output_check_mode", "observe")
 
 
 def _apply_update_triggers(table: str, before: dict[str, Any], after: dict[str, Any]) -> None:
@@ -358,6 +360,10 @@ class LocalSupabaseAdapter:
                 "blackbox_retention_days": 30,
                 "payload_capture_enabled": False,
                 "payload_retention_days": 7,
+                "radar_mode": "observe",
+                "output_check_mode": "observe",
+                "radar_mode_changed_at": now.isoformat(),
+                "output_check_mode_changed_at": now.isoformat(),
             }
         ]
 

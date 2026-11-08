@@ -1052,6 +1052,232 @@ def _telegram_claim_update(store: LocalSupabaseAdapter, p: dict[str, Any]) -> bo
     return True
 
 
+
+# --- Prompt Injection Radar (Phase 4 M4.2): emulation of supabase/migrations/20261117000000_radar_findings.sql -------------
+
+_RULE_ID = re.compile(r"^RAD-(INJ|OUT)-[0-9]{3}$")
+_FAMILY = re.compile(r"^[a-z][a-z-]{1,23}$")
+_LEVELS = ("low", "medium", "high")
+_PLACES = ("text", "hidden", "decoded")
+_EVASION = ("invisible", "lookalike", "leet", "encoded", "hidden")
+_MODES_SETTABLE = ("off", "observe")
+
+
+def _parse_ts(value: Any) -> datetime:
+    parsed = value if isinstance(value, datetime) else datetime.fromisoformat(str(value))
+    return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+
+
+def _org_row(store: LocalSupabaseAdapter, org: str) -> dict[str, Any]:
+    row = next((o for o in store.tables.get("organizations", []) if str(o.get("id")) == org), None)
+    if row is None:
+        raise _error("P0002", "organization not found")
+    return row
+
+
+def _clamped_occurrences(value: Any) -> int:
+    raw = str(value)
+    if re.fullmatch(r"[0-9]{10,}", raw):
+        return 1000
+    if re.fullmatch(r"[0-9]{1,9}", raw):
+        return min(max(int(raw), 1), 1000)
+    return 1
+
+
+def _record_security_findings(store: LocalSupabaseAdapter, p: dict[str, Any]) -> dict[str, Any]:
+    org, agent_id, items = str(p["p_org"]), str(p["p_agent"]), p["p_items"]
+    if not isinstance(items, list) or len(items) > 20:
+        raise _error("22023", "items must be an array of at most 20")
+    org_row = _org_row(store, org)
+    agent = _agent_of(store, org, agent_id)
+    if agent is None:
+        raise _error("P0002", "agent not found")
+    now = datetime.now(timezone.utc)
+    window = datetime.fromtimestamp((int(now.timestamp()) // 300) * 300, tz=timezone.utc).isoformat()
+    rows = store.tables.setdefault("security_findings", [])
+    suppressions = store.tables.get("radar_suppressions", [])
+    counts = {"new": 0, "coalesced": 0, "suppressed": 0, "capped": 0, "skipped": 0, "disabled": 0}
+    rules: list[str] = []
+    for item in items:
+        if not isinstance(item, dict):
+            counts["skipped"] += 1
+            continue
+        rule, kind, family = item.get("rule_id"), item.get("kind"), item.get("family")
+        sev, conf, place = item.get("severity"), item.get("confidence"), item.get("place")
+        if (
+            not isinstance(rule, str) or not _RULE_ID.match(rule) or kind not in ("injection", "output")
+            or (kind == "injection") != rule.startswith("RAD-INJ-") or not isinstance(family, str) or not _FAMILY.match(family)
+            or sev not in _LEVELS or conf not in _LEVELS or place not in _PLACES
+        ):
+            counts["skipped"] += 1
+            continue
+        tool, server = str(item.get("tool_name") or "")[:128], str(item.get("server") or "")[:63]
+        would = item.get("would_block") is True
+        occurrences = _clamped_occurrences(item.get("occurrences", ""))
+        raw_evasion = item.get("evasion")
+        evasion = sorted({e for e in (raw_evasion if isinstance(raw_evasion, list) else []) if e in _EVASION})
+        if (kind == "injection" and org_row.get("radar_mode", "observe") == "off") or (
+            kind == "output" and org_row.get("output_check_mode", "observe") == "off"
+        ):
+            counts["disabled"] += 1
+            continue
+        if any(
+            str(s["agent_id"]) == agent_id and s["rule_id"] == rule and s.get("revoked_at") is None and _parse_ts(s["expires_at"]) > now
+            for s in suppressions
+        ):
+            counts["suppressed"] += 1
+            continue
+        existing = next(
+            (r for r in rows if str(r["agent_id"]) == agent_id and r["rule_id"] == rule and r["tool_name"] == tool
+             and r["place"] == place and r["window_start"] == window), None,
+        )
+        if existing is None:
+            recent = [r for r in rows if str(r["agent_id"]) == agent_id and _parse_ts(r["first_seen_at"]) > now - timedelta(hours=24)]
+            if len(recent) >= 2000:
+                counts["capped"] += 1
+                continue
+            rows.append({
+                "id": str(uuid4()), "organization_id": org, "agent_id": agent_id, "rule_id": rule, "family": family, "kind": kind,
+                "severity": sev, "confidence": conf, "place": place, "evasion": evasion, "tool_name": tool, "server_slug": server,
+                "would_block": would, "occurrences": occurrences, "window_start": window, "first_seen_at": now.isoformat(),
+                "last_seen_at": now.isoformat(), "review_status": "open", "reviewed_by": None, "reviewed_at": None, "review_note": None,
+            })
+            counts["new"] += 1
+            if len(rules) < 5 and rule not in rules:
+                rules.append(rule)
+        else:
+            existing["occurrences"] = min(existing["occurrences"] + occurrences, 1_000_000)
+            existing["last_seen_at"] = now.isoformat()
+            existing["would_block"] = existing["would_block"] or would
+            if _LEVELS.index(sev) > _LEVELS.index(existing["severity"]):
+                existing["severity"] = sev
+            if _LEVELS.index(conf) > _LEVELS.index(existing["confidence"]):
+                existing["confidence"] = conf
+            counts["coalesced"] += 1
+    alert = False
+    last = agent.get("radar_last_alert_at")
+    if counts["new"] > 0 and (last is None or now - _parse_ts(last) > timedelta(minutes=10)):
+        agent["radar_last_alert_at"] = now.isoformat()
+        alert = True
+    return {**counts, "alert": alert, "agent": agent.get("name"), "rules": rules}
+
+
+def _control_radar_settings(store: LocalSupabaseAdapter, p: dict[str, Any]) -> dict[str, Any]:
+    org, actor = str(p["p_org"]), str(p["p_actor"])
+    injection, output = p["p_injection"], p["p_output"]
+    if injection not in _MODES_SETTABLE or output not in _MODES_SETTABLE:
+        raise _error("22023", "mode must be off or observe (block is not available yet)")
+    row = _org_row(store, org)
+    cur_i, cur_o = row.get("radar_mode", "observe"), row.get("output_check_mode", "observe")
+    if cur_i != p.get("p_expected_injection") or cur_o != p.get("p_expected_output"):
+        return {"conflict": True, "radar_mode": cur_i, "output_check_mode": cur_o}
+    if cur_i == injection and cur_o == output:
+        return {"conflict": False, "changed": False, "radar_mode": injection, "output_check_mode": output}
+    now = _now()
+    if cur_i != injection:
+        row["radar_mode_changed_at"] = now
+    if cur_o != output:
+        row["output_check_mode_changed_at"] = now
+    row["radar_mode"], row["output_check_mode"] = injection, output
+    _append_audit(
+        store, org=org, actor=actor, action="organization.radar_settings_changed", target_type="organization", target_id=org,
+        reason=p.get("p_reason"), details={"old_injection": cur_i, "new_injection": injection, "old_output": cur_o, "new_output": output},
+    )
+    return {"conflict": False, "changed": True, "radar_mode": injection, "output_check_mode": output}
+
+
+def _control_finding_review(store: LocalSupabaseAdapter, p: dict[str, Any]) -> dict[str, Any]:
+    org, actor, finding_id, status = str(p["p_org"]), str(p["p_actor"]), str(p["p_finding"]), p["p_status"]
+    note = p.get("p_note")
+    if status not in ("confirmed", "false_alarm") or (note is not None and len(note) > 300):
+        raise _error("22023", "status must be confirmed or false_alarm and the note at most 300 characters")
+    row = next(
+        (r for r in store.tables.get("security_findings", []) if str(r["id"]) == finding_id and str(r["organization_id"]) == org), None
+    )
+    if row is None:
+        raise _error("P0002", "finding not found")
+    if row["review_status"] != p.get("p_expected"):
+        return {"conflict": True, "review_status": row["review_status"]}
+    if row["review_status"] == status:
+        return {"conflict": False, "changed": False, "review_status": status}
+    old = row["review_status"]
+    row.update({"review_status": status, "reviewed_by": actor, "reviewed_at": _now(), "review_note": note})
+    _append_audit(
+        store, org=org, actor=actor, action="radar_finding.reviewed", target_type="organization", target_id=org, reason=note,
+        details={"finding": finding_id, "rule": row["rule_id"], "agent": str(row["agent_id"]), "old_status": old, "new_status": status},
+    )
+    return {"conflict": False, "changed": True, "review_status": status}
+
+
+def _control_radar_suppression_create(store: LocalSupabaseAdapter, p: dict[str, Any]) -> dict[str, Any]:
+    org, actor, agent_id = str(p["p_org"]), str(p["p_actor"]), str(p["p_agent"])
+    rule, days, reason = p["p_rule"], p["p_days"], p["p_reason"]
+    if (
+        not isinstance(rule, str) or not _RULE_ID.match(rule) or not isinstance(days, int) or isinstance(days, bool) or not 1 <= days <= 90
+        or not isinstance(reason, str) or not 3 <= len(reason.strip()) <= 300
+    ):
+        raise _error("22023", "a rule id, 1 to 90 days and a reason of 3 to 300 characters are required")
+    if _agent_of(store, org, agent_id) is None:
+        raise _error("P0002", "agent not found")
+    now = datetime.now(timezone.utc)
+    rows = store.tables.setdefault("radar_suppressions", [])
+    existing = next((s for s in rows if str(s["agent_id"]) == agent_id and s["rule_id"] == rule and s.get("revoked_at") is None), None)
+    if existing is not None:
+        if _parse_ts(existing["expires_at"]) > now:
+            return {"created": False, "id": existing["id"], "expires_at": existing["expires_at"]}
+        existing["revoked_at"], existing["revoked_by"] = now.isoformat(), actor
+    live = [s for s in rows if str(s["organization_id"]) == org and s.get("revoked_at") is None and _parse_ts(s["expires_at"]) > now]
+    if len(live) >= 100:
+        return {"created": False, "limit": True}
+    sid, expires = str(uuid4()), (now + timedelta(days=days)).isoformat()
+    rows.append({
+        "id": sid, "organization_id": org, "agent_id": agent_id, "rule_id": rule, "reason": reason.strip(), "created_by": actor,
+        "created_at": now.isoformat(), "expires_at": expires, "revoked_at": None, "revoked_by": None,
+    })
+    _append_audit(
+        store, org=org, actor=actor, action="radar_suppression.created", target_type="agent", target_id=agent_id, reason=reason.strip(),
+        details={"suppression": sid, "rule": rule, "days": days},
+    )
+    return {"created": True, "id": sid, "expires_at": expires}
+
+
+def _control_radar_suppression_revoke(store: LocalSupabaseAdapter, p: dict[str, Any]) -> dict[str, Any]:
+    org, actor, sid = str(p["p_org"]), str(p["p_actor"]), str(p["p_suppression"])
+    row = next((s for s in store.tables.get("radar_suppressions", []) if str(s["id"]) == sid and str(s["organization_id"]) == org), None)
+    if row is None:
+        raise _error("P0002", "suppression not found")
+    if row.get("revoked_at") is not None:
+        return {"revoked": False}
+    row["revoked_at"], row["revoked_by"] = _now(), actor
+    _append_audit(
+        store, org=org, actor=actor, action="radar_suppression.revoked", target_type="agent", target_id=str(row["agent_id"]),
+        reason=p.get("p_reason"), details={"suppression": sid, "rule": row["rule_id"]},
+    )
+    return {"revoked": True}
+
+
+def _radar_summary(store: LocalSupabaseAdapter, p: dict[str, Any]) -> dict[str, Any]:
+    org = str(p["p_org"])
+    row = _org_row(store, org)
+    since = datetime.now(timezone.utc) - timedelta(days=7)
+    mine = [f for f in store.tables.get("security_findings", []) if str(f["organization_id"]) == org and _parse_ts(f["last_seen_at"]) > since]
+    last7: dict[str, Any] = {}
+    if mine:
+        last7 = {
+            "findings": len(mine), "occurrences": sum(f["occurrences"] for f in mine),
+            "would_block": sum(1 for f in mine if f["would_block"]),
+            "open": sum(1 for f in mine if f["review_status"] == "open"),
+            "confirmed": sum(1 for f in mine if f["review_status"] == "confirmed"),
+            "false_alarm": sum(1 for f in mine if f["review_status"] == "false_alarm"),
+            "would_block_open": sum(1 for f in mine if f["would_block"] and f["review_status"] == "open"),
+        }
+    return {
+        "radar_mode": row.get("radar_mode", "observe"), "output_check_mode": row.get("output_check_mode", "observe"),
+        "radar_mode_changed_at": row.get("radar_mode_changed_at"), "output_check_mode_changed_at": row.get("output_check_mode_changed_at"),
+        "last_7_days": last7,
+    }
+
+
 HANDLERS: dict[str, RpcHandler] = {
     "control_agent_change": _control_agent_change,
     "control_freeze_all": _control_freeze_all,
@@ -1073,6 +1299,12 @@ HANDLERS: dict[str, RpcHandler] = {
     "control_tool_pin": _control_tool_pin,
     "control_tool_pins_approve_all": _control_tool_pins_approve_all,
     "control_server_pin_mode": _control_server_pin_mode,
+    "record_security_findings": _record_security_findings,
+    "control_radar_settings": _control_radar_settings,
+    "control_finding_review": _control_finding_review,
+    "control_radar_suppression_create": _control_radar_suppression_create,
+    "control_radar_suppression_revoke": _control_radar_suppression_revoke,
+    "radar_summary": _radar_summary,
     "record_usage": _record_usage,
     "mark_budget_frozen": _mark_budget_frozen,
     "usage_by_others": _usage_by_others,
