@@ -34,6 +34,7 @@ from .gateway.identity import AgentTokenVerifier
 from .gateway.metrics import GatewayMetrics
 from .gateway.pins import HttpPinReporter, PinCoordinator
 from .gateway.radar_scan import HttpFindingsReporter, RadarScanner
+from .gateway.selftest import BusyError, SelfTestError, SelfTestRunner
 from .gateway.recorder import EventRecorder, HttpEventReporter
 from .gateway.trips import HttpTripReporter, TripDispatcher
 from .gateway.service import McpGateway
@@ -274,6 +275,44 @@ async def scan_registered_server(payload: ScanRequest) -> ScanResponse:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from None
     report = MCPServerAuditor.audit_manifest({"name": payload.server_name, "tools": tools})
     return ScanResponse(report=report, tool_count=len(tools), truncated=truncated)
+
+
+class SelfTestCategory(BaseModel):
+    category: str
+    malicious: int
+    benign: int
+    detected: int
+    false_alarms: int
+    detection_low: float
+    detection_high: float
+    false_alarm_low: float
+    false_alarm_high: float
+    hard_benign: int
+    hard_false_alarms: int
+
+
+class SelfTestResponse(BaseModel):
+    corpus: str
+    model_enabled: bool
+    samples: int
+    duration_ms: float
+    categories: list[SelfTestCategory]
+    limits: str
+
+
+_self_test = SelfTestRunner(model_enabled=settings.RADAR_MODEL_ENABLED)
+
+
+@app.post("/internal/v1/radar/self-test", response_model=SelfTestResponse, dependencies=[Depends(require_service_token)], include_in_schema=False)
+async def radar_self_test() -> SelfTestResponse:
+    """Runs the Radar over the bundled held-out samples and returns counts only. Takes no input. Service token only."""
+    try:
+        return SelfTestResponse.model_validate(await _self_test.run())
+    except BusyError:
+        raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail="A self-test is already running.") from None
+    except (SelfTestError, ValueError) as exc:
+        logger.error("Radar self-test failed", error_type=type(exc).__name__)
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="The self-test could not be completed.") from None
 
 
 @app.get("/v1/policies", dependencies=[Depends(require_service_token)])

@@ -32,3 +32,12 @@ block mode will not exist until a measured gate is passed.
 
 ## The Radar page
 **Radar** in the header. *Checks*: the two switches and a 7-day summary. *Findings*: newest first, filter by review or kind, **Real** / **False alarm** (optional note), **Silence this rule for this agent** (reason of 3 to 300 characters, 1 to 90 days, tick the box; admin only). *Active silences*: **Remove** (admin). A security operator reviews but cannot change switches or silences; a viewer is told the role cannot see the page. A finding never shows the scanned text; "No findings" means the Radar recognised nothing, not that nothing is wrong. If the page stays empty while you expect findings, check the two switches first, then `docs/runbooks/radar.md` "Problems".
+
+## The self-test
+**Radar** page, **Run self-test** (security operator or above, once a minute per organization). The gateway runs its Radar over about 180 of our own held-out texts (hidden instructions, script, internal addresses, file paths) and the page shows how many it found with a 95% range. What it proves: the Radar code deployed in the gateway behaves as measured. What it does not prove: that your agents' traffic goes through the gateway, or anything about attacks the samples do not contain. The texts were written by the team that wrote the rules, so the numbers flatter the Radar: the independent figure for hidden instructions is about 4 in 10 (Coverage page).
+| Symptom | Likely cause and fix |
+|---|---|
+| "A self-test ran a moment ago" | Wait about a minute. |
+| "The gateway could not run the self-test. Nothing was measured." | The gateway is down, restarting, or cannot be reached from core. Check `GATEWAY_URL` on core and the gateway's health (`gateway-denies-all-traffic.md`). No result is ever shown for a failed run. |
+| Same message with the gateway healthy | Core and gateway disagree on the internal service token (core logs "Gateway refused core's service token for the self-test"), or the gateway image is older than core (deploy the gateway). |
+| A switch shows off in the result | The code works but the gateway is not scanning for you. Turn the check back on. |

@@ -17,10 +17,13 @@ import {
   type RadarFinding,
   type RadarSettings,
   type RadarSuppression,
+  type SelfTestResult,
   radarApi,
+  selfTestApi,
 } from "@/lib/api";
 import { useAuth, useRequiredSession } from "@/lib/auth";
 import { EVASION_LABEL, describeRule } from "@/lib/radarRules";
+import { CHECK_LABEL, falseAlarmText, foundText, selfTestProblem } from "@/lib/selfTest";
 import {
   NOTE_MAX,
   SUPPRESSION_DAYS_MAX,
@@ -80,6 +83,10 @@ export default function RadarPage() {
   const [draftRadar, setDraftRadar] = useState<"off" | "observe">("observe");
   const [draftOutput, setDraftOutput] = useState<"off" | "observe">("observe");
   const [confirmOff, setConfirmOff] = useState(false);
+
+  const [selfTest, setSelfTest] = useState<SelfTestResult | null>(null);
+  const [selfTestRunning, setSelfTestRunning] = useState(false);
+  const [selfTestError, setSelfTestError] = useState<string | null>(null);
 
   const [noteFor, setNoteFor] = useState<string | null>(null);
   const [note, setNote] = useState("");
@@ -170,6 +177,25 @@ export default function RadarPage() {
       await radarApi.saveSettings(token, { radar_mode: draftRadar, output_check_mode: draftOutput, confirm: needsConfirm && confirmOff });
       setNotice("Settings saved. They reach the gateway within a few seconds.");
     });
+  };
+
+  const runSelfTest = async () => {
+    if (selfTestRunning) return;
+    setSelfTestRunning(true);
+    setSelfTestError(null);
+    try {
+      setSelfTest(await selfTestApi.run(token));
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 401) {
+        signOut();
+        window.location.href = "/login";
+        return;
+      }
+      setSelfTest(null); // never leave an older result next to a failure
+      setSelfTestError(selfTestProblem(err instanceof ApiError ? err.status : null));
+    } finally {
+      setSelfTestRunning(false);
+    }
   };
 
   const review = (finding: RadarFinding, status: "confirmed" | "false_alarm") => {
@@ -284,7 +310,7 @@ export default function RadarPage() {
                   <select
                     value={draftRadar}
                     disabled={!caps?.can_change_modes}
-                    onChange={(e) => setDraftRadar(e.target.value as "off" | "observe")}
+                    onChange={(e) => { setNotice(null); setError(null); setDraftRadar(e.target.value as "off" | "observe"); }}
                     className={field}
                   >
                     <option value="observe">Watch (record findings)</option>
@@ -296,7 +322,7 @@ export default function RadarPage() {
                   <select
                     value={draftOutput}
                     disabled={!caps?.can_change_modes}
-                    onChange={(e) => setDraftOutput(e.target.value as "off" | "observe")}
+                    onChange={(e) => { setNotice(null); setError(null); setDraftOutput(e.target.value as "off" | "observe"); }}
                     className={field}
                   >
                     <option value="observe">Watch (record findings)</option>
@@ -304,9 +330,12 @@ export default function RadarPage() {
                   </select>
                 </label>
                 {caps?.can_change_modes ? (
-                  <button onClick={saveSettings} disabled={busy || unchanged} className={button}>
-                    Save
-                  </button>
+                  <>
+                    <button onClick={saveSettings} disabled={busy || unchanged} className={button}>
+                      Save
+                    </button>
+                    {unchanged ? null : <span className="font-semibold text-[#8A5A00]">Not saved yet: press Save to apply this change.</span>}
+                  </>
                 ) : (
                   <span className="text-[#606060]">Only an admin can change these.</span>
                 )}
@@ -331,6 +360,60 @@ export default function RadarPage() {
                   <b className="text-[#0F0F0F]">{week.would_block ?? 0}</b> would have been blocked
                 </span>
               </div>
+            </section>
+
+            <section className="mb-6 rounded-[10px] border border-[#E5E5E5] bg-[#FFFFFF] p-4 text-[12px]">
+              <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                <h2 className="text-[14px] font-semibold">Self-test</h2>
+                <button onClick={runSelfTest} disabled={selfTestRunning} className={button}>
+                  {selfTestRunning ? "Running…" : "Run self-test"}
+                </button>
+              </div>
+              <p className="text-[#606060]">
+                Asks the gateway to run the Radar over {selfTest?.samples ?? "about 180"} of our own held-out test texts and shows how many it
+                catches. It proves the Radar code running in the gateway behaves as measured. It does not prove that your agents&apos; traffic
+                goes through the gateway, and it cannot show what these samples do not contain. You can run it once a minute.
+              </p>
+              <p className="mt-2 rounded-[8px] border border-[#FFE0B2] bg-[#FFF8EC] px-3 py-2">
+                <b>Do not read these numbers as how well the Radar works in real life.</b> These texts were written by the same team that
+                wrote the rules, so they flatter it. On text written by someone else, the Radar found about 4 in 10 hidden instructions.
+                See the <Link href="/coverage" className="font-semibold underline">Coverage page</Link> for the independent results.
+              </p>
+              {selfTestError ? <div className="mt-3 rounded-[8px] border border-[#FDECEC] bg-[#FFF5F5] px-3 py-2 text-[#B42318]">{selfTestError}</div> : null}
+              {selfTest ? (
+                <div className="mt-3">
+                  <div className="overflow-x-auto">
+                    <table className="w-full min-w-[560px] text-left">
+                      <thead className="text-[#606060]">
+                        <tr>
+                          <th className="py-1 pr-3 font-medium">Check</th>
+                          <th className="py-1 pr-3 font-medium">Attacks found</th>
+                          <th className="py-1 font-medium">False alarms on harmless text</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {selfTest.categories.map((c) => (
+                          <tr key={c.category} className="border-t border-[#F2F2F2]">
+                            <td className="py-2 pr-3">{CHECK_LABEL[c.category] ?? c.category}</td>
+                            <td className="py-2 pr-3">{foundText(c)}</td>
+                            <td className="py-2">{falseAlarmText(c)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  <p className="mt-2 text-[#606060]">
+                    Ran {when(selfTest.ran_at)} on {selfTest.samples} texts in {Math.round(selfTest.duration_ms)} ms, sample set {selfTest.corpus}.
+                    Helper model: {selfTest.model_enabled ? "on" : "off"}. Your switches right now: hidden instructions{" "}
+                    <b className="text-[#0F0F0F]">{selfTest.radar_mode === "observe" ? "watching" : selfTest.radar_mode}</b>, risky output{" "}
+                    <b className="text-[#0F0F0F]">{selfTest.output_check_mode === "observe" ? "watching" : selfTest.output_check_mode}</b>.
+                    {selfTest.radar_mode === "off" || selfTest.output_check_mode === "off"
+                      ? " A switch that is off means the gateway is not scanning for you, even though the code works."
+                      : ""}
+                  </p>
+                  <p className="mt-1 text-[#606060]">{selfTest.limits}</p>
+                </div>
+              ) : null}
             </section>
 
             <section className="mb-6 rounded-[10px] border border-[#E5E5E5] bg-[#FFFFFF] p-4 text-[12px]">
