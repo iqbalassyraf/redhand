@@ -9,6 +9,7 @@ the 5-second revocation SLO (CLAUDE.md §4.5): TTL (<= 2 s by default, never mor
 
 from __future__ import annotations
 
+import asyncio
 from collections import OrderedDict
 from dataclasses import dataclass
 from datetime import datetime
@@ -27,6 +28,10 @@ logger = structlog.get_logger(__name__)
 
 MAX_CONTEXT_TTL_SECONDS = 4.0
 CACHE_MAX_ENTRIES = 10_000
+# Once a cached passport is this fraction of its lifetime old, the next call that uses it also starts a background refresh, so
+# a busy agent's next call finds a fresh entry instead of waiting for core. This never makes a served entry older than the TTL.
+REFRESH_AHEAD_FRACTION = 0.5
+MAX_BACKGROUND_REFRESHES = 200
 
 
 class Scope(BaseModel):
@@ -191,15 +196,25 @@ class CoreContextClient:
         self._http = http_client or httpx.AsyncClient(timeout=httpx.Timeout(2.0, connect=1.0))
         self._clock = clock
         self._cache: OrderedDict[tuple[str, str, str], tuple[float, GatewayContext]] = OrderedDict()
+        self._refreshing: dict[tuple[str, str, str], asyncio.Task[None]] = {}
+        self._generation = 0
 
     def invalidate(self) -> None:
+        self._generation += 1  # a refresh already running must not put its (older) answer back
         self._cache.clear()
+
+    async def aclose(self) -> None:
+        for task in list(self._refreshing.values()):
+            task.cancel()
+        self._refreshing.clear()
 
     async def get(self, agent_id: UUID, organization_id: UUID, server: str) -> GatewayContext:
         key = (str(agent_id), str(organization_id), server)
         now = self._clock()
         cached = self._cache.get(key)
         if cached is not None and now - cached[0] < self._ttl:
+            if now - cached[0] >= self._ttl * REFRESH_AHEAD_FRACTION:
+                self._start_refresh(key, agent_id, organization_id, server)
             return cached[1]
 
         context = await self._fetch(agent_id, organization_id, server)
@@ -208,6 +223,38 @@ class CoreContextClient:
         while len(self._cache) > CACHE_MAX_ENTRIES:
             self._cache.popitem(last=False)
         return context
+
+    def _start_refresh(self, key: tuple[str, str, str], agent_id: UUID, organization_id: UUID, server: str) -> None:
+        """Starts one background refresh per key. Never raises or waits; a failed refresh changes nothing (the old entry just expires)."""
+        if key in self._refreshing or len(self._refreshing) >= MAX_BACKGROUND_REFRESHES:
+            return
+        try:
+            # Stamp and generation are taken NOW, not when the task first runs: a later start must not look fresher, and an
+            # invalidate() between now and then must discard the result.
+            task = asyncio.get_running_loop().create_task(
+                self._refresh(key, agent_id, organization_id, server, self._clock(), self._generation)
+            )
+        except RuntimeError:  # no running loop: only possible outside a request
+            return
+        self._refreshing[key] = task
+        task.add_done_callback(lambda _t: self._refreshing.pop(key, None))
+
+    async def _refresh(
+        self, key: tuple[str, str, str], agent_id: UUID, organization_id: UUID, server: str, started: float, generation: int,
+    ) -> None:
+        # The entry is stamped with the time the refresh was REQUESTED, so it is never treated as fresher than it is (revocation SLO).
+        try:
+            context = await self._fetch(agent_id, organization_id, server)
+        except (ContextUnavailableError, AgentUnknownError):
+            return  # a failure is never cached and never extends the old entry's life
+        except Exception as exc:  # noqa: BLE001  background work: log the type only, keep the old entry, never raise into the loop
+            logger.warning("Passport refresh failed", error_type=type(exc).__name__)
+            return
+        current = self._cache.get(key)
+        if generation != self._generation or (current is not None and current[0] >= started):
+            return
+        self._cache[key] = (started, context)
+        self._cache.move_to_end(key)
 
     async def _fetch(self, agent_id: UUID, organization_id: UUID, server: str) -> GatewayContext:
         if not self._token:

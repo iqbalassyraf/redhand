@@ -46,3 +46,13 @@ benign documents; markup about 92%; addresses and files about 62 to 64%), so the
 - Metrics: `redhand_gateway_radar_scans_total{outcome}`, `_findings_total{kind}`, `_reports_total{outcome}`, `_scan_ms_sum/_count`.
 - Failure behaviour: core down or refusing, a full queue, a scanner crash: calls are unaffected, findings are lost or late and
   counted. Nothing here can turn a deny into an allow, because the Radar makes no decision.
+
+## Addendum 2026-11-08: passport lookup latency (separate change, same ADR for lack of a better home)
+Staging measurement after M4.3: the gateway's pre-upstream time had a median under 1 ms but a tail of 100 to 1000 ms. Core's
+`/internal/v1/gateway-context` took ~230 ms typical (p90 ~334 ms, 160 requests from Cloud Run logs) and the gateway waits for it whenever
+its 2-second cache expires; the 1 s+ calls were cold starts (min instances 0). Changes: (1) core runs the independent lookups together
+and writes `last_seen_at` at most once a minute per agent; (2) the gateway starts a background refresh once a cached passport is half its
+lifetime old, stamping the new entry with the time the refresh was requested, discarding it after `invalidate()`, never extending an entry
+after a failed refresh, one refresh per key and at most 200 at once. No entry older than the TTL is ever served, so the 5-second
+revocation bound is unchanged. Not done: keeping instances warm (a monthly cost, needs the owner's decision). Agents that call less often
+than every 2 seconds still pay a lookup on every call.
