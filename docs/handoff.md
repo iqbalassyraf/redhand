@@ -13,6 +13,13 @@ Both tools work on RedHand and its demo projects. This file is how each learns w
 
 ---
 
+## 2026-11-08, Claude Code: threat intelligence (CTI) split documented
+- **Decided by the owner:** split CTI into A (technique labels, soon), B (indicator cache, after M4, one or two licence-cleared feeds) and
+  C (LLM triage, gated). Written into `docs/plans/phase4.5-build-plan.md` Part 3; A is cross-referenced from M4 plan A3.
+- **Open:** the LLM rule (advises, deterministic policy decides, tighten-only, metadata only), who reads each feed's terms, and the goal.
+- **For Antigravity:** nothing yet. The two M4.0 briefs (helpdesk export and blind samples) are still the priority.
+- **Not done:** no code, no feeds contacted, no licence cleared.
+
 ## 2026-11-08, Claude Code: M4.1 Radar rules (module only)
 - **Changed:** `agentwall/src/firewall/radar.py` (rules, normalisation, decoding, context scoring), `radar` detector in the bench,
   report wording (perfect held-out rates shown as bounds; independence caveat), baseline and matrix regenerated, M4 plan section 12.
