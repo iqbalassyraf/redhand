@@ -118,6 +118,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     await gateway.trips.aclose()
     await gateway.pins.aclose()
     await gateway.radar.aclose()
+    await gateway.contexts.aclose()
 
 
 app = FastAPI(

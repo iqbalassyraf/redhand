@@ -10,6 +10,7 @@ Agent authentication.
 
 from __future__ import annotations
 
+import asyncio
 from collections import deque
 from datetime import date, datetime, timedelta
 import hashlib
@@ -280,6 +281,21 @@ class GatewayContextResponse(BaseModel):
     server: GatewayServerContext | None
 
 
+LAST_SEEN_WRITE_INTERVAL_SECONDS = 60
+
+
+def _last_seen_is_stale(value: Any, now: datetime) -> bool:
+    """True when the stored last-seen time is missing, unreadable, in the future or at least a minute old."""
+    if not value:
+        return True
+    try:
+        seen = parse_timestamp(value)
+    except (TypeError, ValueError):
+        return True
+    age = (now - seen).total_seconds()
+    return age < 0 or age >= LAST_SEEN_WRITE_INTERVAL_SECONDS
+
+
 @router.get(
     "/internal/v1/gateway-context",
     response_model=GatewayContextResponse,
@@ -298,15 +314,75 @@ async def gateway_context(
     version and scopes, and the upstream URL of the requested MCP server in that tenant.
     Malformed stored data yields status 'revoked' so the gateway denies (fail closed).
     """
-    agent_res = await (
-        supabase.table("agents")
-        .select("*")
-        .eq("id", str(agent_id))
-        .eq("organization_id", str(organization_id))
-        .maybe_single()
-        .execute()
+    # The lookups below do not depend on each other, so they run together: one round trip of waiting instead of about eight
+    # (measured on staging: this endpoint took ~230 ms typical, and the gateway waits for it whenever its short cache expires).
+    # Failure behaviour is unchanged: a failed bait lookup, pin lookup or usage lookup is a 503 (the gateway denies).
+    async def load_honey() -> tuple[list[GatewayHoneytoken], list[GatewayHoneyTool]]:
+        try:
+            tokens_res = await (
+                supabase.table("honeytokens").select("id,digest")
+                .eq("organization_id", str(organization_id)).eq("status", "active").execute()
+            )
+            tools_res = await (
+                supabase.table("honey_tools").select("id,name,description")
+                .eq("organization_id", str(organization_id)).eq("agent_id", str(agent_id))
+                .eq("server_slug", server).eq("status", "active").execute()
+            )
+            return (
+                [GatewayHoneytoken(id=r["id"], digest=r["digest"]) for r in (tokens_res.data or [])],
+                [GatewayHoneyTool(id=r["id"], name=r["name"], description=r["description"]) for r in (tools_res.data or [])],
+            )
+        except Exception as exc:  # noqa: BLE001  without the bait list the gateway cannot decide, so it denies
+            logger.error("Honeytoken lookup failed: %s", type(exc).__name__)
+            raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "Honeytoken lookup failed.") from None
+
+    async def load_server() -> tuple[dict[str, Any] | None, Literal["off", "alert", "enforce"], list[GatewayApprovedTool]]:
+        server_res = await (
+            supabase.table("mcp_servers")
+            .select("id, slug, url, is_active, pin_mode")
+            .eq("organization_id", str(organization_id))
+            .eq("slug", server)
+            .eq("is_active", True)
+            .maybe_single()
+            .execute()
+        )
+        row = server_res.data if server_res else None
+        mode: Literal["off", "alert", "enforce"] = "enforce"  # anything unexpected is read the restrictive way
+        approved: list[GatewayApprovedTool] = []
+        if row:
+            if row.get("pin_mode") in ("off", "alert", "enforce"):
+                mode = row["pin_mode"]
+            if mode == "enforce":
+                try:
+                    pins_res = await (
+                        supabase.table("mcp_tool_pins").select("tool_name, digest")
+                        .eq("organization_id", str(organization_id)).eq("server_id", str(row["id"])).eq("status", "approved")
+                        .execute()
+                    )
+                    approved = [GatewayApprovedTool(tool=r["tool_name"], digest=r["digest"]) for r in (pins_res.data or [])]
+                except Exception as exc:  # noqa: BLE001  without the approved list the gateway cannot enforce, so it denies
+                    logger.error("Tool pin lookup failed: %s", type(exc).__name__)
+                    raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "Tool pin lookup failed.") from None
+        return row, mode, approved
+
+    async def load_org() -> Any:
+        res = await (
+            supabase.table("organizations")
+            .select("safe_mode, payload_capture_enabled, radar_mode, output_check_mode")
+            .eq("id", str(organization_id)).maybe_single().execute()
+        )
+        return res.data if res else None
+
+    async def load_agent() -> Any:
+        res = await (
+            supabase.table("agents").select("*").eq("id", str(agent_id)).eq("organization_id", str(organization_id))
+            .maybe_single().execute()
+        )
+        return res.data if res else None
+
+    agent, (server_row, pin_mode, approved_tools), org_row, (honeytokens, honey_tools) = await asyncio.gather(
+        load_agent(), load_server(), load_org(), load_honey()
     )
-    agent = agent_res.data if agent_res else None
     if not agent:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Agent not found.")
 
@@ -319,39 +395,8 @@ async def gateway_context(
         logger.error("Malformed passport data for agent %s; reporting revoked", agent_id)
         scopes, expires_at, current = [], now, "revoked"
 
-    server_res = await (
-        supabase.table("mcp_servers")
-        .select("id, slug, url, is_active, pin_mode")
-        .eq("organization_id", str(organization_id))
-        .eq("slug", server)
-        .eq("is_active", True)
-        .maybe_single()
-        .execute()
-    )
-    server_row = server_res.data if server_res else None
-    pin_mode: Literal["off", "alert", "enforce"] = "enforce"  # anything unexpected is read the restrictive way
-    approved_tools: list[GatewayApprovedTool] = []
-    if server_row:
-        if server_row.get("pin_mode") in ("off", "alert", "enforce"):
-            pin_mode = server_row["pin_mode"]
-        if pin_mode == "enforce":
-            try:
-                pins_res = await (
-                    supabase.table("mcp_tool_pins").select("tool_name, digest")
-                    .eq("organization_id", str(organization_id)).eq("server_id", str(server_row["id"])).eq("status", "approved")
-                    .execute()
-                )
-                approved_tools = [GatewayApprovedTool(tool=r["tool_name"], digest=r["digest"]) for r in (pins_res.data or [])]
-            except Exception as exc:  # noqa: BLE001  without the approved list the gateway cannot enforce, so it denies
-                logger.error("Tool pin lookup failed: %s", type(exc).__name__)
-                raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "Tool pin lookup failed.") from None
-
     # Safe Mode is on when the agent's flag OR the organization's flag is on. Anything that is not
     # an explicit false (a missing row, null, a non-boolean) counts as ON: the restrictive reading.
-    org_res = await (
-        supabase.table("organizations").select("safe_mode, payload_capture_enabled, radar_mode, output_check_mode").eq("id", str(organization_id)).maybe_single().execute()
-    )
-    org_row = org_res.data if org_res else None
     safe_mode = not (
         agent.get("safe_mode") is False and org_row is not None and org_row.get("safe_mode") is False
     )
@@ -390,29 +435,16 @@ async def gateway_context(
         action="freeze" if agent.get("budget_action") == "freeze" else "deny",
     )
 
-    try:
-        tokens_res = await (
-            supabase.table("honeytokens").select("id,digest")
-            .eq("organization_id", str(organization_id)).eq("status", "active").execute()
+    # "Last seen" is for the dashboard only, so it is written at most once a minute per agent instead of on every lookup
+    # (a write on the critical path of every cache miss). A malformed or missing value simply means "write now".
+    if _last_seen_is_stale(agent.get("last_seen_at"), now):
+        await (
+            supabase.table("agents")
+            .update({"last_seen_at": now.isoformat()})
+            .eq("id", str(agent_id))
+            .eq("organization_id", str(organization_id))
+            .execute()
         )
-        tools_res = await (
-            supabase.table("honey_tools").select("id,name,description")
-            .eq("organization_id", str(organization_id)).eq("agent_id", str(agent_id))
-            .eq("server_slug", server).eq("status", "active").execute()
-        )
-        honeytokens = [GatewayHoneytoken(id=r["id"], digest=r["digest"]) for r in (tokens_res.data or [])]
-        honey_tools = [GatewayHoneyTool(id=r["id"], name=r["name"], description=r["description"]) for r in (tools_res.data or [])]
-    except Exception as exc:  # noqa: BLE001  without the bait list the gateway cannot decide, so it denies
-        logger.error("Honeytoken lookup failed: %s", type(exc).__name__)
-        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "Honeytoken lookup failed.") from None
-
-    await (
-        supabase.table("agents")
-        .update({"last_seen_at": now.isoformat()})
-        .eq("id", str(agent_id))
-        .eq("organization_id", str(organization_id))
-        .execute()
-    )
 
     return GatewayContextResponse(
         agent=GatewayAgentContext(

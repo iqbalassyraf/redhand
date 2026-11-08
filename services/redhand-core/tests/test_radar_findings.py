@@ -405,3 +405,53 @@ def test_anything_but_an_explicit_observe_is_off_in_the_context(env: Env, odd: A
     org["output_check_mode"] = odd
     agent = _context(env)
     assert agent["radar_mode"] == "off" and agent["output_check_mode"] == "off"
+
+
+# --- the gateway-context lookups (latency work) ------------------------------------------------------------------------------
+
+def _agent_row(env: Env) -> dict[str, Any]:
+    return next(a for a in env.store.tables["agents"] if a["id"] == env.agent)
+
+
+def test_last_seen_is_written_at_most_once_a_minute(env: Env) -> None:
+    row = _agent_row(env)
+    row["last_seen_at"] = None
+    _context(env)
+    first = row["last_seen_at"]
+    assert first is not None
+    _context(env)
+    assert row["last_seen_at"] == first  # a second lookup within a minute does not write again
+
+
+@pytest.mark.parametrize("old", [None, "", "not a time", "2999-01-01T00:00:00+00:00", "2000-01-01T00:00:00+00:00"])
+def test_a_missing_unreadable_future_or_old_last_seen_is_rewritten(env: Env, old: Any) -> None:
+    row = _agent_row(env)
+    row["last_seen_at"] = old
+    _context(env)
+    assert row["last_seen_at"] != old
+
+
+def test_a_freeze_shows_in_the_very_next_lookup(env: Env) -> None:
+    assert _context(env)["status"] == "active"
+    _agent_row(env)["status"] = "frozen"
+    assert _context(env)["status"] == "frozen"  # nothing in the core caches the passport
+
+
+def test_an_unknown_agent_is_still_404_and_another_tenants_agent_is_not_returned(env: Env) -> None:
+    params = {"agent_id": str(uuid4()), "organization_id": DEFAULT_ORG_ID, "server": "xero", "instance_id": "gateway-test-0001"}
+    assert env.client.get("/internal/v1/gateway-context", params=params, headers=GATEWAY_HEADERS).status_code == 404
+    params = {"agent_id": env.agent, "organization_id": OTHER_ORG, "server": "xero", "instance_id": "gateway-test-0001"}
+    assert env.client.get("/internal/v1/gateway-context", params=params, headers=GATEWAY_HEADERS).status_code == 404
+
+
+def test_a_failed_bait_lookup_is_still_a_503_so_the_gateway_denies(env: Env, monkeypatch: pytest.MonkeyPatch) -> None:
+    real = env.store.table
+
+    def broken(name: str) -> Any:
+        if name == "honeytokens":
+            raise RuntimeError("database down")
+        return real(name)
+
+    monkeypatch.setattr(env.store, "table", broken)
+    params = {"agent_id": env.agent, "organization_id": DEFAULT_ORG_ID, "server": "xero", "instance_id": "gateway-test-0001"}
+    assert env.client.get("/internal/v1/gateway-context", params=params, headers=GATEWAY_HEADERS).status_code == 503

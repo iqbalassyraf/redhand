@@ -225,3 +225,11 @@ Both tools work on RedHand and its demo projects. This file is how each learns w
 - **Caveat found:** the gateway's `overhead_ms` histogram is taken before the call goes upstream, so it excludes work on the result.
 - **Brief for Antigravity:** `docs/testing/briefs/2026-11-08-m4-3-radar-in-the-gateway.md` (run only after the deploy above).
 - **Uncommitted:** branch `feat/phase4-m4-3-gateway`, nothing committed or pushed.
+
+## 2026-11-08, Claude Code: gateway latency, steps 1 and 2 (branch perf/gateway-context-latency, uncommitted)
+- **Why:** staging baseline over budget (p99 up to 1 s). Core's gateway-context took ~230 ms (Cloud Run logs, 160 requests); the gateway waits for it each time its 2 s cache expires. Radar is not involved (it runs in the background).
+- **Changed:** core runs lookups together and throttles `last_seen_at` to once a minute; gateway refreshes cached passports in the background at half lifetime (never serves an entry older than the TTL). ADR 0015 addendum, changelog.
+- **Verified:** full suite 1320 passed, ruff and mypy clean, 7 mutation checks on the refresh logic caught (one needed a new test). **Not verified:** any real timing on staging; the parallel lookups only show up against the real database.
+- **Not done:** step 3, keeping one instance always warm (costs money, owner decides).
+- **Deploy order when merged:** core, then gateway. Then re-run `scripts/latency_baseline.py` (brief: `docs/testing/briefs/2026-11-08-gateway-latency-retest.md`).
+- **Found, not fixed:** gateway-context never selects `organizations.utc_offset_minutes`, so the budget day always uses the default offset (SQL uses the stored one).
