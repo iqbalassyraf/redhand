@@ -107,6 +107,8 @@ class McpGateway:
         self.trips = trips
         self.pins = pins
         self.radar = radar
+        contexts.attach_metrics(metrics)
+        verifier.attach_metrics(metrics)
         self._budget_refusal_logged: dict[UUID, float] = {}
 
     def _record_budget_refusal(
@@ -154,12 +156,14 @@ class McpGateway:
         # 1. Agent authentication
         if not bearer_token:
             return deny(401, JSONRPC_UNAUTHORIZED, "Agent access token required.", "missing_token")
+        verify_timer = time.perf_counter()
         try:
             identity = await self.verifier.verify(bearer_token)
         except KeyUnavailableError:
             return deny(503, JSONRPC_GATEWAY_UNAVAILABLE, "Gateway cannot verify tokens right now.", "keys_unavailable")
         except AgentAuthError:
             return deny(401, JSONRPC_UNAUTHORIZED, "Invalid or expired agent access token.", "invalid_token")
+        self.metrics.record_stage("verify", (time.perf_counter() - verify_timer) * 1000)
 
         # 2. Message shape
         if not isinstance(message, dict) or message.get("jsonrpc") != "2.0" or not isinstance(method, str):
@@ -200,8 +204,10 @@ class McpGateway:
             # however the passport is scoped, and neither is ever forwarded upstream. The tool NAME is scanned
             # along with the arguments (names and argument keys can carry bait too), and a trip is recorded,
             # logged and reported with the redacted copies, so the bait itself never reaches an event or a log.
+            bait_timer = time.perf_counter()
             try:
                 bait = scan_honeytokens({"tool": tool_name, "arguments": arguments}, context.honeytokens)
+                self.metrics.record_stage("honeytoken_scan", (time.perf_counter() - bait_timer) * 1000)
             except Exception as exc:  # noqa: BLE001  enforcement path: a scanner error denies
                 logger.error("Honeytoken scan failed", error_type=type(exc).__name__)
                 self._record(identity, context, method, message, "BLOCK", ["honeytoken scan failed"], 403, "", {}, started, capture=False)
@@ -246,7 +252,9 @@ class McpGateway:
                 return deny(200, JSONRPC_POLICY_VIOLATION, f"PolicyViolation: tool '{tool_name}' is not approved.",
                             "tool_unapproved", {"tool_name": tool_name, "violations": reasons})
 
+            guard_timer = time.perf_counter()
             violations = self.firewall.inspect_arguments(tool_name, arguments)
+            self.metrics.record_stage("guardrails", (time.perf_counter() - guard_timer) * 1000)
             if violations:
                 self._record(identity, context, method, message, "BLOCK", violations, 403, tool_name, arguments, started)
                 return deny(200, JSONRPC_POLICY_VIOLATION, f"PolicyViolation: tool '{tool_name}' blocked by guardrails.",
@@ -254,6 +262,7 @@ class McpGateway:
 
             # 4b. Budget Guard: a call that is otherwise allowed consumes one unit of the agent's daily
             # limit, or is refused. Refused calls above never reach this point, so they never consume.
+            budget_timer = time.perf_counter()
             decision = self.budget.try_consume(identity.agent_id, context.budget)
             if not decision.allowed:
                 limit = context.budget.daily_call_limit
@@ -272,8 +281,11 @@ class McpGateway:
                     {"tool_name": tool_name, "daily_call_limit": limit, "used": decision.used, "resets_at": resets},
                 )
             self.budget.schedule_flush_if_due()
+            self.metrics.record_stage("budget", (time.perf_counter() - budget_timer) * 1000)
             if decision.urgent:
+                flush_timer = time.perf_counter()
                 await self.budget.flush_now()
+                self.metrics.record_stage("budget_flush_now", (time.perf_counter() - flush_timer) * 1000)
 
         overhead_ms = (time.perf_counter() - started) * 1000
 

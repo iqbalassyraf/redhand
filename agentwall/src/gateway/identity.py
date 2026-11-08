@@ -66,10 +66,16 @@ class AgentTokenVerifier:
         self._clock = clock
         self._jwks: dict[str, Any] = {}
         self._jwks_fetched_at: float | None = None
+        self._metrics: Any = None
+
+    def attach_metrics(self, metrics: Any) -> None:
+        """Lets the gateway time key refreshes. Optional: without it nothing is timed."""
+        self._metrics = metrics
 
     async def _refresh_jwks(self) -> None:
         if not self._jwks_url:
             raise KeyUnavailableError("No agent token verification key is configured.")
+        timer = time.perf_counter()
         try:
             resp = await self._http.get(self._jwks_url)
             resp.raise_for_status()
@@ -80,6 +86,8 @@ class AgentTokenVerifier:
             raise KeyUnavailableError("Agent token keys are unavailable.") from exc
         self._jwks = parsed
         self._jwks_fetched_at = self._clock()
+        if self._metrics is not None:
+            self._metrics.record_stage("jwks_refresh", (time.perf_counter() - timer) * 1000)
 
     async def _key_for(self, kid: str | None) -> Any:
         if self._static_key is not None:

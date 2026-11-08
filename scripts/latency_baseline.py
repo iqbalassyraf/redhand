@@ -30,6 +30,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from staging_agent import DEFAULT_CORE, DEFAULT_GATEWAY, Agent  # noqa: E402  (stdlib-only sibling script)
 
 _BUCKET = re.compile(r'^redhand_gateway_overhead_ms_bucket\{le="([^"]+)"\} (\S+)$')
+_STAGE_BUCKET = re.compile(r'^redhand_gateway_stage_ms_bucket\{stage="([a-z_]+)",le="([^"]+)"\} (\S+)$')
+_STAGE_SUM = re.compile(r'^redhand_gateway_stage_ms_sum\{stage="([a-z_]+)"\} (\S+)$')
+_STAGE_COUNT = re.compile(r'^redhand_gateway_stage_ms_count\{stage="([a-z_]+)"\} (\S+)$')
 BUDGET_P50_MS, BUDGET_P99_MS = 10.0, 50.0
 
 
@@ -51,6 +54,40 @@ def parse_overhead(metrics_text: str) -> dict[str, object]:
     if not count:
         count = max(c for _, c in buckets)
     return {"buckets": sorted(buckets), "sum": total_sum, "count": count}
+
+
+def parse_stages(metrics_text: str) -> dict[str, dict[str, object]]:
+    """Per-stage histograms (verify, context_hit, context_miss, guardrails, budget, ...) from Prometheus text. Empty on an older gateway."""
+    stages: dict[str, dict[str, object]] = {}
+    for line in metrics_text.splitlines():
+        m = _STAGE_BUCKET.match(line)
+        if m:
+            entry = stages.setdefault(m.group(1), {"buckets": [], "sum": 0.0, "count": 0.0})
+            edge = float("inf") if m.group(2) == "+Inf" else float(m.group(2))
+            entry["buckets"].append((edge, float(m.group(3))))  # type: ignore[attr-defined]
+            continue
+        m = _STAGE_SUM.match(line)
+        if m:
+            stages.setdefault(m.group(1), {"buckets": [], "sum": 0.0, "count": 0.0})["sum"] = float(m.group(2))
+            continue
+        m = _STAGE_COUNT.match(line)
+        if m:
+            stages.setdefault(m.group(1), {"buckets": [], "sum": 0.0, "count": 0.0})["count"] = float(m.group(2))
+    for entry in stages.values():
+        entry["buckets"] = sorted(entry["buckets"])  # type: ignore[type-var]
+    return stages
+
+
+def summarise_stages(before: dict[str, dict[str, object]], after: dict[str, dict[str, object]]) -> dict[str, dict[str, object]]:
+    """For each stage that ran between the two snapshots: how many times, and its p50 / p99 upper bounds and mean in ms."""
+    empty: dict[str, object] = {"buckets": [], "sum": 0.0, "count": 0.0}
+    out: dict[str, dict[str, object]] = {}
+    for stage, now in after.items():
+        try:
+            out[stage] = summarise(before.get(stage, empty), now)
+        except ValueError:
+            continue  # the stage did not run during the test
+    return out
 
 
 def summarise(before: dict[str, object], after: dict[str, object]) -> dict[str, object]:
@@ -86,11 +123,11 @@ def verdict(summary: dict[str, object]) -> str:
     return "OVER BUDGET: " + "; ".join(parts) + "."
 
 
-def snapshot(gateway: str, token: str) -> dict[str, object]:
+def fetch_metrics(gateway: str, token: str) -> str:
     request = urllib.request.Request(f"{gateway}/metrics", headers={"Authorization": f"Bearer {token}", "User-Agent": "RedHand-LatencyBaseline/1.0"})
     try:
         with urllib.request.urlopen(request, timeout=30) as response:
-            return parse_overhead(response.read().decode("utf-8", errors="replace"))
+            return response.read().decode("utf-8", errors="replace")
     except urllib.error.HTTPError as error:
         raise SystemExit(f"metrics refused (HTTP {error.code}): check RH_INTERNAL_TOKEN") from None
     except (urllib.error.URLError, TimeoutError) as error:
@@ -123,7 +160,8 @@ def main() -> int:
     status, _ = agent.initialize()
     if status != 200:
         raise SystemExit(f"MCP initialize failed (HTTP {status})")
-    before = snapshot(gateway, token)
+    before_text = fetch_metrics(gateway, token)
+    before, before_stages = parse_overhead(before_text), parse_stages(before_text)
     arguments = json.loads(args.args)
     failures = 0
     for i in range(args.calls):
@@ -131,9 +169,11 @@ def main() -> int:
         if status != 200 or not isinstance(body, dict) or "result" not in body:
             failures += 1
         time.sleep(args.interval)
-    after = snapshot(gateway, token)
+    after_text = fetch_metrics(gateway, token)
+    after, after_stages = parse_overhead(after_text), parse_stages(after_text)
     summary = summarise(before, after)
     summary.update({"requested_calls": args.calls, "failed_calls": failures, "verdict": verdict(summary)})
+    summary["stages"] = summarise_stages(before_stages, after_stages)  # which step the time went into (empty on an older gateway)
     print(json.dumps(summary, indent=2))
     print("\nWhat this means: the gateway adds at most p50 and p99 above, per call, not counting the upstream server.")
     print("Caveat: /metrics is read from one gateway instance; if Cloud Run started a second instance during the test the numbers are partial.")
