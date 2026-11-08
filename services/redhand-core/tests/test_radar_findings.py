@@ -380,3 +380,28 @@ def test_the_daily_cap_counts_but_does_not_store_past_two_thousand_rows(env: Env
         })
     resp = env.report([item(tool_name="brand_new_tool")])
     assert resp.json()["capped"] == 1 and resp.json()["new"] == 0 and len(rows) == 2000
+
+
+# --- the gateway's context carries the modes (Phase 4 M4.3) ----------------------------------------------------------
+
+def _context(env: Env) -> dict[str, Any]:
+    params = {"agent_id": env.agent, "organization_id": DEFAULT_ORG_ID, "server": "xero", "instance_id": "gateway-test-0001"}
+    resp = env.client.get("/internal/v1/gateway-context", params=params, headers=GATEWAY_HEADERS)
+    assert resp.status_code == 200, resp.text
+    return resp.json()["agent"]
+
+
+def test_the_gateway_context_carries_the_two_modes_and_follows_changes(env: Env) -> None:
+    assert _context(env)["radar_mode"] == "observe" and _context(env)["output_check_mode"] == "observe"
+    env.settings_put("off", "observe", confirm=True)
+    agent = _context(env)
+    assert agent["radar_mode"] == "off" and agent["output_check_mode"] == "observe"
+
+
+@pytest.mark.parametrize("odd", ["block", "OBSERVE", "", None, True, 1])
+def test_anything_but_an_explicit_observe_is_off_in_the_context(env: Env, odd: Any) -> None:
+    org = next(o for o in env.store.tables["organizations"] if o["id"] == DEFAULT_ORG_ID)
+    org["radar_mode"] = odd
+    org["output_check_mode"] = odd
+    agent = _context(env)
+    assert agent["radar_mode"] == "off" and agent["output_check_mode"] == "off"

@@ -33,6 +33,7 @@ from .gateway.context import CoreContextClient
 from .gateway.identity import AgentTokenVerifier
 from .gateway.metrics import GatewayMetrics
 from .gateway.pins import HttpPinReporter, PinCoordinator
+from .gateway.radar_scan import HttpFindingsReporter, RadarScanner
 from .gateway.recorder import EventRecorder, HttpEventReporter
 from .gateway.trips import HttpTripReporter, TripDispatcher
 from .gateway.service import McpGateway
@@ -87,6 +88,9 @@ def build_gateway(settings: Settings, firewall: FirewallPolicyEngine, audit: Tam
         ),
         trips=TripDispatcher(reporter=HttpTripReporter(core_url=core, service_token=token), metrics=metrics),
         pins=PinCoordinator(reporter=HttpPinReporter(core_url=core, service_token=token), metrics=metrics),
+        radar=RadarScanner(
+            reporter=HttpFindingsReporter(core_url=core, service_token=token), metrics=metrics, use_model=settings.RADAR_MODEL_ENABLED,
+        ),
     )
 
 
@@ -113,6 +117,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     await gateway.recorder.stop()
     await gateway.trips.aclose()
     await gateway.pins.aclose()
+    await gateway.radar.aclose()
 
 
 app = FastAPI(

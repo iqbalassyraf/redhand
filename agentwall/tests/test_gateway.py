@@ -29,6 +29,7 @@ from agentwall.src.gateway.identity import AgentTokenVerifier
 from agentwall.src.gateway.metrics import GatewayMetrics
 from agentwall.src.gateway.recorder import EventRecorder
 from agentwall.src.gateway.pins import PinCoordinator, PinReport
+from agentwall.src.gateway.radar_scan import FindingsReport, RadarScanner
 from agentwall.src.gateway.trips import Outcome, Trip, TripDispatcher
 from agentwall.src.gateway.service import (
     JSONRPC_GATEWAY_UNAVAILABLE,
@@ -89,6 +90,18 @@ class FakePinReporter:
         self.outcomes: list[Outcome] = []
 
     async def send(self, report: PinReport) -> Outcome:
+        self.reports.append(report)
+        return self.outcomes.pop(0) if self.outcomes else "ok"
+
+
+class FakeFindingsReporter:
+    """Stands in for core's /internal/v1/findings."""
+
+    def __init__(self) -> None:
+        self.reports: list[FindingsReport] = []
+        self.outcomes: list[Outcome] = []
+
+    async def send(self, report: FindingsReport) -> Outcome:
         self.reports.append(report)
         return self.outcomes.pop(0) if self.outcomes else "ok"
 
@@ -163,6 +176,7 @@ class FakeUpstream:
     received: list[dict[str, Any]] = field(default_factory=list)
     headers: list[dict[str, str]] = field(default_factory=list)
     mode: str = "json"  # json | sse | down | error | redirect | huge | wrong_id
+    reply_text: str | None = None  # what a tools/call returns, when a test needs specific content
 
     def handler(self, request: httpx.Request) -> httpx.Response:
         if self.mode == "down":
@@ -184,7 +198,7 @@ class FakeUpstream:
             result = {"tools": [{"name": n, "inputSchema": {}} for n in ("list_invoices", "delete_invoice", "execute_sql")]}
         elif method == "tools/call":
             name = message["params"]["name"]
-            text = "leaked key AKIAIOSFODNN7EXAMPLE" if name == "leaky" else f"ran {name}"
+            text = self.reply_text or ("leaked key AKIAIOSFODNN7EXAMPLE" if name == "leaky" else f"ran {name}")
             result = {"content": [{"type": "text", "text": text}]}
         else:
             result = {"protocolVersion": "2025-06-18", "capabilities": {}}
@@ -214,6 +228,9 @@ class Harness:
         self.trips = TripDispatcher(reporter=self.trip_reporter, retry_delays=())
         self.pin_reporter = FakePinReporter()
         self.pins = PinCoordinator(reporter=self.pin_reporter, retry_delays=())
+        self.findings_reporter = FakeFindingsReporter()
+        self.metrics = GatewayMetrics()
+        self.radar = RadarScanner(reporter=self.findings_reporter, metrics=self.metrics, retry_delays=())
         self.gateway = McpGateway(
             verifier=AgentTokenVerifier(public_key_pem=public_pem, jwks_url=None),
             contexts=CoreContextClient(
@@ -227,17 +244,19 @@ class Harness:
             ),
             firewall=gateway_main.firewall_engine,
             audit_logger=self.audit,
-            metrics=GatewayMetrics(),
+            metrics=self.metrics,
             budget=self.budget,
             recorder=self.recorder,
             trips=self.trips,
             pins=self.pins,
+            radar=self.radar,
         )
 
     def add_agent(
         self, scopes: list[dict[str, str]], status: str = "active", org: UUID = ORG, safe_mode: bool = False,
         limit: int | None = None, used_by_others: int = 0, payload_capture: bool = False,
         honeytokens: list[dict[str, str]] | None = None, honey_tools: list[dict[str, str]] | None = None,
+        radar_mode: str = "off", output_check_mode: str = "off",
     ) -> UUID:
         agent_id = uuid4()
         self.core.agents[str(agent_id)] = {
@@ -245,6 +264,7 @@ class Harness:
             "scopes": scopes, "expires_at": "2099-01-01T00:00:00+00:00", "safe_mode": safe_mode,
             "payload_capture": payload_capture,
             "honeytokens": honeytokens or [], "honey_tools": honey_tools or [],
+            "radar_mode": radar_mode, "output_check_mode": output_check_mode,
             "budget": {
                 "daily_call_limit": limit, "used_by_other_instances": used_by_others, "day_key": "2026-11-04",
                 "resets_at": "2026-11-04T16:00:00+00:00", "action": "deny",

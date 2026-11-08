@@ -33,6 +33,7 @@ from .metrics import GatewayMetrics
 from .capture import build_excerpt
 from .honeytokens import scan as scan_honeytokens
 from .pins import PinCoordinator
+from .radar_scan import RadarScanner, kinds_for
 from .recorder import EventRecorder, GatewayEvent
 from .trips import Trip, TripDispatcher
 from .upstream import DestinationBlockedError, UpstreamError, UpstreamForwarder
@@ -93,6 +94,7 @@ class McpGateway:
         recorder: EventRecorder,
         trips: TripDispatcher,
         pins: PinCoordinator,
+        radar: RadarScanner,
     ) -> None:
         self.verifier = verifier
         self.contexts = contexts
@@ -104,6 +106,7 @@ class McpGateway:
         self.recorder = recorder
         self.trips = trips
         self.pins = pins
+        self.radar = radar
         self._budget_refusal_logged: dict[UUID, float] = {}
 
     def _record_budget_refusal(
@@ -325,6 +328,7 @@ class McpGateway:
                 redacted, findings = self.firewall.inspect_egress(upstream_result)
                 if findings:
                     logger.warning("Secrets redacted from tool result", count=len(findings), tool=tool_name)
+                self._observe_result(identity, context, tool_name, redacted)
                 body = {**body, "result": redacted}
                 captured_result = redacted
                 try:
@@ -342,6 +346,20 @@ class McpGateway:
         if body is None:
             return GatewayResponse(202, None, result.headers)
         return GatewayResponse(200, body, result.headers)
+
+    def _observe_result(self, identity: AgentIdentity, context: GatewayContext, tool_name: str, result: Any) -> None:
+        """
+        Hands the (already redacted) result to the Radar's background queue. Observe only: this never changes the result, never
+        waits and never raises, so a scanner problem cannot affect the call (docs/adr/0015-radar-in-the-gateway.md).
+        """
+        kinds = kinds_for(context.radar_mode, context.output_check_mode)
+        if not kinds:
+            return
+        self.radar.submit(
+            organization_id=identity.organization_id, agent_id=identity.agent_id, server=context.server_slug, tool=tool_name,
+            tool_names=frozenset(s.tool for s in context.scopes if s.server == context.server_slug and s.tool != "*"),
+            kinds=kinds, result=result,
+        )
 
     def _trip(
         self, identity: AgentIdentity, context: GatewayContext, kind: str, ref_id: UUID, seen_in: str, tool_name: str

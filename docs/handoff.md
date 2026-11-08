@@ -179,3 +179,14 @@ Both tools work on RedHand and its demo projects. This file is how each learns w
 
 ## Helpdesk demo agent (completed, built by Antigravity)
 - Separate project: n8n + Telegram + Neon Serverless Postgres (free tier Singapore) + Python MCP server at `/Users/testing/Documents/redhand-helpdesk-demo`. Full report in that project's `docs/REPORT.md`. All 7 milestones complete (`29/29 pytest passed`, `20/20 eval passed`). Ready for RedHand registration, scanning, tool pinning, honeytokens, and demo recording.
+
+## 2026-11-08, Claude Code: M4.3 Radar in the gateway (observe only) + latency script
+- **Changed:** gateway scans tool results on a bounded background queue and reports findings to core; core sends `radar_mode` and
+  `output_check_mode` in the gateway context. New: `agentwall/src/gateway/radar_scan.py`, ADR 0015, `docs/runbooks/radar.md`,
+  `scripts/latency_baseline.py` + runbook, tests (`agentwall/tests/test_gateway_radar.py`, `tests/e2e/test_phase4_radar.py`, core context tests).
+- **Verified:** full suite 1298 passed; ruff clean; mypy strict clean (70 files); 7 mutation checks all caught (one needed a new test).
+- **Not verified:** anything on staging; scan cost on a real gateway; the optional model path in the gateway (default off).
+- **Staging is NOT ready yet:** migration `20261117000000_radar_findings` (M4.2) is not applied on staging (`list_migrations` shows the last one is `tool_pinning`). Order: migration, core, gateway.
+- **Caveat found:** the gateway's `overhead_ms` histogram is taken before the call goes upstream, so it excludes work on the result.
+- **Brief for Antigravity:** `docs/testing/briefs/2026-11-08-m4-3-radar-in-the-gateway.md` (run only after the deploy above).
+- **Uncommitted:** branch `feat/phase4-m4-3-gateway`, nothing committed or pushed.

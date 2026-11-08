@@ -243,6 +243,10 @@ class GatewayAgentContext(BaseModel):
     # gateway requires both fields and denies if they are missing (an older core), like safe_mode and budget.
     honeytokens: list[GatewayHoneytoken]
     honey_tools: list[GatewayHoneyTool]
+    # Prompt Injection Radar and output checks (Phase 4 M4.3). Only "off" or "observe" exist (block is not built). The gateway
+    # requires both fields and denies if they are missing (an older core), like the fields above. Deploy core before the gateway.
+    radar_mode: Literal["off", "observe"]
+    output_check_mode: Literal["off", "observe"]
 
 
 class GatewayBudgetContext(BaseModel):
@@ -345,7 +349,7 @@ async def gateway_context(
     # Safe Mode is on when the agent's flag OR the organization's flag is on. Anything that is not
     # an explicit false (a missing row, null, a non-boolean) counts as ON: the restrictive reading.
     org_res = await (
-        supabase.table("organizations").select("safe_mode, payload_capture_enabled").eq("id", str(organization_id)).maybe_single().execute()
+        supabase.table("organizations").select("safe_mode, payload_capture_enabled, radar_mode, output_check_mode").eq("id", str(organization_id)).maybe_single().execute()
     )
     org_row = org_res.data if org_res else None
     safe_mode = not (
@@ -353,6 +357,12 @@ async def gateway_context(
     )
 
     payload_capture = org_row is not None and org_row.get("payload_capture_enabled") is True
+    # A check only runs when the organization explicitly turned it on. Anything else (a missing row, null, an unknown value) is
+    # off: the checks only observe, so "off" never lets anything through that "observe" would have stopped.
+    radar_mode: Literal["off", "observe"] = "observe" if org_row is not None and org_row.get("radar_mode") == "observe" else "off"
+    output_check_mode: Literal["off", "observe"] = (
+        "observe" if org_row is not None and org_row.get("output_check_mode") == "observe" else "off"
+    )
     offset = budget_rules.normalize_offset(org_row.get("utc_offset_minutes") if org_row else None)
     raw_limit = agent.get("daily_call_limit")
     if raw_limit is None:
@@ -417,6 +427,8 @@ async def gateway_context(
             budget=budget,
             honeytokens=honeytokens,
             honey_tools=honey_tools,
+            radar_mode=radar_mode,
+            output_check_mode=output_check_mode,
         ),
         server=GatewayServerContext(
             slug=server_row["slug"], url=server_row["url"], pin_mode=pin_mode, approved_tools=approved_tools

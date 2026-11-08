@@ -101,6 +101,10 @@ class Settings(BaseSettings):
         default=500, ge=1, le=500,
         description="Most events sent to core in one report call. Must not exceed core's own per-batch limit.",
     )
+    RADAR_MODEL_ENABLED: bool = Field(
+        default=False,
+        description="Also run the second-stage injection model in the Radar's background scan (about 8 ms more CPU per large result, never inline).",
+    )
     ALLOW_INSECURE_UPSTREAMS: bool = Field(
         default=False,
         description="Development only: allow http:// and private-network MCP server URLs.",
