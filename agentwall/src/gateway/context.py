@@ -30,7 +30,10 @@ MAX_CONTEXT_TTL_SECONDS = 4.0
 CACHE_MAX_ENTRIES = 10_000
 # Once a cached passport is this fraction of its lifetime old, the next call that uses it also starts a background refresh, so
 # a busy agent's next call finds a fresh entry instead of waiting for core. This never makes a served entry older than the TTL.
-REFRESH_AHEAD_FRACTION = 0.5
+REFRESH_AHEAD_FRACTION = 0.25
+# When an entry has expired while its refresh is still running, a call waits for that refresh for at most this long (instead of
+# starting a second lookup) and otherwise looks up for itself.
+REFRESH_WAIT_SECONDS = 1.0
 MAX_BACKGROUND_REFRESHES = 200
 
 
@@ -227,6 +230,14 @@ class CoreContextClient:
                 self._start_refresh(key, agent_id, organization_id, server)
             self._stage("context_hit", timer)
             return cached[1]
+
+        running = self._refreshing.get(key)
+        if running is not None:
+            await asyncio.wait({running}, timeout=REFRESH_WAIT_SECONDS)
+            refreshed = self._cache.get(key)
+            if refreshed is not None and self._clock() - refreshed[0] < self._ttl:  # still inside its lifetime: usable
+                self._stage("context_wait_refresh", timer)
+                return refreshed[1]
 
         context = await self._fetch(agent_id, organization_id, server)
         self._stage("context_miss", timer)

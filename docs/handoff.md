@@ -240,3 +240,8 @@ Both tools work on RedHand and its demo projects. This file is how each learns w
 - **Verified:** tests and 6 mutation checks. **Not verified:** real numbers; needs a deploy (core is unchanged, gateway only) and the 200-call run again.
 - **Note:** the retest's revisions 00022/00017 were redeployed by the owner from the same commit 866dcfc.
 - **Retest:** rerun brief `docs/testing/briefs/2026-11-08-gateway-latency-retest.md` step 1 and read the `stages` section.
+
+## 2026-11-08, Claude Code: refresh earlier + wait for a running refresh (branch perf/context-refresh-earlier, uncommitted)
+- **Measured on staging (stage timings, 200 calls):** mean overhead 6.2 ms, p50 <= 1 ms, cached path ~0.6 ms in total, 0 failed calls. 6 calls (3%) were `context_miss` (~180 ms each), 100% of the calls over 100 ms; p99 therefore still over 50 ms. Misses cost a normal lookup, so the cause was refresh timing, not a slow core.
+- **Changed:** refresh starts at 25% of the lifetime (was 50%); an expired entry with a refresh running waits for it (max 1 s). 4 new tests plus a stuck-refresh test; 4 mutation checks caught (one needed a new test). Suite 1335 passed, ruff and mypy clean.
+- **Not verified:** real effect on staging; needs a gateway deploy and one more 200-call run. If misses are still above 1% of calls the next options are always-allocated CPU or a warm instance (monthly cost, owner decides).

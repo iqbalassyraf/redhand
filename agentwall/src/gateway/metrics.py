@@ -219,7 +219,7 @@ class GatewayMetrics:
             lines.append(f"redhand_gateway_overhead_ms_sum {self._latency_sum_ms:.3f}")
             lines.append(f"redhand_gateway_overhead_ms_count {self._latency_count}")
             lines += [
-                "# HELP redhand_gateway_stage_ms Time in one step of a call, by stage (verify, context_hit, context_miss, honeytoken_scan, guardrails, budget, budget_flush_now, jwks_refresh, context_refresh, context_refresh_failed).",
+                "# HELP redhand_gateway_stage_ms Time in one step of a call, by stage (verify, context_hit, context_wait_refresh, context_miss, honeytoken_scan, guardrails, budget, budget_flush_now, jwks_refresh, context_refresh, context_refresh_failed).",
                 "# TYPE redhand_gateway_stage_ms histogram",
             ]
             for stage in sorted(self._stage_buckets):
