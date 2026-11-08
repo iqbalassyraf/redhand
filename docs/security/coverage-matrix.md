@@ -36,7 +36,7 @@ Status is assigned from point estimates, by rules fixed in M1. With 20 benign sa
 
 ## Independent blind round 1 (frozen: the rules BEFORE they were improved)
 
-1,000 samples written by a different author (Antigravity) from a brief with no rule text, measured once on the M4.1 rules; the full record is `docs/security/blind-round-1.md`. Those samples are now development data, so these numbers can only be refreshed by a new blind round (round 2: not run yet). The improvement since is therefore **not yet measured on independent data**.
+1,000 samples written by a different author (Antigravity) from a brief with no rule text, measured once on the M4.1 rules; the full record is `docs/security/blind-round-1.md`. Those samples are now development data, so these numbers can only be refreshed by a new blind round.
 
 | Category | Detected (95% interval) | False alarms | False alarms on hard benign |
 |---|---|---|---|
@@ -44,6 +44,17 @@ Status is assigned from point estimates, by rules fixed in M1. With 20 benign sa
 | `output_xss` | 98/100 = 98% (93% to 99%) | 13/150 = 9% (5% to 14%) | 13/35 |
 | `output_ssrf` | 76/100 = 76% (67% to 83%) | 4/150 = 3% (1% to 7%) | 4/35 |
 | `output_path` | 66/100 = 66% (56% to 75%) | 7/150 = 5% (2% to 9%) | 7/35 |
+
+## Independent blind round 2 (frozen: the rewritten rules on harder, unseen samples)
+
+800 new samples by the same independent author, asked to be harder and more varied; one run on the rewritten rules (`docs/security/blind-round-2.md`). This is the best available estimate of performance on text the rules have not seen. It is not comparable one to one with round 1.
+
+| Category | Detected (95% interval) | False alarms | False alarms on hard benign |
+|---|---|---|---|
+| `injection_indirect` | 33/80 = 41% (31% to 52%) | 10/120 = 8% (5% to 15%) | 10/45 |
+| `output_xss` | 74/80 = 92% (85% to 97%) | 0/120 = 0% (0% to 3%) | 0/45 |
+| `output_ssrf` | 50/80 = 62% (52% to 72%) | 3/120 = 2% (1% to 7%) | 3/45 |
+| `output_path` | 51/80 = 64% (53% to 73%) | 6/120 = 5% (2% to 10%) | 6/45 |
 
 
 ### Detection by language (dev malicious samples)
