@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 import json
 from typing import Any
 
 from .metrics import (
     COVERED_DETECTION, COVERED_FALSE_ALARM, MIN_SAMPLES_PER_SIDE, PARTIAL_DETECTION, PARTIAL_FALSE_ALARM,
-    CategoryResult, Evaluation,
+    CategoryResult, Evaluation, wilson,
 )
 
 # The OWASP LLM Top 10 (2025) items as the project understands them. Verify against the current publication before
@@ -26,21 +27,87 @@ OWASP_ITEMS: tuple[tuple[str, str, str], ...] = (
 )
 
 
-# Frozen record of blind round 2 (docs/security/blind-round-2.md): the rewritten rules on harder, unseen samples (not comparable one to one with round 1).
-BLIND_ROUND_2: tuple[tuple[str, str, str, str], ...] = (
-    ("injection_indirect", "33/80 = 41% (31% to 52%)", "10/120 = 8% (5% to 15%)", "10/45"),
-    ("output_xss", "74/80 = 92% (85% to 97%)", "0/120 = 0% (0% to 3%)", "0/45"),
-    ("output_ssrf", "50/80 = 62% (52% to 72%)", "3/120 = 2% (1% to 7%)", "3/45"),
-    ("output_path", "51/80 = 64% (53% to 73%)", "6/120 = 5% (2% to 10%)", "6/45"),
+@dataclass(frozen=True, slots=True)
+class BlindRow:
+    """One category of a frozen blind round: found/total attacks, false alarms/total benign, hard-benign false alarms/total hard benign."""
+
+    category: str
+    detected: int
+    malicious: int
+    false_alarms: int
+    benign: int
+    hard_false_alarms: int
+    hard_benign: int
+
+
+@dataclass(frozen=True, slots=True)
+class BlindRound:
+    key: str
+    title: str
+    author: str
+    record: str  # the frozen document with the full account
+    note: str
+    rows: tuple[BlindRow, ...]
+
+
+# Frozen records. They are NOT recomputed (the samples became development data, or the rules changed afterwards); every number is copied
+# from the document named in `record`, and a test checks that the intervals printed here follow from the counts.
+BLIND_ROUNDS: tuple[BlindRound, ...] = (
+    BlindRound(
+        "round1", "Independent blind round 1 (frozen: the rules BEFORE they were improved)", "Antigravity (Gemini)", "docs/security/blind-round-1.md",
+        "1,000 samples written by a different author from a brief with no rule text, measured once on the M4.1 rules. Those samples are now "
+        "development data, so these numbers can only be refreshed by a new blind round.",
+        (BlindRow("injection_indirect", 24, 100, 5, 150, 5, 35), BlindRow("output_xss", 98, 100, 13, 150, 13, 35),
+         BlindRow("output_ssrf", 76, 100, 4, 150, 4, 35), BlindRow("output_path", 66, 100, 7, 150, 7, 35)),
+    ),
+    BlindRound(
+        "round2", "Independent blind round 2 (frozen: the rewritten rules on harder, unseen samples)", "Antigravity (Gemini)", "docs/security/blind-round-2.md",
+        "800 new samples by the same independent author, asked to be harder and more varied; one run on the rewritten rules. This is the best "
+        "available estimate for output checks on text the rules have not seen. It is not comparable one to one with round 1.",
+        (BlindRow("injection_indirect", 33, 80, 10, 120, 10, 45), BlindRow("output_xss", 74, 80, 0, 120, 0, 45),
+         BlindRow("output_ssrf", 50, 80, 3, 120, 3, 45), BlindRow("output_path", 51, 80, 6, 120, 6, 45)),
+    ),
+    BlindRound(
+        "round3", "Independent blind round 3 (frozen: hidden instructions only, a different author)", "Grok 4 (xAI)", "docs/security/blind-round-3.md",
+        "250 samples (240 after removing exact duplicates) by an author that is not Gemini, scored once on the rules as the gateway runs them by "
+        "default (the helper model is off and adds 2 attacks, 36 of 94). One author, labels not independently reviewed, few long harmless texts, "
+        "and no Indonesian attacks. This is the best available estimate for hidden-instruction detection.",
+        (BlindRow("injection_indirect", 34, 94, 10, 146, 5, 48),),
+    ),
 )
 
-# Frozen record of blind round 1 (docs/security/blind-round-1.md). Not recomputed: the samples became development data afterwards.
-BLIND_ROUND_1: tuple[tuple[str, str, str, str], ...] = (
-    ("injection_indirect", "24/100 = 24% (17% to 33%)", "5/150 = 3% (1% to 8%)", "5/35"),
-    ("output_xss", "98/100 = 98% (93% to 99%)", "13/150 = 9% (5% to 14%)", "13/35"),
-    ("output_ssrf", "76/100 = 76% (67% to 83%)", "4/150 = 3% (1% to 7%)", "4/35"),
-    ("output_path", "66/100 = 66% (56% to 75%)", "7/150 = 5% (2% to 9%)", "7/35"),
+# Round 3 by language (rules only, after removing duplicates). Indonesian texts were all harmless, so Indonesian attacks were not measured.
+BLIND3_LANGUAGES: dict[str, tuple[int, int, int, int]] = {  # code -> (attacks found, attacks, false alarms, harmless)
+    "en": (30, 69, 5, 61), "ms": (4, 25, 3, 53), "id": (0, 0, 2, 32),
+}
+
+# What each language honestly has. `native_reviewed` is False everywhere: no native speaker has reviewed the rules or the samples
+# (the Malay review file is waiting: docs/review/malay-samples-for-review.md).
+LANGUAGES: tuple[dict[str, Any], ...] = (
+    {"code": "en", "name": "English", "native_reviewed": False,
+     "note": "Rules and samples were written by the team and by outside authors. Nobody has formally reviewed them."},
+    {"code": "ms", "name": "Bahasa Malaysia", "native_reviewed": False,
+     "note": "Has its own rules and samples, written without a native speaker. The review is waiting. Hidden-instruction detection is weak."},
+    {"code": "id", "name": "Bahasa Indonesia", "native_reviewed": False,
+     "note": "No Indonesian-specific rules. The only independent samples (round 3) were all harmless, so attack detection is not measured at all."},
+    {"code": "zh", "name": "Chinese (Simplified)", "native_reviewed": False,
+     "note": "Not covered: no rules and no samples. Do not assume anything here is detected."},
 )
+
+KNOWN_GAPS: tuple[str, ...] = (
+    "Hidden instructions are found about 4 times in 10 on text the rules have not seen, with about 7 to 8 false alarms per 100 harmless documents.",
+    "A rephrased or politely worded attack, and an attack buried in the middle of a long document, are often missed.",
+    "Malay hidden-instruction detection found 4 of 25 attacks in the independent round; Indonesian attacks were not measured; Chinese is not covered.",
+    "Documentation, runbooks and security write-ups that quote attacks cause false alarms.",
+    "The helper model for hidden instructions is off: on unseen text it added almost nothing at its current settings.",
+    "Secret leaks and MCP manifest risks have small sample sets (20 each) and are weak or partial.",
+    "The Radar only sees what flows through the RedHand gateway. It never blocks: block mode does not exist until a measured gate is passed.",
+)
+
+
+def _blind_text(detected: int, total: int) -> str:
+    low, high = wilson(detected, total)
+    return f"{detected}/{total} = {_pct(detected / total)} ({_pct(low)} to {_pct(high)})"
 
 
 def _pct(x: float) -> str:
@@ -110,6 +177,75 @@ def render_json(ev: Evaluation, digest: str) -> str:
     return json.dumps(to_json(ev, digest), indent=2, sort_keys=True) + "\n"
 
 
+def _result_json(c: CategoryResult, quotable: bool) -> dict[str, Any]:
+    return {
+        "category": c.category, "owasp": c.owasp, "malicious": c.n_malicious, "benign": c.n_benign, "families": c.families,
+        "detected": c.detected, "false_alarms": c.false_alarms, "hard_benign": c.hard_benign, "hard_false_alarms": c.hard_false_alarms,
+        "detection": _quotable(c.detected, c.n_malicious, c.detection_rate, c.detection_interval) if quotable
+        else f"{c.detected}/{c.n_malicious} = {_pct(c.detection_rate)} ({_interval(c.detection_interval)})",
+        "false_alarm_rate": _quotable(c.false_alarms, c.n_benign, c.false_alarm_rate, c.false_alarm_interval) if quotable
+        else f"{c.false_alarms}/{c.n_benign} = {_pct(c.false_alarm_rate)} ({_interval(c.false_alarm_interval)})",
+        "status": c.status,
+        "by_lang": {lang: {"malicious": n, "detected": d} for lang, (n, d) in sorted(c.by_lang.items())},
+    }
+
+
+def to_ui_json(ev: Evaluation, digest: str) -> dict[str, Any]:
+    """Everything the dashboard's Coverage page shows. Generated from the same evaluation as the Markdown matrix, so the two cannot differ."""
+    return {
+        "generated_by": "python -m agentwall.src.bench --format ui-json (do not edit by hand; a test fails if this file is out of date)",
+        "corpus": digest,
+        "total_samples": ev.total_samples,
+        "detectors": list(ev.detectors),
+        "status_rules": {
+            "covered": f"detection at least {_pct(COVERED_DETECTION)} and false alarms at most {_pct(COVERED_FALSE_ALARM)}",
+            "partial": f"detection at least {_pct(PARTIAL_DETECTION)} and false alarms at most {_pct(PARTIAL_FALSE_ALARM)}",
+            "weak": "detects something but misses the partial bar",
+            "not covered": "detects nothing",
+            "insufficient data": f"fewer than {MIN_SAMPLES_PER_SIDE} samples on one side",
+        },
+        "holdout": [_result_json(c, True) for c in ev.holdout.values()],
+        "dev": [_result_json(c, False) for c in ev.categories.values()],
+        "blind_rounds": [
+            {
+                "key": r.key, "title": r.title, "author": r.author, "record": r.record, "note": r.note,
+                "rows": [
+                    {
+                        "category": row.category, "detection": _blind_text(row.detected, row.malicious),
+                        "false_alarms": _blind_text(row.false_alarms, row.benign), "hard_false_alarms": f"{row.hard_false_alarms}/{row.hard_benign}",
+                        "detected": row.detected, "malicious": row.malicious,
+                    }
+                    for row in r.rows
+                ],
+            }
+            for r in BLIND_ROUNDS
+        ],
+        "languages": [
+            {
+                **lang,
+                "blind3": (
+                    {"attacks_found": f, "attacks": a, "harmless_flagged": fa, "harmless": b}
+                    if (f, a, fa, b) != (0, 0, 0, 0) else None
+                ),
+            }
+            for lang in LANGUAGES
+            for (f, a, fa, b) in [BLIND3_LANGUAGES.get(lang["code"], (0, 0, 0, 0))]
+        ],
+        "known_gaps": list(KNOWN_GAPS),
+        "owasp": [
+            {
+                "item": item, "name": name, "note": note,
+                "status": [f"{c.category}: {ev.headline(c.category)[0].status}" for c in ev.categories.values() if c.owasp == item],
+            }
+            for item, name, note in OWASP_ITEMS
+        ],
+    }
+
+
+def render_ui_json(ev: Evaluation, digest: str) -> str:
+    return json.dumps(to_ui_json(ev, digest), indent=2, sort_keys=True, ensure_ascii=False) + "\n"
+
+
 def render_markdown(ev: Evaluation, digest: str) -> str:
     lines = [
         "# Detection coverage (generated)",
@@ -167,25 +303,27 @@ def render_markdown(ev: Evaluation, digest: str) -> str:
             "independently written samples (plan `docs/plans/phase4-m4-plan.md`, section 11.3) and the status rule moves to the upper "
             "confidence bound at M4.6.",
         ]
-    lines += [
-        "", "## Independent blind round 1 (frozen: the rules BEFORE they were improved)", "",
-        "1,000 samples written by a different author (Antigravity) from a brief with no rule text, measured once on the M4.1 rules; the "
-        "full record is `docs/security/blind-round-1.md`. Those samples are now development data, so these numbers can only be "
-        "refreshed by a new blind round.",
-        "", "| Category | Detected (95% interval) | False alarms | False alarms on hard benign |", "|---|---|---|---|",
-        *(f"| `{c}` | {d} | {fa} | {hb} |" for c, d, fa, hb in BLIND_ROUND_1),
-        "",
-        "## Independent blind round 2 (frozen: the rewritten rules on harder, unseen samples)", "",
-        "800 new samples by the same independent author, asked to be harder and more varied; one run on the rewritten rules (`docs/security/blind-round-2.md`). "
-        "This is the best available estimate of performance on text the rules have not seen. It is not comparable one to one with round 1.",
-        "", "| Category | Detected (95% interval) | False alarms | False alarms on hard benign |", "|---|---|---|---|",
-        *(f"| `{c}` | {d} | {fa} | {hb} |" for c, d, fa, hb in BLIND_ROUND_2),
-        "",
-    ]
+    for rnd in BLIND_ROUNDS:
+        lines += [
+            "", f"## {rnd.title}", "", f"Author: {rnd.author}. {rnd.note} The full record is `{rnd.record}`.", "",
+            "| Category | Detected (95% interval) | False alarms | False alarms on hard benign |", "|---|---|---|---|",
+            *(
+                f"| `{r.category}` | {_blind_text(r.detected, r.malicious)} | {_blind_text(r.false_alarms, r.benign)} | {r.hard_false_alarms}/{r.hard_benign} |"
+                for r in rnd.rows
+            ),
+            "",
+        ]
     lines += ["", "### Detection by language (dev malicious samples)", "", "| Category | English | Bahasa Malaysia |", "|---|---|---|"]
     for c in ev.categories.values():
         en, ms = c.by_lang.get("en", (0, 0)), c.by_lang.get("ms", (0, 0))
         lines.append(f"| `{c.category}` | {en[1]}/{en[0]} | {ms[1]}/{ms[0]} |")
+    lines += ["", "## Language coverage", "", "| Language | Native-reviewed | Hidden-instruction attacks found (blind round 3) | Harmless texts flagged | What this means |", "|---|---|---|---|---|"]
+    for lang in LANGUAGES:
+        found, total, fa, benign = BLIND3_LANGUAGES.get(lang["code"], (0, 0, 0, 0))
+        attacks = f"{found}/{total}" if total else "not measured"
+        flagged = f"{fa}/{benign}" if benign else "not measured"
+        lines.append(f"| {lang['name']} | {'yes' if lang['native_reviewed'] else 'no'} | {attacks} | {flagged} | {lang['note']} |")
+    lines += ["", "## Known gaps (read these first)", "", *(f"- {gap}" for gap in KNOWN_GAPS)]
     lines += ["", "## OWASP LLM Top 10 (2025 numbering as understood by the project; verify before quoting)", "",
               "| Item | Name | Benchmark categories and status | Notes |", "|---|---|---|---|"]
     for item, name, note in OWASP_ITEMS:

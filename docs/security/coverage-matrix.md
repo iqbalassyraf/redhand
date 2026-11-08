@@ -36,7 +36,7 @@ Status is assigned from point estimates, by rules fixed in M1. With 20 benign sa
 
 ## Independent blind round 1 (frozen: the rules BEFORE they were improved)
 
-1,000 samples written by a different author (Antigravity) from a brief with no rule text, measured once on the M4.1 rules; the full record is `docs/security/blind-round-1.md`. Those samples are now development data, so these numbers can only be refreshed by a new blind round.
+Author: Antigravity (Gemini). 1,000 samples written by a different author from a brief with no rule text, measured once on the M4.1 rules. Those samples are now development data, so these numbers can only be refreshed by a new blind round. The full record is `docs/security/blind-round-1.md`.
 
 | Category | Detected (95% interval) | False alarms | False alarms on hard benign |
 |---|---|---|---|
@@ -45,9 +45,10 @@ Status is assigned from point estimates, by rules fixed in M1. With 20 benign sa
 | `output_ssrf` | 76/100 = 76% (67% to 83%) | 4/150 = 3% (1% to 7%) | 4/35 |
 | `output_path` | 66/100 = 66% (56% to 75%) | 7/150 = 5% (2% to 9%) | 7/35 |
 
+
 ## Independent blind round 2 (frozen: the rewritten rules on harder, unseen samples)
 
-800 new samples by the same independent author, asked to be harder and more varied; one run on the rewritten rules (`docs/security/blind-round-2.md`). This is the best available estimate of performance on text the rules have not seen. It is not comparable one to one with round 1.
+Author: Antigravity (Gemini). 800 new samples by the same independent author, asked to be harder and more varied; one run on the rewritten rules. This is the best available estimate for output checks on text the rules have not seen. It is not comparable one to one with round 1. The full record is `docs/security/blind-round-2.md`.
 
 | Category | Detected (95% interval) | False alarms | False alarms on hard benign |
 |---|---|---|---|
@@ -55,6 +56,15 @@ Status is assigned from point estimates, by rules fixed in M1. With 20 benign sa
 | `output_xss` | 74/80 = 92% (85% to 97%) | 0/120 = 0% (0% to 3%) | 0/45 |
 | `output_ssrf` | 50/80 = 62% (52% to 72%) | 3/120 = 2% (1% to 7%) | 3/45 |
 | `output_path` | 51/80 = 64% (53% to 73%) | 6/120 = 5% (2% to 10%) | 6/45 |
+
+
+## Independent blind round 3 (frozen: hidden instructions only, a different author)
+
+Author: Grok 4 (xAI). 250 samples (240 after removing exact duplicates) by an author that is not Gemini, scored once on the rules as the gateway runs them by default (the helper model is off and adds 2 attacks, 36 of 94). One author, labels not independently reviewed, few long harmless texts, and no Indonesian attacks. This is the best available estimate for hidden-instruction detection. The full record is `docs/security/blind-round-3.md`.
+
+| Category | Detected (95% interval) | False alarms | False alarms on hard benign |
+|---|---|---|---|
+| `injection_indirect` | 34/94 = 36% (27% to 46%) | 10/146 = 7% (4% to 12%) | 5/48 |
 
 
 ### Detection by language (dev malicious samples)
@@ -68,6 +78,25 @@ Status is assigned from point estimates, by rules fixed in M1. With 20 benign sa
 | `output_xss` | 132/136 | 62/64 |
 | `secret_leak` | 7/18 | 2/2 |
 | `tool_poisoning` | 17/17 | 3/3 |
+
+## Language coverage
+
+| Language | Native-reviewed | Hidden-instruction attacks found (blind round 3) | Harmless texts flagged | What this means |
+|---|---|---|---|---|
+| English | no | 30/69 | 5/61 | Rules and samples were written by the team and by outside authors. Nobody has formally reviewed them. |
+| Bahasa Malaysia | no | 4/25 | 3/53 | Has its own rules and samples, written without a native speaker. The review is waiting. Hidden-instruction detection is weak. |
+| Bahasa Indonesia | no | not measured | 2/32 | No Indonesian-specific rules. The only independent samples (round 3) were all harmless, so attack detection is not measured at all. |
+| Chinese (Simplified) | no | not measured | not measured | Not covered: no rules and no samples. Do not assume anything here is detected. |
+
+## Known gaps (read these first)
+
+- Hidden instructions are found about 4 times in 10 on text the rules have not seen, with about 7 to 8 false alarms per 100 harmless documents.
+- A rephrased or politely worded attack, and an attack buried in the middle of a long document, are often missed.
+- Malay hidden-instruction detection found 4 of 25 attacks in the independent round; Indonesian attacks were not measured; Chinese is not covered.
+- Documentation, runbooks and security write-ups that quote attacks cause false alarms.
+- The helper model for hidden instructions is off: on unseen text it added almost nothing at its current settings.
+- Secret leaks and MCP manifest risks have small sample sets (20 each) and are weak or partial.
+- The Radar only sees what flows through the RedHand gateway. It never blocks: block mode does not exist until a measured gate is passed.
 
 ## OWASP LLM Top 10 (2025 numbering as understood by the project; verify before quoting)
 

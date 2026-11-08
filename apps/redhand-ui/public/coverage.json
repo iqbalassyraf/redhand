@@ -1,0 +1,539 @@
+{
+  "blind_rounds": [
+    {
+      "author": "Antigravity (Gemini)",
+      "key": "round1",
+      "note": "1,000 samples written by a different author from a brief with no rule text, measured once on the M4.1 rules. Those samples are now development data, so these numbers can only be refreshed by a new blind round.",
+      "record": "docs/security/blind-round-1.md",
+      "rows": [
+        {
+          "category": "injection_indirect",
+          "detected": 24,
+          "detection": "24/100 = 24% (17% to 33%)",
+          "false_alarms": "5/150 = 3% (1% to 8%)",
+          "hard_false_alarms": "5/35",
+          "malicious": 100
+        },
+        {
+          "category": "output_xss",
+          "detected": 98,
+          "detection": "98/100 = 98% (93% to 99%)",
+          "false_alarms": "13/150 = 9% (5% to 14%)",
+          "hard_false_alarms": "13/35",
+          "malicious": 100
+        },
+        {
+          "category": "output_ssrf",
+          "detected": 76,
+          "detection": "76/100 = 76% (67% to 83%)",
+          "false_alarms": "4/150 = 3% (1% to 7%)",
+          "hard_false_alarms": "4/35",
+          "malicious": 100
+        },
+        {
+          "category": "output_path",
+          "detected": 66,
+          "detection": "66/100 = 66% (56% to 75%)",
+          "false_alarms": "7/150 = 5% (2% to 9%)",
+          "hard_false_alarms": "7/35",
+          "malicious": 100
+        }
+      ],
+      "title": "Independent blind round 1 (frozen: the rules BEFORE they were improved)"
+    },
+    {
+      "author": "Antigravity (Gemini)",
+      "key": "round2",
+      "note": "800 new samples by the same independent author, asked to be harder and more varied; one run on the rewritten rules. This is the best available estimate for output checks on text the rules have not seen. It is not comparable one to one with round 1.",
+      "record": "docs/security/blind-round-2.md",
+      "rows": [
+        {
+          "category": "injection_indirect",
+          "detected": 33,
+          "detection": "33/80 = 41% (31% to 52%)",
+          "false_alarms": "10/120 = 8% (5% to 15%)",
+          "hard_false_alarms": "10/45",
+          "malicious": 80
+        },
+        {
+          "category": "output_xss",
+          "detected": 74,
+          "detection": "74/80 = 92% (85% to 97%)",
+          "false_alarms": "0/120 = 0% (0% to 3%)",
+          "hard_false_alarms": "0/45",
+          "malicious": 80
+        },
+        {
+          "category": "output_ssrf",
+          "detected": 50,
+          "detection": "50/80 = 62% (52% to 72%)",
+          "false_alarms": "3/120 = 2% (1% to 7%)",
+          "hard_false_alarms": "3/45",
+          "malicious": 80
+        },
+        {
+          "category": "output_path",
+          "detected": 51,
+          "detection": "51/80 = 64% (53% to 73%)",
+          "false_alarms": "6/120 = 5% (2% to 10%)",
+          "hard_false_alarms": "6/45",
+          "malicious": 80
+        }
+      ],
+      "title": "Independent blind round 2 (frozen: the rewritten rules on harder, unseen samples)"
+    },
+    {
+      "author": "Grok 4 (xAI)",
+      "key": "round3",
+      "note": "250 samples (240 after removing exact duplicates) by an author that is not Gemini, scored once on the rules as the gateway runs them by default (the helper model is off and adds 2 attacks, 36 of 94). One author, labels not independently reviewed, few long harmless texts, and no Indonesian attacks. This is the best available estimate for hidden-instruction detection.",
+      "record": "docs/security/blind-round-3.md",
+      "rows": [
+        {
+          "category": "injection_indirect",
+          "detected": 34,
+          "detection": "34/94 = 36% (27% to 46%)",
+          "false_alarms": "10/146 = 7% (4% to 12%)",
+          "hard_false_alarms": "5/48",
+          "malicious": 94
+        }
+      ],
+      "title": "Independent blind round 3 (frozen: hidden instructions only, a different author)"
+    }
+  ],
+  "corpus": "1eef50813cce3eaa",
+  "detectors": [
+    "egress_guardrail",
+    "radar",
+    "radar_model",
+    "manifest_auditor",
+    "description_auditor"
+  ],
+  "dev": [
+    {
+      "benign": 294,
+      "by_lang": {
+        "en": {
+          "detected": 138,
+          "malicious": 138
+        },
+        "ms": {
+          "detected": 70,
+          "malicious": 70
+        }
+      },
+      "category": "injection_indirect",
+      "detected": 208,
+      "detection": "208/208 = 100% (98%-100%)",
+      "false_alarm_rate": "10/294 = 3% (2%-6%)",
+      "false_alarms": 10,
+      "families": 121,
+      "hard_benign": 96,
+      "hard_false_alarms": 10,
+      "malicious": 208,
+      "owasp": "LLM01",
+      "status": "partial"
+    },
+    {
+      "benign": 20,
+      "by_lang": {
+        "en": {
+          "detected": 13,
+          "malicious": 19
+        },
+        "ms": {
+          "detected": 1,
+          "malicious": 1
+        }
+      },
+      "category": "manifest_risk",
+      "detected": 14,
+      "detection": "14/20 = 70% (48%-85%)",
+      "false_alarm_rate": "0/20 = 0% (0%-16%)",
+      "false_alarms": 0,
+      "families": 11,
+      "hard_benign": 9,
+      "hard_false_alarms": 0,
+      "malicious": 20,
+      "owasp": "LLM06",
+      "status": "partial"
+    },
+    {
+      "benign": 290,
+      "by_lang": {
+        "en": {
+          "detected": 112,
+          "malicious": 136
+        },
+        "ms": {
+          "detected": 59,
+          "malicious": 64
+        }
+      },
+      "category": "output_path",
+      "detected": 171,
+      "detection": "171/200 = 86% (80%-90%)",
+      "false_alarm_rate": "6/290 = 2% (1%-4%)",
+      "false_alarms": 6,
+      "families": 185,
+      "hard_benign": 90,
+      "hard_false_alarms": 6,
+      "malicious": 200,
+      "owasp": "LLM05",
+      "status": "partial"
+    },
+    {
+      "benign": 290,
+      "by_lang": {
+        "en": {
+          "detected": 122,
+          "malicious": 137
+        },
+        "ms": {
+          "detected": 49,
+          "malicious": 63
+        }
+      },
+      "category": "output_ssrf",
+      "detected": 171,
+      "detection": "171/200 = 86% (80%-90%)",
+      "false_alarm_rate": "8/290 = 3% (1%-5%)",
+      "false_alarms": 8,
+      "families": 186,
+      "hard_benign": 90,
+      "hard_false_alarms": 8,
+      "malicious": 200,
+      "owasp": "LLM05",
+      "status": "partial"
+    },
+    {
+      "benign": 290,
+      "by_lang": {
+        "en": {
+          "detected": 132,
+          "malicious": 136
+        },
+        "ms": {
+          "detected": 62,
+          "malicious": 64
+        }
+      },
+      "category": "output_xss",
+      "detected": 194,
+      "detection": "194/200 = 97% (94%-99%)",
+      "false_alarm_rate": "0/290 = 0% (0%-1%)",
+      "false_alarms": 0,
+      "families": 143,
+      "hard_benign": 93,
+      "hard_false_alarms": 0,
+      "malicious": 200,
+      "owasp": "LLM05",
+      "status": "covered"
+    },
+    {
+      "benign": 20,
+      "by_lang": {
+        "en": {
+          "detected": 7,
+          "malicious": 18
+        },
+        "ms": {
+          "detected": 2,
+          "malicious": 2
+        }
+      },
+      "category": "secret_leak",
+      "detected": 9,
+      "detection": "9/20 = 45% (26%-66%)",
+      "false_alarm_rate": "0/20 = 0% (0%-16%)",
+      "false_alarms": 0,
+      "families": 15,
+      "hard_benign": 11,
+      "hard_false_alarms": 0,
+      "malicious": 20,
+      "owasp": "LLM02",
+      "status": "weak"
+    },
+    {
+      "benign": 20,
+      "by_lang": {
+        "en": {
+          "detected": 17,
+          "malicious": 17
+        },
+        "ms": {
+          "detected": 3,
+          "malicious": 3
+        }
+      },
+      "category": "tool_poisoning",
+      "detected": 20,
+      "detection": "20/20 = 100% (84%-100%)",
+      "false_alarm_rate": "0/20 = 0% (0%-16%)",
+      "false_alarms": 0,
+      "families": 9,
+      "hard_benign": 8,
+      "hard_false_alarms": 0,
+      "malicious": 20,
+      "owasp": "LLM01",
+      "status": "covered"
+    }
+  ],
+  "generated_by": "python -m agentwall.src.bench --format ui-json (do not edit by hand; a test fails if this file is out of date)",
+  "holdout": [
+    {
+      "benign": 32,
+      "by_lang": {
+        "en": {
+          "detected": 20,
+          "malicious": 23
+        },
+        "ms": {
+          "detected": 4,
+          "malicious": 5
+        }
+      },
+      "category": "injection_indirect",
+      "detected": 24,
+      "detection": "24/28 = 86% (69%-94%)",
+      "false_alarm_rate": "0/32 (at most 11% with 95% confidence)",
+      "false_alarms": 0,
+      "families": 14,
+      "hard_benign": 10,
+      "hard_false_alarms": 0,
+      "malicious": 28,
+      "owasp": "LLM01",
+      "status": "partial"
+    },
+    {
+      "benign": 20,
+      "by_lang": {
+        "en": {
+          "detected": 17,
+          "malicious": 18
+        },
+        "ms": {
+          "detected": 2,
+          "malicious": 2
+        }
+      },
+      "category": "output_path",
+      "detected": 19,
+      "detection": "19/20 = 95% (76%-99%)",
+      "false_alarm_rate": "0/20 (at most 16% with 95% confidence)",
+      "false_alarms": 0,
+      "families": 5,
+      "hard_benign": 10,
+      "hard_false_alarms": 0,
+      "malicious": 20,
+      "owasp": "LLM05",
+      "status": "covered"
+    },
+    {
+      "benign": 20,
+      "by_lang": {
+        "en": {
+          "detected": 18,
+          "malicious": 18
+        },
+        "ms": {
+          "detected": 2,
+          "malicious": 2
+        }
+      },
+      "category": "output_ssrf",
+      "detected": 20,
+      "detection": "20/20 (at least 84% with 95% confidence)",
+      "false_alarm_rate": "0/20 (at most 16% with 95% confidence)",
+      "false_alarms": 0,
+      "families": 6,
+      "hard_benign": 10,
+      "hard_false_alarms": 0,
+      "malicious": 20,
+      "owasp": "LLM05",
+      "status": "covered"
+    },
+    {
+      "benign": 20,
+      "by_lang": {
+        "en": {
+          "detected": 17,
+          "malicious": 17
+        },
+        "ms": {
+          "detected": 3,
+          "malicious": 3
+        }
+      },
+      "category": "output_xss",
+      "detected": 20,
+      "detection": "20/20 (at least 84% with 95% confidence)",
+      "false_alarm_rate": "0/20 (at most 16% with 95% confidence)",
+      "false_alarms": 0,
+      "families": 9,
+      "hard_benign": 10,
+      "hard_false_alarms": 0,
+      "malicious": 20,
+      "owasp": "LLM05",
+      "status": "covered"
+    },
+    {
+      "benign": 20,
+      "by_lang": {
+        "en": {
+          "detected": 10,
+          "malicious": 16
+        },
+        "ms": {
+          "detected": 3,
+          "malicious": 4
+        }
+      },
+      "category": "tool_poisoning",
+      "detected": 13,
+      "detection": "13/20 = 65% (43%-82%)",
+      "false_alarm_rate": "0/20 (at most 16% with 95% confidence)",
+      "false_alarms": 0,
+      "families": 10,
+      "hard_benign": 12,
+      "hard_false_alarms": 0,
+      "malicious": 20,
+      "owasp": "LLM01",
+      "status": "partial"
+    }
+  ],
+  "known_gaps": [
+    "Hidden instructions are found about 4 times in 10 on text the rules have not seen, with about 7 to 8 false alarms per 100 harmless documents.",
+    "A rephrased or politely worded attack, and an attack buried in the middle of a long document, are often missed.",
+    "Malay hidden-instruction detection found 4 of 25 attacks in the independent round; Indonesian attacks were not measured; Chinese is not covered.",
+    "Documentation, runbooks and security write-ups that quote attacks cause false alarms.",
+    "The helper model for hidden instructions is off: on unseen text it added almost nothing at its current settings.",
+    "Secret leaks and MCP manifest risks have small sample sets (20 each) and are weak or partial.",
+    "The Radar only sees what flows through the RedHand gateway. It never blocks: block mode does not exist until a measured gate is passed."
+  ],
+  "languages": [
+    {
+      "blind3": {
+        "attacks": 69,
+        "attacks_found": 30,
+        "harmless": 61,
+        "harmless_flagged": 5
+      },
+      "code": "en",
+      "name": "English",
+      "native_reviewed": false,
+      "note": "Rules and samples were written by the team and by outside authors. Nobody has formally reviewed them."
+    },
+    {
+      "blind3": {
+        "attacks": 25,
+        "attacks_found": 4,
+        "harmless": 53,
+        "harmless_flagged": 3
+      },
+      "code": "ms",
+      "name": "Bahasa Malaysia",
+      "native_reviewed": false,
+      "note": "Has its own rules and samples, written without a native speaker. The review is waiting. Hidden-instruction detection is weak."
+    },
+    {
+      "blind3": {
+        "attacks": 0,
+        "attacks_found": 0,
+        "harmless": 32,
+        "harmless_flagged": 2
+      },
+      "code": "id",
+      "name": "Bahasa Indonesia",
+      "native_reviewed": false,
+      "note": "No Indonesian-specific rules. The only independent samples (round 3) were all harmless, so attack detection is not measured at all."
+    },
+    {
+      "blind3": null,
+      "code": "zh",
+      "name": "Chinese (Simplified)",
+      "native_reviewed": false,
+      "note": "Not covered: no rules and no samples. Do not assume anything here is detected."
+    }
+  ],
+  "owasp": [
+    {
+      "item": "LLM01",
+      "name": "Prompt Injection",
+      "note": "",
+      "status": [
+        "injection_indirect: partial",
+        "tool_poisoning: partial"
+      ]
+    },
+    {
+      "item": "LLM02",
+      "name": "Sensitive Information Disclosure",
+      "note": "",
+      "status": [
+        "secret_leak: weak"
+      ]
+    },
+    {
+      "item": "LLM03",
+      "name": "Supply Chain",
+      "note": "Only the MCP manifest audit touches this (see manifest_risk). Package and model provenance are not checked.",
+      "status": []
+    },
+    {
+      "item": "LLM04",
+      "name": "Data and Model Poisoning",
+      "note": "Not covered: RedHand does not see training or fine-tuning data.",
+      "status": []
+    },
+    {
+      "item": "LLM05",
+      "name": "Improper Output Handling",
+      "note": "",
+      "status": [
+        "output_path: covered",
+        "output_ssrf: covered",
+        "output_xss: covered"
+      ]
+    },
+    {
+      "item": "LLM06",
+      "name": "Excessive Agency",
+      "note": "",
+      "status": [
+        "manifest_risk: partial"
+      ]
+    },
+    {
+      "item": "LLM07",
+      "name": "System Prompt Leakage",
+      "note": "Not measured here. System-prompt canaries are planned (Phase 4 M5).",
+      "status": []
+    },
+    {
+      "item": "LLM08",
+      "name": "Vector and Embedding Weaknesses",
+      "note": "Not covered: RAG checks are deferred (they need customer integration).",
+      "status": []
+    },
+    {
+      "item": "LLM09",
+      "name": "Misinformation",
+      "note": "Not covered: outside what a control layer can judge.",
+      "status": []
+    },
+    {
+      "item": "LLM10",
+      "name": "Unbounded Consumption",
+      "note": "Budget Guard caps daily tool calls (tested elsewhere); not measured by this benchmark.",
+      "status": []
+    }
+  ],
+  "status_rules": {
+    "covered": "detection at least 90% and false alarms at most 1%",
+    "insufficient data": "fewer than 20 samples on one side",
+    "not covered": "detects nothing",
+    "partial": "detection at least 50% and false alarms at most 5%",
+    "weak": "detects something but misses the partial bar"
+  },
+  "total_samples": 2312
+}

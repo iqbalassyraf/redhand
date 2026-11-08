@@ -8,11 +8,14 @@ Phase 4 avoids unmeasured claims: every new detector must move these numbers, an
 ```
 uv run python -m agentwall.src.bench                      # text table
 uv run python -m agentwall.src.bench --format markdown --out docs/security/coverage-matrix.md
+uv run python -m agentwall.src.bench --format ui-json --out apps/redhand-ui/public/coverage.json   # the dashboard's Coverage page
 uv run python -m agentwall.src.bench --check agentwall/bench/baseline.json   # exit 1 if any category got worse
 uv run python -m agentwall.src.bench --update-baseline agentwall/bench/baseline.json
 ```
 The test suite runs the same checks, so CI fails if a change makes a category worse, or if the committed
-`baseline.json` or `coverage-matrix.md` differ from a fresh run.
+`baseline.json`, `coverage-matrix.md` or the dashboard's `apps/redhand-ui/public/coverage.json` differ from a fresh run.
+
+**Adding a blind round:** a blind round is written down once, in `BLIND_ROUNDS` in `agentwall/src/bench/report.py` (counts copied from its frozen record in `docs/security/blind-round-N.md`; the page and the Markdown both print it), together with its per-language counts. Then regenerate the matrix and `coverage.json` as above. A test checks that the intervals follow from the counts and that rounds 1 and 2 still print what their records said.
 
 ## Changing detectors or the corpus
 1. Make the change, run the benchmark, and read the per-category numbers.

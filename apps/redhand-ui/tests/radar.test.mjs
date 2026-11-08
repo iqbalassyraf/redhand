@@ -63,3 +63,40 @@ test("day counts are clamped into range and long text is cut for display", () =>
   assert.equal(shorten("a".repeat(100)).length, 60);
   assert.equal(shorten("short"), "short");
 });
+
+import { isCoverageData, measured, statusStyle } from "../src/lib/coverage.ts";
+
+const COVERAGE = JSON.parse(readFileSync(new URL("../public/coverage.json", import.meta.url), "utf8"));
+
+test("the committed coverage file has the shape the page needs", () => {
+  assert.equal(isCoverageData(COVERAGE), true);
+  assert.equal(isCoverageData(null), false);
+  assert.equal(isCoverageData({}), false);
+  assert.equal(isCoverageData({ ...COVERAGE, languages: "x" }), false);
+  assert.equal(isCoverageData({ ...COVERAGE, corpus: 5 }), false);
+  assert.equal(isCoverageData({ ...COVERAGE, languages: [{ code: "en" }] }), false);
+});
+
+test("no language is shown as reviewed, Chinese is not covered, and Indonesian attacks are not measured", () => {
+  const byCode = Object.fromEntries(COVERAGE.languages.map((l) => [l.code, l]));
+  assert.deepEqual(Object.keys(byCode), ["en", "ms", "id", "zh"]);
+  for (const l of COVERAGE.languages) assert.equal(l.native_reviewed, false, l.code);
+  assert.match(byCode.zh.note, /Not covered/);
+  assert.equal(byCode.zh.blind3, null);
+  assert.equal(byCode.id.blind3.attacks, 0);
+  assert.equal(measured(byCode.id.blind3.attacks_found, byCode.id.blind3.attacks), "not measured");
+  assert.equal(measured(30, 69), "30 of 69");
+});
+
+test("statuses are shaded cautiously and an unknown status is shown as it is", () => {
+  assert.equal(statusStyle("covered").label, "covered");
+  assert.match(statusStyle("weak").classes, /B42318/);
+  assert.equal(statusStyle("something new").label, "something new");
+  assert.match(statusStyle("something new").classes, /606060/);
+});
+
+test("the coverage file lists the known gaps and the three frozen blind rounds", () => {
+  assert.ok(COVERAGE.known_gaps.length >= 5);
+  assert.deepEqual(COVERAGE.blind_rounds.map((r) => r.key), ["round1", "round2", "round3"]);
+  assert.ok(JSON.stringify(COVERAGE).length < 40_000);
+});
