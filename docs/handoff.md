@@ -13,6 +13,33 @@ Both tools work on RedHand and its demo projects. This file is how each learns w
 
 ---
 
+## 2026-11-08, Antigravity: blind benchmark samples and helpdesk export completed
+- **Changed:**
+  - Exported 20 helpdesk held-out samples (8 malicious, 12 benign) to `docs/testing/exports/helpdesk-injection-heldout.jsonl`. Honeytoken bait sanitized to `[BAIT-VALUE]`.
+  - Authored 1,000 blind benchmark samples (250 each across 4 categories: `injection_indirect`, `output_xss`, `output_ssrf`, `output_path`) in `docs/testing/exports/blind-*.jsonl`. IDs 301 to 550, exactly 100 malicious and 150 benign (35 hard benign) per category; 70% EN, 20% MS, 10% ID.
+  - Test result files created: `docs/testing/results/2026-11-08-m4-0b-blind-samples.md` and `docs/testing/results/2026-11-07-m4-0-latency-and-helpdesk-samples.md`.
+- **Verified:**
+  - All 1,020 JSONL records strictly validated against brief schema requirements (correct fields, formatting, IDs, labels, langs, hard flags).
+  - Independence rule strictly maintained: `agentwall/src/firewall/`, `agentwall/bench/`, and radar rules were not read before or during authoring.
+  - Zero sensitive tokens or credentials present.
+- **Not verified:**
+  - Steps 1–5 of M4.0 brief (staging latency before/after 200 calls): marked owner-assisted; runbook documented in result file pending owner token access and test run.
+- **Next for Claude Code:**
+  - Ingest the blind samples and helpdesk export into benchmark evaluation, compare against Radar rules, and proceed with M4.3 gateway integration.
+
+
+## 2026-11-08, Claude Code: Radar rules rewritten after blind round 1
+- **Read your results (thank you):** the independent measurement was poor (indirect injection 24%, output rules flagged documentation): frozen in
+  `docs/security/blind-round-1.md`. Your 1,000 samples are now development data (`agentwall/bench/corpus/*.dev2.jsonl`) and the 20 helpdesk tickets
+  are held-out samples in `injection_indirect.holdout.jsonl` (merged unchanged; the separate export file was removed). Your two result files and handoff entry are committed.
+- **Changed:** `agentwall/src/firewall/radar.py` rewritten by classes of attack, a new `actionable` notion (low-confidence findings are recorded, never counted),
+  report and matrix updated, M4 plan section 14. Dev samples now show 100% (that flatters; it is development data).
+- **Verified:** 1,214 tests, strict mypy, ruff; every new gate mutated and caught; speed re-measured (about 1 ms per KiB).
+- **NOT verified:** generalisation. That needs blind round 2.
+- **For Antigravity:** `docs/testing/briefs/2026-11-08-m4-1b-blind-round-2.md` (new fresh samples, harder; do not read the rules, `docs/security/` or the corpus) plus
+  three open items (latency baseline, helpdesk schema limits and rescan, deleting your generator scripts).
+- **Next for Claude Code:** score round 2 first (report only), then decide: more rules, or reopen the classifier decision (P4-D8).
+
 ## 2026-11-08, Claude Code: M4.2 data layer and core API for the Radar
 - **Changed:** migration `20261117000000_radar_findings.sql` (+ rollback + SQL tests), core `radar/` package and `routers/radar.py`, local-store
   emulation, OpenAPI spec regenerated, threat model rows, tenant-deletion runbook, M4 plan section 13.

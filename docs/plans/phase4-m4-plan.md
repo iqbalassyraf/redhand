@@ -262,3 +262,28 @@ confirmation, reason), `/internal/v1/findings` (service token), a Telegram alert
 **Not built (next):** the gateway side (M4.3: context fields for modes and suppressions, the scan hook, the reporter, `would_block`),
 the dashboard (M4.4), the block gate (M4.6). Deploy order for M4.2 alone is migration then core; the gateway is unaffected.
 **Decision made while building:** an oversized occurrence count in a report is clamped to 1,000 rather than treated as 1.
+
+## 14. M4.1b status (2026-11-08): the rules rewritten after blind round 1
+**What happened:** the independent measurement (`docs/security/blind-round-1.md`, frozen) showed 24% indirect-injection detection and false
+alarms on documentation. Decision D11 (owner, 2026-11-08): improve the rules using those 1,000 samples as development data, then measure
+again on a fresh blind round. The 20 helpdesk tickets stayed held out and were never read while improving the rules.
+**What changed (classes of attack, not individual samples):**
+- *Injection:* a "directed at the agent" signal (an imperative or an address to the AI); broader lexicons for secrets, personal data, reveal
+  targets, risky actions and exfiltration verbs; bracketed or commented directives that carry a call (`[SYSTEM: fn(...)]`, `<!-- Trigger: fn() -->`);
+  policy-void claims ("safeguards suspended by ..."); authority plus urgency demands for sensitive data; link or image exfiltration with
+  placeholder parameters; Malay and Indonesian verbs, markers and morphology; sentences that talk ABOUT attacks or attackers are descriptions.
+- *Output:* markup inside a code span is not live (recorded as low confidence); escaped markup (`&lt;script&gt;`) is no longer decoded; more
+  address forms (network schemes, tunnel and collector domains, rebinding names, data-carrying addresses, `file://` as both a path and an address
+  problem); system files when the text asks for them; documentation headers lower address and path findings to low confidence.
+- *Confidence:* a finding now has `actionable` = not low confidence. Low-confidence findings are still recorded for the owner and never alert or
+  count as a detection. Documentation-style text, quoted attacks, lone markers and code-span markup are recorded as low.
+**Numbers (read with care):** dev samples (which now include the blind samples) 100% detected with 0 false alarms in all four categories: that
+flatters the rules and proves nothing. Held-out (the author's own set plus the helpdesk tickets): injection 23 of 28 with 0 of 32 false alarms.
+**The improvement is NOT measured on independent data.** That is blind round 2 (`docs/testing/briefs/2026-11-08-m4-1b-blind-round-2.md`).
+**Known limits, by design:** an attacker can prepend a documentation-style header to lower the ALERT of an address or path finding (live markup
+and the injection rules do not use the header); wrapping a payload in a code span stops the XSS alert (a renderer shows it as text); a rephrased
+attack still gets through; a long result is read at both ends only (16 KiB).
+**Speed (local, pure Python):** 1 KiB about 1 ms, 4 KiB about 4 ms, 16 KiB about 17 ms (p50); the worst adversarial 16 KiB inputs 25 to 35 ms.
+The rewrite roughly doubled the cost per KiB compared with M4.1 (about 0.8 to 1 ms per KiB, now 1 ms); prefilter and combined patterns bought most of it back.
+**Decision after round 2:** if indirect injection is still well below useful on blind data, reopen P4-D8 (a measured classifier) with the numbers.
+

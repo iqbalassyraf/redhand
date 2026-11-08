@@ -26,6 +26,15 @@ OWASP_ITEMS: tuple[tuple[str, str, str], ...] = (
 )
 
 
+# Frozen record of blind round 1 (docs/security/blind-round-1.md). Not recomputed: the samples became development data afterwards.
+BLIND_ROUND_1: tuple[tuple[str, str, str, str], ...] = (
+    ("injection_indirect", "24/100 = 24% (17% to 33%)", "5/150 = 3% (1% to 8%)", "5/35"),
+    ("output_xss", "98/100 = 98% (93% to 99%)", "13/150 = 9% (5% to 14%)", "13/35"),
+    ("output_ssrf", "76/100 = 76% (67% to 83%)", "4/150 = 3% (1% to 7%)", "4/35"),
+    ("output_path", "66/100 = 66% (56% to 75%)", "7/150 = 5% (2% to 9%)", "7/35"),
+)
+
+
 def _pct(x: float) -> str:
     return f"{x * 100:.0f}%"
 
@@ -150,6 +159,15 @@ def render_markdown(ev: Evaluation, digest: str) -> str:
             "independently written samples (plan `docs/plans/phase4-m4-plan.md`, section 11.3) and the status rule moves to the upper "
             "confidence bound at M4.6.",
         ]
+    lines += [
+        "", "## Independent blind round 1 (frozen: the rules BEFORE they were improved)", "",
+        "1,000 samples written by a different author (Antigravity) from a brief with no rule text, measured once on the M4.1 rules; the "
+        "full record is `docs/security/blind-round-1.md`. Those samples are now development data, so these numbers can only be "
+        "refreshed by a new blind round (round 2: not run yet). The improvement since is therefore **not yet measured on independent data**.",
+        "", "| Category | Detected (95% interval) | False alarms | False alarms on hard benign |", "|---|---|---|---|",
+        *(f"| `{c}` | {d} | {fa} | {hb} |" for c, d, fa, hb in BLIND_ROUND_1),
+        "",
+    ]
     lines += ["", "### Detection by language (dev malicious samples)", "", "| Category | English | Bahasa Malaysia |", "|---|---|---|"]
     for c in ev.categories.values():
         en, ms = c.by_lang.get("en", (0, 0)), c.by_lang.get("ms", (0, 0))
