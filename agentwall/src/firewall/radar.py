@@ -27,7 +27,7 @@ import base64
 import bisect
 import binascii
 from collections.abc import Callable, Iterable, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 import html
 import ipaddress
 import itertools
@@ -62,12 +62,21 @@ class Finding:
     evasion: tuple[str, ...]  # "invisible", "lookalike", "leet", "encoded", "hidden"
     reason: str  # fixed wording per rule, never taken from the text
 
+    @property
+    def actionable(self) -> bool:
+        """Recorded for the owner either way; only a finding that is not low confidence is alerted on or counted as a detection."""
+        return self.confidence != "low"
+
 
 @dataclass(frozen=True, slots=True)
 class ScanReport:
     findings: tuple[Finding, ...]
     truncated: bool  # part of the result was past the scan budget and was not scanned
     skipped_binary: int  # large base64-looking values (images, files) that were deliberately not read as text
+
+    @property
+    def actionable(self) -> tuple[Finding, ...]:
+        return tuple(f for f in self.findings if f.actionable)
 
 
 @dataclass(frozen=True, slots=True)
@@ -130,7 +139,17 @@ _SPACE = re.compile(r"\s+")
 _LEET_WORD = re.compile(r"(?<![\w])(?=[a-z0-9]*[a-z])(?=[a-z0-9]*[013457])[a-z0-9]{3,24}(?![\w@.])")
 _BASE64 = re.compile(r"(?<![A-Za-z0-9+/_-])[A-Za-z0-9+/_-]{24,}={0,2}(?![A-Za-z0-9+/_=-])")
 _HEX = re.compile(r"(?<![0-9a-fA-F])(?:[0-9a-fA-F]{2}){16,}(?![0-9a-fA-F])")
+# Only numeric entities (&#106;) are decoded. &lt; and &gt; are left as they are: escaped markup is shown as text, not run.
+_NUMERIC_ENTITY = re.compile(r"&#[xX]?[0-9a-fA-F]{1,7};?|&(?:colon|tab|newline);")
 _BINARY_BLOB = re.compile(r"[A-Za-z0-9+/_-]+={0,2}")
+
+
+_DOC_DOWNGRADE = frozenset({"RAD-OUT-005", "RAD-OUT-006", "RAD-OUT-007"})
+
+
+def _is_doc(clean: str) -> bool:
+    """Text that presents itself as documentation: a title-style header, and not a command ("Query the configuration: ...")."""
+    return bool(_DOC_HEADER.match(clean)) and not _DIRECTED_START.match(clean)
 
 
 @dataclass(frozen=True, slots=True)
@@ -142,6 +161,7 @@ class Prepared:
     markup: str  # for output rules: entities and percent-escapes decoded, case kept
     evasion: tuple[str, ...]
     has_bidi: bool
+    doc: bool = False  # presents itself as documentation (a title-style header): findings are recorded as low confidence
 
 
 def _decode_blobs(text: str) -> list[str]:
@@ -187,108 +207,205 @@ def prepare(text: str) -> Prepared:
     decoded = tuple(_decode_blobs(stripped))
     markup = stripped
     for _ in range(2):  # a value that is escaped twice is still one value
-        again = unquote(html.unescape(markup))
+        again = unquote(_NUMERIC_ENTITY.sub(lambda m: html.unescape(m.group(0)), markup))
         if again == markup:
             break
         markup = again
-    return Prepared(clean, leet, hidden, decoded, markup, tuple(evasion), bool(_BIDI.search(nfkc)))
+    return Prepared(clean, leet, hidden, decoded, markup, tuple(evasion), bool(_BIDI.search(nfkc)), _is_doc(clean))
 
 
-# --- the injection analysis (features per sentence, rules over a small window) ---------------------------------------
+# --- the injection analysis (features per sentence, rules over a small window) --------------------------
 
-_VERB_OVR = r"(?:ignore|disregard|forget|override|bypass|discard|abandon|neglect|set aside|put aside|overrule|supersede|drop)"
-_PRIOR = r"(?:all|any|every|your|the|its|these|those|previous|prior|earlier|above|preceding|existing|old|original|initial|current|safety|security|system|my|our|other)"
-_OBJ_STRONG = r"(?:instructions?|prompts?|directives?|guidance|programming|training|guidelines|orders|system (?:message|prompt))"
-_OBJ_WEAK = r"(?:rules|polic(?:y|ies)|restrictions|safeguards|constraints|limits|guardrails|filters|protocols)"
-_WEAK_NEEDS = r"(?=(?: \w+){0,3} (?:your|all|any|every|previous|prior|earlier|safety|security|above|existing|its)\b)"
-_RECEIVED = r"(?:were told|were given|have been given|have been told|received|got|learned|know|were taught|were instructed|were programmed|said)"
+def _alt(*words: str) -> str:
+    return "(?:" + "|".join(words) + ")"
+
+
+_VERB_OVR = _alt("ignore", "disregard", "forget", "override", "bypass", "discard", "abandon", "neglect", "set aside", "put aside",
+                 "overrule", "supersede", "drop", "stop following", "stop obeying")
+_PRIOR = _alt("all", "any", "every", "your", "the", "its", "these", "those", "previous", "prior", "earlier", "above", "preceding", "existing",
+              "old", "original", "initial", "current", "safety", "security", "system", "my", "our", "other", "customer", "store", "service")
+_OBJ_STRONG = _alt("instructions?", "prompts?", "directives?", "guidance", "programming", "training", "guidelines", "orders", r"system (?:message|prompt)")
+_OBJ_WEAK = _alt("rules", r"polic(?:y|ies)", "restrictions", "safeguards", "constraints", "limits", "guardrails", "filters", "protocols",
+                 "boundaries", "ethics", r"(?:isolation|safety|security|content) (?:rules|policies|guidelines|checks)")
+_WEAK_NEEDS = r"(?=(?: [\w']+){0,4} (?:your|all|any|every|previous|prior|earlier|safety|security|above|existing|its|customer|isolation)\b)"
+_RECEIVED = _alt("were told", "were given", "have been given", "have been told", "received", "got", "learned", "know", "were taught",
+                 "were instructed", "were programmed", "said")
 
 _OVERRIDE_EN = (
     re.compile(rf"\b{_VERB_OVR}\b(?: {_PRIOR}){{1,4}} {_OBJ_STRONG}\b"),
-    re.compile(rf"\b{_VERB_OVR}\b{_WEAK_NEEDS}(?: {_PRIOR}){{1,4}} {_OBJ_WEAK}\b"),
+    re.compile(rf"\b{_VERB_OVR}\b{_WEAK_NEEDS}(?: {_PRIOR}){{1,4}}(?: [a-z']{{2,15}}){{0,2}} {_OBJ_WEAK}\b"),
+    re.compile(rf"\b{_VERB_OVR}\b(?: {_PRIOR}){{1,4}}(?: [a-z']{{2,15}}){{1,2}} {_OBJ_STRONG}\b"),
     re.compile(rf"\b{_VERB_OVR}\b (?:everything|anything|whatever|all)(?: \w+){{0,2}} (?:that )?(?:you|u)(?: have| had)?(?: been)? {_RECEIVED}\b"),
     re.compile(r"\b(?:new|updated|revised) (?:instructions?|directives?|orders)(?: from [\w ]{3,30})?:? (?:ignore|disregard|you (?:must|will|are to))"),
     re.compile(rf"\b(?:supersedes?|overrides?|replaces?|takes? precedence over)(?: {_PRIOR}){{0,3}} {_OBJ_STRONG}\b"),
     re.compile(rf"\b(?:supersedes?|overrides?|replaces?|takes? precedence over)(?: {_PRIOR}){{1,3}} {_OBJ_WEAK}\b"),
+    re.compile(r"(?:^|[.:;!,] ?)(?:ignore|disregard|bypass)(?: [a-z']{2,15}){1,3} (?:rules|policies|guidelines|restrictions|constraints|instructions|limits)\b"),
+    re.compile(r"(?:^|[.:;!] ?)(?:override|overrule) ?[:!\-]"),
+    re.compile(r"\byou are (?:now |hereby )?(?:forbidden|prohibited|not allowed|no longer allowed|no longer permitted) (?:from|to)\b"),
+    re.compile(r"\bbypass(?: all| any| the)? (?:authentication|authorization|authorisation|verification|security|checks?|otentikasi|autentikasi)\b"),
+    re.compile(r"\bstop (?:processing|answering|responding|following)\b[^.]{0,60}\b(?:ignore|disregard|bypass)\b"),
+    re.compile(r"\bthe (?:user )?(?:prompt|request|message|conversation) (?:above|before) (?:was|is|has been) (?:cancell?ed|void|a test|invalid)\b"),
 )
 _OVERRIDE_MS = (
-    re.compile(r"\b(?:abaikan|lupakan|ketepikan|abai|batalkan|langkau|tolak ke tepi)(?: semua| segala| setiap| apa yang)?(?: \w+){0,3} (?:arahan|peraturan|panduan|polisi|prompt|sekatan)\b"),
+    re.compile(r"\b(?:abaikan|lupakan|ketepikan|abai|batalkan|langkau|tolak ke tepi|kesampingkan)(?: semua| segala| setiap| sebarang| apa yang)?(?: [a-z']{2,15}){0,3} (?:arahan|peraturan|panduan|polisi|prompt|sekatan|had|batasan|instruksi|perintah|aturan|kebijakan|pedoman|ketentuan|larangan)\b"),
     re.compile(r"\b(?:abaikan|lupakan|ketepikan)(?: semua| segala)? (?:yang|apa yang) (?:anda|kamu) (?:telah )?(?:diberitahu|diberi|terima|pelajari)\b"),
+    re.compile(r"\bjangan (?:ikut|patuhi|turut|ikuti|menuruti)\b[^.]{0,25}\b(?:peraturan|arahan|polisi|panduan|aturan|instruksi)\b"),
+    re.compile(r"\b(?:semua |segala )?(?:sekatan|batasan|had|peraturan|larangan|kebijakan)(?: \w+){0,2} (?:telah |sudah )?(?:dibatalkan|dilucutkan|dimansuhkan|dibuang|dinonaktifkan|dicabut|ditangguhkan)\b"),
 )
 _PERSONA = (
     re.compile(r"\byou are now\b(?: in)?(?: an?| the)?(?: \w+){0,2} (?:mode|dan|admin|administrator|unrestricted|unfiltered|uncensored|jailbroken|root|god|developer)\b"),
-    re.compile(r"\b(?:developer|debug|god|jailbreak|admin|sudo|unrestricted|dan) mode\b"),
+    re.compile(r"\b(?:developer|debug|god|jailbreak|admin|sudo|unrestricted|dan|maintenance|sandbox|test) mode\b"),
     re.compile(r"\bdo anything now\b"),
     re.compile(r"\b(?:act|behave|respond) as (?:an? |the )?(?:unrestricted|unfiltered|uncensored|jailbroken|root|admin|administrator|system)\b"),
     re.compile(r"\bpretend (?:that )?(?:you are|to be|you're)(?: an?| the)?(?: \w+){0,3} (?:owner|admin|administrator|system|root|manager|ceo|director)\b"),
     re.compile(r"\bfrom now on,? you (?:are|will be|must|work for|obey|only|shall)\b"),
     re.compile(r"\bwithout (?:any )?(?:restrictions|limits|filters|rules|guardrails)\b.{0,60}\b(?:you|do|export|print|reveal|delete)\b"),
-    re.compile(r"\b(?:mulai sekarang|sekarang) (?:anda|kamu) (?:ialah|adalah|akan menjadi)\b"),
-    re.compile(r"\b(?:tanpa|tiada) (?:sebarang )?sekatan\b"),
+    re.compile(r"\byou are (?:now )?(?:entering|acting|operating|working|playing|becoming)\b[^.]{0,30}\b(?:mode|sandbox|persona|tester|admin|administrator|root|unrestricted|unconstrained|unfiltered|auditor|bot)\b"),
+    re.compile(r"\bforget (?:that )?you (?:are|were)\b|\bswitch (?:your |to )?(?:persona|role|mode|identity)\b"),
+    re.compile(r"\byou are (?:now )?(?:an? )?(?:unconstrained|unrestricted|unfiltered|uncensored|unbound)\b|\byou are now \w{3,20}(?:bot|gpt|ai)\b"),
+    re.compile(r"\byou (?:do not|don't|have no|no longer) (?:follow|have|obey)(?: any)? (?:ethics|policies|rules|restrictions|limits|guidelines|safety|store policies)"),
+    re.compile(r"\b(?:security|safety|policy|content) (?:guidelines|rules|policies|restrictions|limits)(?: \w+){0,2} (?:do not|don't|no longer) apply\b"),
+    re.compile(r"\b(?:mulai sekarang|sekarang) (?:anda|kamu|kau) (?:ialah|adalah|akan menjadi|tidak|bukan)\b|\banda sekarang (?:berada )?(?:dalam|ialah|adalah|menjadi)\b[^.]{0,30}\b(?:mod|pentadbir|admin|tanpa|asisten|pembantu)"),
+    re.compile(r"\b(?:tanpa|tiada) (?:sebarang )?(?:sekatan|batasan)\b|\b(?:lupakan|abaikan) peran(?:mu| anda| kamu)?\b|\btidak (?:memiliki|punya) (?:batasan|aturan|kebijakan)\b"),
 )
 _MARKER = (
-    re.compile(r"</?\s*(?:system|instructions?|admin|assistant|tool_result|function_results?|im_start|im_end|sys|sistem|arahan)\s*>"),
+    re.compile(r"</?\s*(?:[a-z_]*(?:system|instruction|admin|override|directive|tool_result|function_results?|im_start|im_end|sys|sistem|arahan)[a-z_]*|assistant)\s*>"),
     re.compile(r"<\|(?:im_start|im_end|system|assistant|user|endoftext)\|>"),
     re.compile(r"<<\s*/?sys\s*>>|\[/?inst\]"),
     re.compile(r"(?:^|[\s>\]#*])\[(?:system|admin|sistem|assistant)\]"),
-    re.compile(r"#{2,}\s*(?:system|new instructions?|instructions?|admin)(?: \w+){0,2}\s*#{0,}"),
-    re.compile(r"\bsystem (?:override|note for the (?:model|ai|assistant)|prompt:|message:)"),
-    re.compile(r"\b(?:begin|end) (?:system|hidden|secret) (?:prompt|instructions?)\b"),
+    re.compile(r"#{2,}\s*(?:system|new instructions?|instructions?|admin|official|arahan|instruksi|directive)(?: \w+){0,3}\s*:?#{0,}"),
+    re.compile(r"(?:^|[\s#>\[*:!])system (?:override|note for the (?:model|ai|assistant)|prompt:|message:)(?: ?[:#\]!]|$)"),
+    re.compile(r"\b(?:begin|end)[ _](?:system|hidden|secret|admin)[ _](?:prompt|instructions?|message)\b"),
     re.compile(r"(?:^|[\s>])system: ?(?:you|call|run|ignore|send|forward|delete|execute|reveal|disregard)\b"),
-    re.compile(r"<!--[^>]{0,400}\b(?:assistant|ai agent|ai assistant|llm|agent|model)\b[^>]{0,400}-->"),
+    re.compile(r"\bsystem (?:notification|command|alert|directive|notice|instruction)s? ?:"),
+    re.compile(r"<!--[^>]{0,400}\b(?:assistant|ai agent|ai assistant|ai instruction|llm|agent|model|trigger)\b[^>]{0,400}-->"),
     re.compile(r"\[//\]: ?# ?\([^)]{0,300}\b(?:ai|agent|assistant|model)s?\b"),
 )
-_SENSITIVE_OBJ = (
-    r"(?:api[ _-]?keys?|access[ _-]?tokens?|session[ _-]?(?:tokens?|ids?|cookies?)|credentials?|passwords?|secrets?|private keys?|"
-    r"system prompt|hidden (?:instructions?|prompt|configuration)|initial instructions|chat history|conversation(?: history| summary)?|"
-    r"address book|contacts?|customer (?:list|data|records|emails)|database|ledger|kata laluan|kunci api|sejarah perbualan|senarai pelanggan|pangkalan data)"
+# A bracketed or commented directive that carries a call: [SYSTEM: send_email(...)], <!-- Trigger: drop_database(...) -->, [ARAHAN_SISTEM: panggil request_refund(...)].
+_WRAPPER = re.compile(
+    r"(?:\[|<!--|\{)[^\]}>]{0,40}?(?:system|admin|sistem|arahan|mesej|instruksi|instruction|perintah|tindakan|trigger|invoke|hook|command|action|automation|call|tool|official|rasmi|resmi)"
 )
+_WRAPPER_CALL = re.compile(
+    r"(?:\[|<!--|\{)[^\]}>]{0,80}?\b[a-z][a-z0-9]*(?:_[a-z0-9]+)+\s*\("
+)
+
+def _combine(patterns: Iterable[re.Pattern[str]]) -> re.Pattern[str]:
+    """One compiled alternation for a group of patterns, so a sentence is scanned once per group instead of once per pattern."""
+    return re.compile("|".join(f"(?:{p.pattern})" for p in patterns))
+
+
+_OVERRIDE_ANY = (_combine(_OVERRIDE_EN), _combine(_OVERRIDE_MS))
+_PERSONA_ANY = (_combine(_PERSONA),)
+_MARKER_ANY = _combine(_MARKER)
+
+_SECRET_OBJ = (
+    r"(?:conversation(?: history| summary| log)?|chat (?:history|logs?)|api[ _-]?keys?|master keys?|access[ _-]?tokens?|bearer tokens?|auth(?:entication)? (?:tokens?|headers?)|session[ _-]?(?:tokens?|ids?|cookies?)|"
+    r"credentials?|passwords?|passwd|secrets?|secret (?:keys?|tokens?)|private keys?|credit card(?: tokens?| details| numbers?)?|card numbers?|"
+    r"environment variables?|env vars?|kata laluan|kunci (?:api|rahsia)|kunci rahsia api|token rahsia|katasandi|kata sandi|kunci api)"
+)
+_PII_OBJ = (
+    r"(?:(?:customer|customers'|customer's|user|users'|user's|client|clients'|pelanggan|pengguna|semua|all|every|seluruh)(?: \w+){0,2} (?:emails?|e-mails?|email addresses|addresses|phone numbers?|telephone numbers?|nombor telefon|nomor telepon|"
+    r"(?:ip )?addresses|(?:shipping |home |billing )?address|personal (?:data|information|details)|data peribadi|maklumat peribadi|data pribadi|identity numbers?|nric|kad pengenalan|nomor ktp|daftar nomor|senarai pelanggan|customer list|customer data|records|data)|"
+    r"(?:nombor telefon|nomor telepon|alamat|emel|email|data|maklumat|senarai(?: penuh)?|nama|rekod) (?:peribadi |penuh |lengkap )?(?:pelanggan|pengguna)|senarai (?:penuh )?(?:alamat|nombor|data|emel)|"
+    r"personal (?:data|information)|maklumat peribadi|data peribadi|profit margins?|wholesale costs?|supplier costs?|customer (?:list|database)|transaction data|data transaksi)"
+)
+_REVEAL_TARGET = (
+    r"(?:system prompts?|prompt template|(?:developer|initial|original|hidden|secret)(?: setup)?(?: prompts?| instructions?| configuration| config| messages?)|operational limits|"
+    r"instructions? (?:you were|you have been|you've been|given to you)|(?:your|the) (?:full |complete |entire |hidden |initial |system |original )?(?:instructions?|prompt|configuration|guidelines|rules)|"
+    r"(?:text|everything|content|conversation|messages?) (?:above|before)|context window|arahan (?:sistem|asal|tersembunyi)|teks arahan|prompt sistem|instruksi sistem|konfigurasi awal|pengaturan awal)"
+)
+_REVEAL_VERB = _alt("reveal", "print", "show", "output", "repeat", "display", "echo", "quote", "summari[sz]e", "list", "paste", "dump", "share", "leak", "disclose",
+                    "give", "tell", "provide", "write out", "recite", "cetak", "paparkan", "tunjukkan", "keluarkan", "dedahkan", "tampilkan", "bocorkan",
+                    "sebutkan", "senaraikan", "salin", "beritahu", "ceritakan")
 _BULK_OBJ = r"(?:(?:all|every|each|full|entire|complete|whole)(?: \w+){0,2} (?:files?|folders?|documents?|records|messages?|emails?|data|contracts?|history|text|users?|customers?)|semua (?:fail|mesej|rekod|data|dokumen))"
-_EXFIL_VERB = r"(?:send|forward|email|e-mail|mail|post|upload|copy|append|paste|leak|export|exfiltrate|transmit|submit|fetch|hantar|e-melkan|salin|muat naik|eksport|kirim)"
-_DESTINATION = re.compile(
-    r"(?:https?://[^\s'\"<>]+|[\w.+-]+@[\w-]+(?:\.[\w-]+)+|\b(?:third[- ]party|external|remote|shared) (?:server|service|folder|drive|address)\b|"
-    r"\bthe (?:address|link|url) (?:below|in the footer|at the bottom)\b|\b(?:alamat|pautan) (?:di|pada) (?:bahagian )?(?:bawah|footer|hujung)\b|\bshared (?:folder|drive)\b|\bbcc:)"
+_EXFIL_VERB = _alt("send", "forward", "email", "e-mail", "mail", "post", "upload", "copy", "append", "paste", "leak", "export", "exfiltrate", "transmit",
+                   "submit", "fetch", "steal", "extract", "embed", "include", "attach", "insert", "add", "write", "replace", "hantar(?:kan)?", "e-melkan",
+                   "salin", "muat naik", "eksport", "kirim(?:kan)?", "sertakan", "masukkan", "laporkan", "curi", "ambil", "tulis", "bocorkan", "kemukakan")
+_INBAND = re.compile(
+    r"\b(?:reply|response|answer|message|output|link|url|query (?:parameter|string)|image|alt text|survey|feedback|footer|signature|jawapan|balasan|mesej|pautan|tautan|"
+    r"dns request|dns query|header|hujung (?:setiap )?mesej|ujung)\b"
 )
+_DESTINATION = re.compile(
+    r"(?:https?://[^\s'\"<>]+|\b[\w.-]+\.(?:com|net|org|io|my|id|xyz|top|ru|cn|tk|co|info)\b|\*\.[\w.-]+|[\w.+-]+@[\w-]+(?:\.[\w-]+)+|\b(?:third[- ]party|external|remote|shared|outside) (?:server|service|folder|drive|address|endpoint)\b|"
+    r"\bthe (?:address|link|url) (?:below|in the footer|at the bottom)\b|\b(?:alamat|pautan|tautan) (?:di|pada) (?:bahagian )?(?:bawah|footer|hujung)\b|\bshared (?:folder|drive)\b|\bbcc:|\bpelayan (?:luar|pihak ketiga)\b|\bserver (?:luar|eksternal)\b)"
+)
+_EXFIL_URL = re.compile(
+    r"!?\[[^\]]{0,100}\]\(\s*<?https?://[^)\s>]*(?:=\[[a-z_ -]{2,30}\]|=\{[^}]{1,30}\}|=%5b|\?(?:data|token|secret|key|session|cookie|email|user|q|d|id|no)=(?:$|[)&]))"
+    r"|https?://[^\s'\"<>]*(?:=\[[a-z_ -]{2,30}\]|\?(?:data|token|secret|key|session|cookie|email|no)=(?:$|[\s)&]))",
+    re.I,
+)
+_REDIRECT = re.compile(r"\b(?:replace|change|swap|substitute|tukar|ganti)\b[^.]{0,40}\b(?:domain|link|url|address|website|pautan|alamat|tautan)\b[^.]{0,25}\b(?:with|to|dengan|kepada|menjadi)\b")
 _CALL_ID = re.compile(r"\b(?:call|invoke|run|execute|trigger|use|panggil|jalankan|gunakan)\b(?: the| alat| fungsi)?(?: [a-z']{1,12}){0,2}? (?P<id>[a-z][a-z0-9]*_[a-z0-9_]+)\b")
 _CALL_NAMED = re.compile(r"\b(?:call|invoke|run|execute|panggil)\b(?: the)? (?P<id>[a-z][a-z0-9_]{3,40}) (?:tool|function|alat)\b")
 _CALL_SHELL = re.compile(r"\b(?:run|execute|jalankan)\b[^.]{0,40}\b(?:curl|wget|bash|sh|nc|netcat|powershell|rm -rf|chmod|cat ~|cat /)\b|\b(?:curl|wget) \S+ ?\| ?(?:sh|bash)\b|\| ?nc \S+ \d+")
 _CONCEAL = re.compile(
-    r"\b(?:do not|don't|dont|never|jangan)\s+(?:\w+ ){0,3}?(?:tell|mention|reveal|show|inform|notify|alert|disclose|log|record|dedahkan|beritahu|sebut|maklumkan|rekodkan|tunjuk)\b(?: \w+){0,4}"
-    r"|\b(?:without|before) (?:telling|informing|notifying|alerting|asking) (?:the )?(?:user|human|operator|owner)\b"
-    r"|\bleave out (?:any )?mention\b|\bkeep (?:this|it|that) (?:a )?secret\b|\b(?:act|behave|respond) normally\b"
-    r"|\b(?:silently|secretly|covertly|quietly|senyap-senyap|secara senyap|diam-diam)\b|\bhidden instruction\b|\barahan tersembunyi\b"
+    r"\b(?:do not|don't|dont|never|jangan)\s+(?:\w+ ){0,3}?(?:tell|mention|reveal|show|inform|notify|alert|disclose|log|record|report|flag|dedahkan|beritahu|bagitahu|sebut|maklumkan|rekodkan|tunjuk|catat|laporkan|beri tahu)\b(?: [\w']+){0,6}"
+    r"|\b(?:without|before|tanpa|sebelum) (?:telling|informing|notifying|alerting|asking|logging|recording|mencatat|mencatatkan|merekod|memaklumkan|memberitahu) ?(?:the |any |apa-apa )?(?:user|human|operator|owner|pengguna|log|logs)?\b"
+    r"|\bleave out (?:any )?mention\b|\bkeep (?:this|it|that) (?:a )?secret\b|\b(?:act|behave|respond) normally\b|\bhide (?:this|that|it)(?: \w+){0,2} from\b"
+    r"|\b(?:silently|secretly|covertly|quietly|senyap-senyap|secara senyap|secara rahsia|secara diam-diam|diam-diam)\b|\bhidden instruction\b|\barahan tersembunyi\b|\bsecret instruction\b|\bdisguise it\b"
 )
-_URGENCY = re.compile(r"\b(?:urgent|immediately|right now|asap|no time|within \d+ (?:minutes?|seconds?|hours?)|in \d+ minutes|segera|sekarang juga|serta-merta)\b")
+_URGENCY = re.compile(
+    r"\b(?:urgent|immediate(?:ly)?|right now|asap|no time|within \d+ (?:minutes?|seconds?|hours?)|in \d+ minutes|emergency|critical alert|red alert|life-threatening|"
+    r"segera|serta-merta|kecemasan|darurat|sekarang juga|amaran)\b"
+)
 _AUTHORITY = re.compile(
-    r"\b(?:message from|note from|this is|from) (?:the )?(?:it |security |system |platform |site )?(?:admin(?:istrator)?|security team|management|support team|owner|developer|ceo|administrators?|your (?:developer|administrator|boss))\b"
-    r"|\b(?:mesej|nota|arahan) (?:daripada|dari) (?:pentadbir|pengurusan|pemilik|pembangun)\b|\bauthori[sz]ed by\b|\bthe user has authori[sz]ed\b"
+    r"\b(?:message from|note from|this is|from|by|ordered by|directive from|instruction from|required by|requires|requested by) (?:the )?(?:it |security |system |platform |site |chief security )?(?:admin(?:istrator)?|security team|management|support team|owner|developer|ceo|cso|cto|administrators?|your (?:developer|administrator|boss)|chief (?:security )?officer|police|authorities|auditor|regulator|iras|lhdn|bank negara)\b"
+    r"|\b(?:the )?(?:ceo|cso|cto|owner|admin(?:istrator)?|police|iras|lhdn|authorities|auditor|regulator|management|boss)\b[^.]{0,20}\b(?:requires?|requests?|demands?|orders?|instructs?|mandates?|directs?)\b"
+    r"|\b(?:mesej|nota|arahan) (?:daripada|dari) (?:pentadbir|pengurusan|pemilik|pembangun)\b|\bpolis diraja malaysia\b|\bamaran polis\b|\bauthori[sz]ed by\b|\bthe user has authori[sz]ed\b|\bchief security officer\b|\bpolice (?:investigation|order)\b"
+    r"|\b(?:pentadbir|administrator|pemilik kedai|polis diraja malaysia|pusat)\b[^.]{0,20}\b(?:mengarahkan|arahan|memerintahkan)\b|\b(?:arahan|instruksi) (?:rasmi|resmi)\b|\b(?:official|rasmi|resmi) (?:instruction|directive|arahan|instruksi)\b"
 )
 _REVEAL = re.compile(
-    r"\b(?:reveal|print|show|output|repeat|display|leak|disclose|paste|dump|share|give me|tell me|reply with|respond with|send me|dedahkan|tunjukkan|bocorkan|tampal)\b"
-    r"[^.]{0,40}\b(?:your|the|its|anda|kamu)\b(?: \w+){0,2} (?:system prompt|hidden (?:instructions?|prompt|configuration)|initial instructions|instructions|api key|password|credentials|secret|token|configuration|prompt sistem|arahan sistem|kata laluan|kunci api)"
+    rf"\b{_REVEAL_VERB}\b[^.]{{0,70}}?\b(?:{_REVEAL_TARGET}|{_SECRET_OBJ})"
+    r"|\b(?:what|which|apakah|apa)\b[^.?]{0,40}\b(?:instructions?|prompt|rules|arahan|teks arahan)\b[^.?]{0,30}\b(?:given|told|received|diberikan|diterima|diberi|terima|menerima|dapat)\b"
+    r"|\b(?:echo|repeat)(?: back)? everything above\b"
 )
 _RISKY_ACTION = re.compile(
-    r"\b(?:delete|wipe|erase|drop|destroy|remove)[ _](?:all|every|backups?|records?|database|users?|data)\b|\b(?:transfer|wire|send)[ _](?:funds|money|payment)\b"
-    r"|\bapprove (?:every|all|the pending|any)\b|\braise the [\w ]{0,20}limit\b|\b(?:disable|turn off) (?:logging|safety|the safeguards|checks|monitoring)\b|\bgrant (?:me |full )?(?:admin|access)\b"
+    r"\b(?:grant|give|berikan|beri)(?: \w+){0,2} (?:admin|administrator|root|superuser|full|elevated|akses root|akses admin)(?: \w+){0,2} (?:privileges?|access|role|rights|permissions?|akses)?\b"
+    r"|\b(?:overwrite|change|set|ubah|tetapkan)(?: \w+){0,3} (?:role|peranan)(?: \w+){0,2} (?:to|kepada) ['\"]?(?:superadmin|admin|root|administrator)"
+    r"|\b(?:approve|authori[sz]e)(?: \w+){0,3} (?:all|every|any|pending|immediate|regardless)\b|\bregardless of (?:the )?(?:amount|limit|policy)\b|\bwithout (?:verification|approval|authentication|checking)\b"
+    r"|\b(?:disable|turn off|suspend|bypass|waive|skip|batalkan)(?: \w+){0,3} (?:checks?|verification|authentication|guardrails?|safeguards?|security|safety|monitoring|logging|2fa|mfa|sekatan|semakan)\b"
+    r"|\b(?:delete|drop|truncate|wipe|erase|remove|purge|destroy|padam(?:kan)?|hapus|kosongkan)(?: \w+){0,3} (?:all |every |the |semua |setiap )?(?:records?|tables?|accounts?|database|tickets?|data|backups?|users?|messages?|logs?|rekod|tiket|akaun|pangkalan data|tabel|transaksi)\b"
+    r"|\breset(?: \w+){0,2} password\b|\bcreate(?: \w+){0,2} (?:admin|administrator)\b|\bcipta(?: \w+){0,2} (?:admin|pentadbir)\b|\b(?:transfer|wire)(?: \w+){0,2} (?:funds|money|dana)\b|\braise the [\w ]{0,20}limit\b|\bgrant (?:me |full )?(?:admin|access)\b"
+    r"|\b(?:discard|ignore)(?: \w+){0,2} (?:the )?(?:user's |customer's )?(?:complaint|question|request)\b|\bmark(?: \w+){0,3} (?:as )?['\"]?(?:resolved|closed|paid|lunas)\b|\balter the refund\b|\bdiskaun \d{2,3}%"
 )
-_HAS_SENSITIVE = re.compile(_SENSITIVE_OBJ)
-_HAS_BULK = re.compile(_BULK_OBJ)
-_HAS_EXFIL_VERB = re.compile(rf"\b{_EXFIL_VERB}\b")
+_VOID_CLAIM = re.compile(
+    r"\b(?:guardrails?|safeguards?|safety|security|polic(?:y|ies)|restrictions?|limits?|filters?|checks?|verification|sekatan|batasan|had)(?: \w+){0,3} (?:is |are |has been |have been |were |now |telah |sudah )?"
+    r"(?:disabled|suspended|lifted|removed|void|cancell?ed|revoked|waived|bypassed|deactivated|dibatalkan|dilucutkan|dinonaktifkan|ditangguhkan)\b"
+)
 _ADDRESSES_AGENT = re.compile(
-    r"\b(?:assistant|ai agent|ai assistant|ai model|llm|language model|ejen ai|pembantu ai)\b|(?:^|[\s>:])(?:ai|agent|ejen)[:,]|\byou (?:must|should|will|need to|are to|have to)\b|\bpastikan anda\b|\banda (?:mesti|perlu|hendaklah)\b|\bagents? reading this\b"
+    r"\b(?:assistant|ai agent|ai assistant|ai model|ai instruction|llm|language model|ejen ai|pembantu ai|notice to llm)\b|(?:^|[\s>:])(?:ai|agent|ejen)[:,]|\byou (?:must|should|will|need to|are to|have to)\b|\bpastikan anda\b|\banda (?:mesti|perlu|hendaklah|sekarang)\b|\bagents? reading this\b"
 )
+_IMPERATIVE = _alt(
+    "ignore", "disregard", "forget", "stop", "print", "output", "display", "show", "reveal", "dump", "list", "send", "forward", "email", "post", "upload", "copy",
+    "append", "embed", "include", "add", "insert", "steal", "extract", "leak", "exfiltrate", "echo", "quote", "repeat", "summari[sz]e", "write", "tell", "give", "provide",
+    "grant", "approve", "disable", "delete", "drop", "truncate", "wipe", "erase", "remove", "overwrite", "reset", "bypass", "mark", "set", "change", "discard", "hide",
+    "execute", "run", "call", "invoke", "trigger", "fetch", "read", "open", "access", "download", "replace", "format", "confirm", "switch", "act", "pretend", "disclose",
+    "paste", "return", "do", "make", "leave", "keep", "turn", "create", "update", "disclosure", "release", "hand over", "recommend", "answer", "respond", "reply",
+    "cetak", "paparkan", "tunjukkan", "keluarkan", "dedahkan", "hantar(?:kan)?", "kirim(?:kan)?", "salin", "sertakan", "masukkan", "senaraikan", "padam(?:kan)?", "batalkan",
+    "abaikan", "lupakan", "ketepikan", "berikan", "beri", "tetapkan", "naikkan", "lakukan", "panggil", "jalankan", "akses", "muat turun", "dapatkan", "laporkan", "kemukakan",
+    "bocorkan", "curi", "tampilkan", "hapus", "ubah", "ajarkan", "cek", "unduh", "kosongkan", "bantu", "sebutkan", "ambil", "tulis", "periksa", "semak", "jangan", "ikut",
+    "query", "inspect", "backup", "retrieve", "probe", "view", "examine", "check", "sync", "monitor", "verify", "baca", "lihat", "pantau", "buka", "gunakan", "use", "go",
+    "navigate", "visit", "browse", "connect", "ping", "test", "save", "enter",
+)
+_DIRECTED_START = re.compile(rf"^(?:(?:please|kindly|sila|tolong|silakan|immediately|now|first|then|also|instead|silently|quietly|secretly|just|secara \w+|kemudian|lalu),? )*{_IMPERATIVE}\b")
+_LABEL = re.compile(r"^[\w\[\]#*_ '/.-]{2,40}: ")
 _QUOTE_BEFORE = re.compile(
-    r"(?:\b(?:says?|said|saying|reads?|phrases?|such as|for example|e\.g\.?|examples? (?:include|are)|like|quoted?|titled|called|wording|string|typical|tells? \w+(?: \w+){0,2} to|told \w+ to)\b\W*(?:\w+\W+){0,3}|[\"'“‘«]\s?)$"
+    r"(?:\b(?:says?|said|saying|reads?|phrases?|such as|for example|e\.g\.?|examples? (?:include|are|of)|like|quoted?|titled|called|wording|string|typical|"
+    r"(?:tells?|told|commands?|instructs?|orders?|forces?|tricks?|persuades?|convinces?|manipulates?|causes?|makes?|lets?|allows?|asks?|attempts? to|tries to|designed to|used to)(?: \w+){0,3} to|"
+    r"attackers? (?:may |might |can |often |typically |will )?(?:use|say|write|type|send|submit|ask|tell|inject)|payloads? (?:like|such as))\b\W*(?:\w+\W+){0,3}|[\"'“‘«]\s?)$"
 )
 _NEGATION = re.compile(r"(?:do not|don't|dont|never|must not|should not|mustn't|jangan|tidak boleh|not to|avoid|without)(?: [\w']+){0,3} $")
 _SEGMENT_SPLIT = re.compile(r"(?<=[.!?;])\s+|\n+|(?=<!--)")
-
+_DOC_HEADER = re.compile(
+    r"^[^\n:]{0,90}?\b(?:guide|security advisory|security notice|advisory|tutorial|runbook|documentation|specification|readme|post-?mortem|security review|incident review|"
+    r"incident report|cheat sheet|standard|writeup|write-up|manual|architecture|configuration|training|troubleshooting|faq|audit log|scanner output|changelog|release notes|"
+    r"panduan|artikel|edukasi|laporan audit|spesifikasi|dokumentasi|konfigurasi|garis panduan|pedoman)\b[^\n:]{0,50}:(?=\s)|^(?:issue|bug|cve|rfc)[- #]?[\w-]{1,15}:(?=\s)"
+)
 
 # Per-sentence cues as bits, so combining neighbouring sentences is three integer ORs.
-OVERRIDE, OVERRIDE_STRONG, QUOTED, PERSONA, MARKER, CALL, CALL_HELD, EXFIL, DEST, CONCEAL, URGENCY, AUTH, REVEAL, RISKY, AGENT, MENTION_HELD = (
-    1 << i for i in range(16)
-)
-_CUES = DEST | CONCEAL | URGENCY | AUTH | REVEAL | AGENT | RISKY | CALL
+(OVERRIDE, OVERRIDE_STRONG, QUOTED, PERSONA, MARKER, CALL, CALL_HELD, EXFIL, DEST, CONCEAL, URGENCY, AUTH, REVEAL, RISKY, AGENT, MENTION_HELD,
+ DIRECTED, WRAPPER, VOID, INBAND, SECRET, PII) = (1 << i for i in range(22))
+_CUES = DEST | CONCEAL | URGENCY | AUTH | REVEAL | AGENT | RISKY | CALL | SECRET
 
 
 def _bit(condition: object, flag: int) -> int:
@@ -336,25 +453,43 @@ def _unnegated(pattern: re.Pattern[str], text: str) -> re.Match[str] | None:
     return None
 
 
+_HAS_SECRET = re.compile(_SECRET_OBJ)
+_HAS_PII = re.compile(_PII_OBJ)
+_HAS_BULK = re.compile(_BULK_OBJ)
+_HAS_EXFIL_VERB = re.compile(rf"(?<![@\w./-]){_EXFIL_VERB}(?![\w@-])")  # not the "mail" in me@mail.example
+
+
+def _directed(seg: str) -> bool:
+    """A sentence that tells the reader to do something (an imperative, or addressed to the AI), as opposed to describing."""
+    body = _LABEL.sub("", seg, count=1) if _LABEL.match(seg) else seg
+    return bool(_DIRECTED_START.match(body) or _DIRECTED_START.match(seg) or _ADDRESSES_AGENT.search(seg))
+
+
 def _features(seg: str, ctx: ScanContext) -> int:
     f = 0
-    found, quoted_only = _first_unguarded((*_OVERRIDE_EN, *_OVERRIDE_MS), seg)
+    found, quoted_only = _first_unguarded(_OVERRIDE_ANY, seg)
     f |= _bit(found or quoted_only, OVERRIDE) | _bit(quoted_only and not found, QUOTED) | _bit(found, OVERRIDE_STRONG)
-    f |= _bit(_first_unguarded(_PERSONA, seg)[0], PERSONA)
-    f |= _bit(any(p.search(seg) for p in _MARKER), MARKER)
+    f |= _bit(_first_unguarded(_PERSONA_ANY, seg)[0], PERSONA)
+    f |= _bit(_MARKER_ANY.search(seg), MARKER)
+    f |= _bit(_WRAPPER.search(seg), WRAPPER)
     calls = [m for p in (_CALL_ID, _CALL_NAMED) for m in p.finditer(seg) if not _NEGATION.search(seg[max(0, m.start() - 45): m.start()])]
-    f |= _bit(calls or _unnegated(_CALL_SHELL, seg), CALL)
+    f |= _bit(calls or _unnegated(_CALL_SHELL, seg) or _WRAPPER_CALL.search(seg), CALL)
     # "send_email(to, subject, body)" is documentation of a tool, not a request to call it: it does not count as naming a held tool.
     f |= _bit(any(m.group("id") in ctx.tool_names and not seg.startswith("(", m.end()) for m in calls), CALL_HELD)
     f |= _bit(any(t in seg for t in ctx.tool_names if len(t) >= 4 and "_" in t), MENTION_HELD)
-    f |= _bit(_DESTINATION.search(seg), DEST)
-    f |= _bit(_unnegated(_HAS_EXFIL_VERB, seg) and (_HAS_SENSITIVE.search(seg) or _HAS_BULK.search(seg)), EXFIL)
+    f |= _bit(_DESTINATION.search(seg), DEST) | _bit(_INBAND.search(seg), INBAND)
+    leaks_by_url = bool(_EXFIL_URL.search(seg)) or bool(_REDIRECT.search(seg) and _DESTINATION.search(seg))
+    f |= _bit(leaks_by_url, EXFIL | DEST)
+    secret, pii = _HAS_SECRET.search(seg), _HAS_PII.search(seg)
+    f |= _bit(secret, SECRET) | _bit(pii, PII)
+    f |= _bit(_unnegated(_HAS_EXFIL_VERB, seg) and (secret or pii or _HAS_BULK.search(seg)), EXFIL)
     for m in _CONCEAL.finditer(seg):
         if not _NEGATION.search(seg[max(0, m.start() - 45): m.start()]) or m.group(0).startswith(("silently", "secretly", "quietly", "covertly")):
             f |= CONCEAL
             break
     f |= _bit(_URGENCY.search(seg), URGENCY) | _bit(_AUTHORITY.search(seg), AUTH)
     f |= _bit(_unnegated(_REVEAL, seg), REVEAL) | _bit(_RISKY_ACTION.search(seg), RISKY) | _bit(_ADDRESSES_AGENT.search(seg), AGENT)
+    f |= _bit(_VOID_CLAIM.search(seg), VOID) | _bit(_directed(seg), DIRECTED)
     return f
 
 
@@ -371,17 +506,20 @@ def _union(flags: Sequence[int], i: int) -> int:
 # Every rule above must have at least one of its required words here; a test replays the whole corpus with and without the
 # prefilter to prove the two agree.
 _TRIGGER = re.compile(
-    r"ignor|disregard|forget|overrid|bypass|discard|abandon|neglect|set aside|put aside|overrul|supersed|drop|replace|precedence|"
-    r"new (?:instruction|directive|order)|updated (?:instruction|directive)|revised (?:instruction|directive)|"
-    r"abai|lupakan|ketepikan|batalkan|langkau|tolak ke|you are now|mode\b|do anything|act as|behave|respond|pretend|from now on|"
-    r"without|mulai sekarang|sekarang|sekatan|<|\[|#|system|sistem|call|invoke|run\b|execute|trigger|use\b|panggil|jalankan|gunakan|"
-    r"curl|wget|\| ?nc|send|forward|mail|post\b|upload|copy|append|paste|leak|export|transmit|submit|fetch|hantar|salin|muat naik|"
-    r"eksport|kirim|http|@|third|external|remote|shared|alamat|pautan|bcc|not\b|n't|dont|never|jangan|before|leave out|keep|normal|"
-    r"silent|secret|covert|quiet|senyap|diam|hidden|tersembunyi|urgent|immediate|right now|asap|no time|within|segera|serta-merta|"
-    r"message from|note from|this is|from the|mesej|nota|authori|reveal|print|show|output|repeat|display|disclose|dump|share|give me|"
-    r"tell me|reply|dedahkan|tunjukkan|bocorkan|tampal|delete|wipe|erase|destroy|remove|transfer|wire|approve|raise|disable|turn off|"
-    r"grant|assistant|\bai\b|llm|language model|ejen|pembantu|you |pastikan|anda |agent"
+    r"ignor|disregard|forget|overrid|overrul|bypass|discard|abandon|neglect|set aside|put aside|supersed|precedence|forbidden|prohibited|instruction|directive|"
+    r"abai|lupakan|ketepikan|batalkan|langkau|tolak ke|kesampingkan|you are|mode\b|do anything|act as|behave|pretend|from now|mulai sekarang|sekarang|sekatan|batasan|"
+    r"<|\[|\{|#|system|sistem|admin|call\b|invoke|trigger|panggil|jalankan|curl|wget|\| ?nc|steal|leak|embed|reveal|disclose|dump|echo|quote|summari|"
+    r"dedahkan|bocorkan|tampil|cetak|paparkan|keluarkan|tunjukkan|delete|wipe|erase|destroy|purge|truncate|padam|hapus|kosongkan|transfer|wire\b|approve|raise the|disable|"
+    r"turn off|grant|berikan|guardrail|safeguard|polic|restriction|verification|reset|cipta|mark |diskaun|sandbox|persona|forbid|unrestricted|unconstrained|peran|pentadbir|polis|"
+    r"password|credential|credit card|secret|api[ _-]?key|master key|bearer|session|kunci|katasandi|kata laluan|kad pengenalan|nric|environment var|phone|nombor|nomor|"
+    r"e-?mail|emel|address|alamat|personal|peribadi|pribadi|margin|wholesale|conversation|chat |send|forward|mail\b|upload|exfil|extract|http|@|silent|covert|quiet|"
+    r"copy|paste|append|attach|insert|include|add\b|write|export|submit|fetch|hantar|salin|muat naik|eksport|kirim|sertakan|masukkan|laporkan|curi|ambil|tulis|kemukakan|"
+    r"kata sandi|\.com|\.net|\.org|shared|external|remote|third|bcc|"
+    r"senyap|diam|hidden|tersembunyi|do not|don't|dont|never|jangan|without|tanpa|urgent|immediate|right now|asap|no time|within|emergency|alert|critical|life-|segera|"
+    r"serta-merta|kecemasan|darurat|amaran|message from|note from|this is|requires|authori|official|rasmi|resmi|ceo|police|iras|lhdn|assistant|\bai\b|llm|ejen|pembantu|"
+    r"what|which|apakah|replace|tukar|ganti|swap|not allowed|no longer|lifted|suspended|void|revoked|cancel|dibatalkan|dilucutkan|dimansuhkan|dinonaktifkan|ditangguhkan"
 )
+
 
 def _segments(clean: str) -> list[str]:
     segs: list[str] = []
@@ -406,39 +544,55 @@ def _confidence(base: Level, *, cues: int, evasion: tuple[str, ...], held: bool,
     return "low" if quoted and level == "medium" else level
 
 
+_REPORTING = re.compile(
+    r"(?<![\w@./'-])(?:prompt injection|injection attacks?|attackers?|an attack|attacks? (?:such as|like)|malicious (?:input|text|users?)|payloads?|"
+    r"vulnerabilit(?:y|ies)|cve-\d|penyerang|serangan|suntikan prompt|kerentanan)(?![\w@'-])"
+)
+
+
 def _analyse_injection(text: str, ctx: ScanContext, where: Where, evasion: tuple[str, ...]) -> dict[str, Finding]:
     found: dict[str, Finding] = {}
     segs = _segments(text)
     flags = [_features(seg, ctx) if _TRIGGER.search(seg) else 0 for seg in segs]
+    for i, seg in enumerate(segs):
+        if flags[i] == 0 and ((i > 0 and flags[i - 1]) or (i + 1 < len(segs) and flags[i + 1])):
+            flags[i] = _bit(_directed(seg), DIRECTED)  # whether a neighbouring sentence is a command still matters to a rule
 
     def add(rule_id: str, base: Level, cues: int, held: bool, quoted: bool = False, severity: Level | None = None) -> None:
         if rule_id not in found:
             found[rule_id] = _finding(rule_id, where, _confidence(base, cues=cues, evasion=evasion, held=held, quoted=quoted), evasion, severity)
 
+    for i, seg in enumerate(segs):
+        if flags[i] and _REPORTING.search(seg):
+            flags[i] = 0  # a sentence that talks ABOUT attacks is a description, not an instruction
     for i, f in enumerate(flags):
         if f == 0 and (i == 0 or flags[i - 1] == 0) and (i + 1 >= len(flags) or flags[i + 1] == 0):
             continue  # no cue here or next to here: nothing a rule could combine
         w = _union(flags, i)
         cues = (w & _CUES).bit_count()
         held = bool(w & (CALL_HELD | MENTION_HELD))
+        harm = w & (RISKY | REVEAL | EXFIL | SECRET | PII | CALL)
         if f & OVERRIDE and (f & OVERRIDE_STRONG or cues):
             add("RAD-INJ-001", "medium", cues, held, quoted=bool(f & QUOTED) and not cues)
+        if f & VOID and w & DIRECTED and w & (RISKY | REVEAL | EXFIL | SECRET | PII):
+            add("RAD-INJ-001", "medium", cues, held)
         if f & PERSONA:
             add("RAD-INJ-002", "medium", cues, False)
-        if f & MARKER:
-            add("RAD-INJ-003", "medium", cues, held)
-        if f & EXFIL and w & (DEST | AGENT | CONCEAL | OVERRIDE_STRONG | URGENCY | AUTH):
+        if f & MARKER or (f & WRAPPER and (f & CALL or w & (RISKY | REVEAL | EXFIL | SECRET | PII | OVERRIDE))):
+            # a lone marker (a tag named system in a bug report) is weak evidence; with a directive next to it, it is not
+            add("RAD-INJ-003", "medium" if w & (DIRECTED | OVERRIDE | CALL | RISKY | REVEAL | EXFIL | SECRET | PII) else "low", cues, held)
+        if f & EXFIL and w & (DIRECTED | DEST | INBAND | AGENT | CONCEAL | OVERRIDE_STRONG | URGENCY | AUTH):
             add("RAD-INJ-004", "medium", cues, held)
-        if f & CALL and (w & (DEST | CONCEAL | URGENCY | AUTH | AGENT | OVERRIDE_STRONG | RISKY) or f & CALL_HELD):
+        if f & CALL and (w & (DEST | CONCEAL | URGENCY | AUTH | AGENT | OVERRIDE_STRONG | RISKY | WRAPPER) or f & CALL_HELD):
             add("RAD-INJ-005", "medium", cues, bool(f & CALL_HELD))
-        if f & CONCEAL and w & (AGENT | CALL | EXFIL | DEST | OVERRIDE_STRONG | REVEAL | RISKY):
+        if f & CONCEAL and (w & (AGENT | CALL | EXFIL | DEST | OVERRIDE_STRONG | REVEAL | RISKY | SECRET | PII) or (f & DIRECTED and w & DIRECTED)):
             add("RAD-INJ-006", "medium", cues, held, severity="medium")
         if f & REVEAL:
             add("RAD-INJ-007", "medium", cues, False)
-        if f & AUTH and w & (CALL | EXFIL | REVEAL | RISKY | OVERRIDE_STRONG):
+        if (f & AUTH or f & URGENCY or f & VOID) and w & DIRECTED and w & (harm | VOID | OVERRIDE_STRONG):
             add("RAD-INJ-008", "medium", cues, held)
-        if f & URGENCY and f & RISKY and w & (CALL | CONCEAL | AUTH | AGENT):
-            add("RAD-INJ-008", "medium", cues, held)
+        elif f & AUTH and w & URGENCY and w & (SECRET | PII | RISKY):
+            add("RAD-INJ-008", "medium", cues, held)  # an urgent demand from an authority for sensitive data, phrased as a noun ("immediate disclosure of ...")
     return found
 
 
@@ -475,8 +629,9 @@ class InjectionDetector:
 
 # --- the output analysis ---------------------------------------------------------------------------------------------
 
+_CODE_SPAN = re.compile(r"```.*?```|``[^`\n]+``|`[^`\n]+`", re.S)
 _SCRIPT = re.compile(r"<\s*script\b|<\s*/\s*script\s*>")
-_HANDLER = re.compile(r"<[a-z][a-z0-9]*(?:\s[^<>]{0,300}?)?[\s/\"']on[a-z]{3,20}\s*=", re.I)
+_HANDLER = re.compile(r"<[a-z][a-z0-9]*(?:[\s/][^<>]{0,300}?)?[\s/\"']on[a-z]{3,20}\s*=", re.I)
 _JS_URL = re.compile(
     r"(?:href|src|action|formaction|data|xlink:href|poster|background|content)\s*=\s*[\"']?\s*(?:javascript|vbscript|livescript)\s*:"
     r"|\]\(\s*<?\s*(?:javascript|vbscript)\s*:|url\(\s*[\"']?\s*javascript\s*:|(?:href|src|action)\s*=\s*[\"']?\s*data\s*:\s*text/html",
@@ -493,18 +648,30 @@ _SENSITIVE_PARAM = re.compile(r"^(?:d|data|q|c|cookie|token|session|sess|sid|ema
 _COLLECTORS_ALWAYS = (
     "webhook.site", "requestbin.com", "requestbin.net", "pipedream.net", "hookbin.com", "interact.sh", "oast.pro", "oast.live", "oast.site",
     "oast.fun", "oast.me", "oast.online", "burpcollaborator.net", "canarytokens.com", "beeceptor.com", "ngrok.io", "ngrok-free.app", "ngrok.app",
+    "oastify.com", "requestcatcher.com", "loca.lt", "localtunnel.me", "serveo.net", "trycloudflare.com", "ngrok-free.dev", "dnslog.cn", "ceye.io",
+    "postb.in", "ptsv2.com", "mockbin.org", "webhook.cool", "hooks.zapier.com",
 )
 _COLLECTORS_WITH_VERB = ("file.io", "transfer.sh", "pastebin.com", "paste.ee", "anonfiles.com", "0x0.st", "temp.sh", "dpaste.org", "hastebin.com", "gofile.io")
 _URL = re.compile(r"\b([a-z][a-z0-9+.-]{1,12}):/{2}(\[[0-9a-f:.]+\]|[^\s\"'<>)/?#\]\\]+)", re.I)
-_FETCH_VERB = re.compile(r"\b(?:fetch|open|call|read|visit|browse|download|get|send|post|query|pull|use|check|run|connect|request|load|paste|show|list|export|test|hit|curl|wget|navigate|go to|access|ping|sambung|ambil|buka|baca|hantar|periksa|semak)\b", re.I)
-_TARGET_NOUN = re.compile(r"\b(?:target|endpoint|console|server|wiki|admin|dashboard|api|webhook|service|internal|portal|panel|jenkins|database|queue|metadata|config)\b", re.I)
-_DOC_CONTEXT = re.compile(r"\b(?:example|e\.g\.?|for instance|returns|docs?|documentation|should be blocked|blocked|must not|do not|don't|never|avoid|such as)\b", re.I)
+_FETCH_VERB = re.compile(
+    r"\b(?:fetch|open|call|read|visit|browse|download|get|send|post|query|pull|use|check|run|connect|request|load|paste|show|list|export|test|hit|curl|wget|navigate|go to|"
+    r"access|ping|inspect|retrieve|probe|sync|monitor|verify|view|execute|upload|forward|"
+    r"sambung(?:kan)?|ambil|buka|baca|hantar(?:kan)?|periksa|semak|akses|muat turun|dapatkan|kirim(?:kan)?|laporkan|cek|unduh|pantau|lihat|kemukakan)\b", re.I)
+_TARGET_NOUN = re.compile(
+    r"\b(?:target|endpoint|console|server|wiki|admin|dashboard|api|webhook|service|internal|portal|panel|jenkins|database|queue|metadata|config|router|share|relay|"
+    r"penghala|pelayan|sistem|pangkalan data|papan pemuka|dalaman|rahsia|sulit|internal)\b", re.I)
+_DOC_CONTEXT = re.compile(
+    r"(?<![.\w-])example(?![.\w-])|\b(?:e\.g\.?|for instance|returns|docs?|documentation|should be blocked|blocked|must not|do not|don't|never|avoid|such as)\b", re.I
+)
 _UPLOAD_VERB = re.compile(r"\b(?:send|post|upload|paste|forward|submit|copy|push|reply|share|hantar|muat naik)\b", re.I)
 _INTERNAL_SUFFIXES = (".internal", ".local", ".localdomain", ".corp", ".lan", ".home", ".intranet", ".svc", ".consul", ".localhost", ".cluster.local")
 _METADATA_IPS = {"169.254.169.254", "169.254.170.2", "100.100.100.200", "fd00:ec2::254"}
 _METADATA_NAMES = {"metadata", "metadata.google.internal", "instance-data", "metadata.azure.internal", "metadata.tencentyun.com"}
 _TEST_NETS = tuple(ipaddress.ip_network(n) for n in ("192.0.2.0/24", "198.51.100.0/24", "203.0.113.0/24", "2001:db8::/32"))
-_RISKY_SCHEMES = {"gopher", "dict", "ldap", "ldaps", "tftp", "sftp", "jar", "netdoc"}
+_RISKY_SCHEMES = {"gopher", "dict", "ldap", "ldaps", "tftp", "sftp", "jar", "netdoc", "file"}
+_NETWORK_SCHEMES = {"http", "https", "ftp", "smb", "smtp", "smtps", "imap", "pop3", "redis", "mongodb", "mysql", "postgres", "postgresql", "jdbc", "ssh", "telnet", "vnc", "rdp", "nfs", "amqp", "memcached", "ws", "wss"}
+_REBINDING = ("nip.io", "sslip.io", "xip.io", "localtest.me", "lvh.me", "vcap.me", "traefik.me")
+_REBINDING_LABEL = re.compile(r"(?:^|[.-])(?:rebind|rebinding|dnsrebind)(?:[.-]|$)")
 _SENSITIVE_PATH = re.compile(
     r"/etc/(?:passwd|shadow|gshadow|sudoers|master\.passwd|ssl/private|ssh/)|/proc/(?:self|\d+)/(?:environ|cmdline|maps|mem|fd)|/root/|"
     r"(?:~|/home/[\w.-]+|/users/[\w. -]+|/mnt/c/users/[\w. -]+)/\.(?:ssh|aws|kube|docker|gnupg|config/gcloud|bash_history|zsh_history|netrc|npmrc|git-credentials)\b|"
@@ -520,6 +687,16 @@ _READ_VERB = re.compile(r"\b(?:read|open|show|cat|print|dump|attach|include|disp
 _PATH_DOC = re.compile(r"\b(?:never|do not|don't|avoid|rejects?|blocks?|blocked|should not|must not|attack|lists? accounts|ignored by git|do not commit|never commit|copy \.env\.example)\b", re.I)
 _SENTENCE_END = re.compile(r"[.;!?](?=\s)|\n")
 _FILE_SCHEME = re.compile(r"\bfile:/{2,3}[^\s\"'<>]{3,}", re.I)
+_SYSTEM_PATH = re.compile(
+    r"(?<![\w.-])(?:/etc/[\w./-]+|/proc/[\w./-]+|/sys/[\w./-]+|/var/(?:log|mail|lib|spool|backups)/[\w./-]*|/opt/(?:backups?|[\w.-]+/conf)[\w./-]*|/srv/[\w./-]+|"
+    r"/tmp/sess_\w+|/root/[\w./-]*|/boot/[\w./-]*|/home/[\w.-]+/\.[\w./-]+|~/\.[\w./-]+|"
+    r"[a-z]:\\(?:windows|inetpub|programdata|users)\\[\w .\\-]*|%(?:appdata|userprofile|systemroot|programdata)%\\[\w .\\-]*)",
+    re.I,
+)
+_ACCESS_VERB = re.compile(
+    r"\b(?:read|open|cat|dump|inspect|access|download|execute|view|query|show|print|display|load|fetch|get|retrieve|steal|upload|copy|type|list|check|examine|"
+    r"lihat|periksa|semak|muat turun|dapatkan|baca|unduh|cek|ambil|tampilkan|tunjukkan|paparkan|dapat|sertakan|attach|include|send)\b", re.I)
+_TRAV_TARGET = re.compile(r"(?:\.\.[/\\]){2,}(?:[\w.-]+[/\\]){0,3}?(?:etc|var|root|home|proc|config|secrets?|\.env|\.ssh|\.aws|\.git|windows|boot|database|credentials|passwd|shadow)", re.I)
 
 
 def _loose_ipv4(host: str) -> ipaddress.IPv4Address | None:
@@ -595,29 +772,38 @@ class OutputDetector:
 
     def scan(self, prepared: Prepared, ctx: ScanContext) -> list[Finding]:
         text = prepared.markup
-        low = text.lower()
         out: dict[str, Finding] = {}
 
         def add(rule_id: str, confidence: Level = "medium") -> None:
             out.setdefault(rule_id, _finding(rule_id, "text", confidence, prepared.evasion))
 
+        # Markup inside a code span or fence is shown as text by a markdown renderer, so it is not live: documentation that quotes
+        # an attack that way is recorded with low confidence. Markup outside code is judged as before.
+        live = _CODE_SPAN.sub(" ", text)
+        self._markup(live, "high", add)
+        if "`" in text and live != text:
+            self._markup(text, "low", lambda rule, _confidence="low": add(rule, "low"))
+        self._urls(text, add)
+        self._paths(text, add)
+        return list(out.values())
+
+    @staticmethod
+    def _markup(text: str, confidence: Level, add: Callable[..., None]) -> None:
+        low = text.lower()
         if "<" in text and (_SCRIPT.search(low) or _HANDLER.search(text)):
-            add("RAD-OUT-001", "high")
+            add("RAD-OUT-001", confidence)
         if _JS_URL.search(text):
-            add("RAD-OUT-002", "high")
+            add("RAD-OUT-002", confidence)
         if "<" in text or "@import" in low or "srcdoc" in low or "expression(" in low:
             if _ACTIVE.search(text):
-                add("RAD-OUT-003")
+                add("RAD-OUT-003", "medium" if confidence != "low" else "low")
         for m in itertools.islice(_IMG.finditer(text), MAX_OUTPUT_MATCHES):
             url = m.group(1) or m.group(2)
             parts = urlsplit(url)
             host = (parts.hostname or "").lower()
             if _domain_matches(host, _COLLECTORS_ALWAYS) or (parts.query and _query_looks_like_data(parts.query)):
-                add("RAD-OUT-004", "high")
+                add("RAD-OUT-004", confidence)
                 break
-        self._urls(text, add)
-        self._paths(text, add)
-        return list(out.values())
 
     @staticmethod
     def _urls(text: str, add: Callable[..., None]) -> None:
@@ -627,7 +813,7 @@ class OutputDetector:
             if scheme in _RISKY_SCHEMES:
                 add("RAD-OUT-006")
                 continue
-            if scheme not in ("http", "https", "ftp"):
+            if scheme not in _NETWORK_SCHEMES:
                 continue
             hostpart = authority.rsplit("@", 1)[-1]
             host = hostpart[1:hostpart.index("]")] if hostpart.startswith("[") and "]" in hostpart else hostpart.split(":")[0]
@@ -643,15 +829,18 @@ class OutputDetector:
                 add("RAD-OUT-005", "high")
             elif kind == "internal" and not doc and (_FETCH_VERB.search(sentence) or _TARGET_NOUN.search(sentence)):
                 add("RAD-OUT-005", "high")
-            elif _domain_matches(host.lower(), _COLLECTORS_ALWAYS):
+            elif _domain_matches(host.lower(), _COLLECTORS_ALWAYS) or _domain_matches(host.lower(), _REBINDING) or _REBINDING_LABEL.search(host.lower()):
                 add("RAD-OUT-006")
             elif _domain_matches(host.lower(), _COLLECTORS_WITH_VERB) and _UPLOAD_VERB.search(sentence):
                 add("RAD-OUT-006")
+            elif kind is None and not doc and _EXFIL_URL.search(sentence):
+                add("RAD-OUT-006")  # an address that carries data (a placeholder or an empty data parameter) to an outside host
 
     @staticmethod
     def _paths(text: str, add: Callable[..., None]) -> None:
         for m in _FILE_SCHEME.finditer(text):
             add("RAD-OUT-007", "high")
+            add("RAD-OUT-006")  # a fetchable scheme as well, so a request to read a local file is also an address problem
             return
         traversal = _TRAVERSAL.search(text)
         for m in itertools.islice(_SENSITIVE_PATH.finditer(text), MAX_OUTPUT_MATCHES):
@@ -667,9 +856,16 @@ class OutputDetector:
                 continue
             add("RAD-OUT-007", "high")
             return
+        for m in itertools.islice(_SYSTEM_PATH.finditer(text), MAX_OUTPUT_MATCHES):
+            before = text[max(0, m.start() - 70): m.start()]
+            if _PATH_DOC.search(text[max(0, m.start() - 160): m.end() + 40]):
+                continue
+            if _ACCESS_VERB.search(before) or _TRAVERSAL_ONE.search(before[-12:]):
+                add("RAD-OUT-007", "high")
+                return
         if traversal and not _PATH_DOC.search(text):
             depth = len(_TRAVERSAL_ONE.findall(text))
-            if depth >= 3 or "....//" in text or "..;/" in text:
+            if depth >= 3 or "....//" in text or "..;/" in text or _TRAV_TARGET.search(text):
                 add("RAD-OUT-007")
 
 
@@ -729,6 +925,11 @@ def scan_result(
         prepared = prepare(text)
         for detector in detectors:
             for finding in detector.scan(prepared, ctx):
+                if prepared.doc and finding.rule_id in _DOC_DOWNGRADE and finding.confidence != "low" and finding.where == "text" and not finding.evasion:
+                    # The address and path rules fire on documentation that mentions an address or a file (an advisory, a runbook). Text
+                    # that presents itself that way is recorded but never alerted on. An attacker can add such a header to evade the
+                    # ALERT of these rules. Live markup (XSS) and the injection rules do not use it; any evasion keeps its confidence.
+                    finding = replace(finding, confidence="low")
                 if finding.kind in kinds:
                     key = (finding.rule_id, finding.where)
                     previous = seen.get(key)

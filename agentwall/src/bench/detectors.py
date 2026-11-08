@@ -48,9 +48,9 @@ def _description_auditor(sample: Sample) -> bool:
 
 
 def _radar(sample: Sample) -> bool:
-    """Radar findings count only for the category they inform: an XSS rule does not get credit for an injection sample."""
+    """Actionable Radar findings (not low confidence) count only for the category they inform: an XSS rule does not get credit for an injection sample."""
     assert sample.text is not None
-    return any(category_of(f) == sample.category for f in scan_result(sample.text).findings)
+    return any(category_of(f) == sample.category for f in scan_result(sample.text).actionable)
 
 
 DETECTORS: tuple[Detector, ...] = (
