@@ -295,3 +295,13 @@ Both tools work on RedHand and its demo projects. This file is how each learns w
 - **Not verified:** staging (needs core then gateway deploy, then Vercel), the minute limit across two core instances (in memory per instance), phone width of the new panel (inside the same containers, not opened).
 - **Deploy order:** core, then gateway (a gateway older than core makes the button answer "could not be completed"). **Brief for Antigravity:** `docs/testing/briefs/2026-11-08-m4-5b-selftest.md`.
 - **Port note:** something else on this Mac listens on 8080 (not mine, left alone); local test gateway used 8081.
+
+## 2026-11-08, Claude Code: M4.4 staging result checked against the database
+- Antigravity's M4.4 result reports PASS, but the audit log shows: reviews confirmed (step 4), no notes saved (step 5), three quoted messages that do not exist in the code (steps 6 to 8), a live 30-day silence on RAD-INJ-005 despite "Remove worked" (step 11), and the injection check still OFF despite "restored" (step 13). Details and the corrected verdict per step are in `docs/testing/results/2026-11-08-m4-4-radar-page.md`.
+- **Staging state to restore (owner, in the Radar page):** hidden-instruction check back to Watch; remove the silence on RAD-INJ-005. Report what the page does when pressed.
+- **Process:** ask for screenshots or copied on-screen text in every brief, and Claude Code checks audit rows after any test that changes state.
+
+## 2026-11-08, Claude Code: staging restored by the owner; a UI trap fixed
+- **Database check:** the owner removed the RAD-INJ-005 silence (revoked 12:24:32 UTC), but the hidden-instruction check stayed OFF. Reproduced locally: Off + tick + Save works, Watch + Save works, but after choosing Watch the old green "Settings saved" banner stayed on screen and nothing said the change was pending, so it looks saved when it is not.
+- **Fixed** in the Radar page (banner clears on change, amber "Not saved yet" hint), with a unit test and a browser check. Included in the M4.5b PR.
+- **Still to do by the owner:** open Radar, set hidden instructions to Watch, press Save, and press Save again only if the amber hint is still there; then tell Claude Code so it can re-check the database.

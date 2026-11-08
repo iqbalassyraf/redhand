@@ -620,3 +620,34 @@ export const radarApi = {
   removeSuppression: (t: string, id: string) =>
     apiFetch<{ revoked: boolean }>(`/v1/radar/suppressions/${id}`, t, { method: "DELETE" }),
 };
+
+export interface SelfTestCategory {
+  category: string;
+  malicious: number;
+  benign: number;
+  detected: number;
+  false_alarms: number;
+  detection_low: number;
+  detection_high: number;
+  false_alarm_low: number;
+  false_alarm_high: number;
+  hard_benign: number;
+  hard_false_alarms: number;
+}
+
+/** Counts only: no sample text and no sample ids come back. */
+export interface SelfTestResult {
+  corpus: string;
+  model_enabled: boolean;
+  samples: number;
+  duration_ms: number;
+  categories: SelfTestCategory[];
+  limits: string;
+  radar_mode: RadarMode;
+  output_check_mode: RadarMode;
+  ran_at: string;
+}
+
+export const selfTestApi = {
+  run: (t: string) => apiFetch<SelfTestResult>("/v1/radar/self-test", t, { method: "POST" }),
+};

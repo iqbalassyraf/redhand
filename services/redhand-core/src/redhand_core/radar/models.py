@@ -167,3 +167,40 @@ class SuppressionRevokeRequest(BaseModel):
 
 class SuppressionRevokeResponse(BaseModel):
     revoked: bool
+
+
+class SelfTestCategory(BaseModel):
+    """Counts for one check on the bundled held-out samples. No sample text and no sample ids: held-out misses are never listed."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    category: Literal["injection_indirect", "output_xss", "output_ssrf", "output_path"]
+    malicious: int = Field(ge=1)
+    benign: int = Field(ge=1)
+    detected: int = Field(ge=0)
+    false_alarms: int = Field(ge=0)
+    detection_low: float = Field(ge=0, le=1)
+    detection_high: float = Field(ge=0, le=1)
+    false_alarm_low: float = Field(ge=0, le=1)
+    false_alarm_high: float = Field(ge=0, le=1)
+    hard_benign: int = Field(ge=0)
+    hard_false_alarms: int = Field(ge=0)
+
+
+class GatewaySelfTest(BaseModel):
+    """What the gateway answers. Validated here so a malformed or surprising answer is an error, never a result."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    corpus: str = Field(pattern=r"^[0-9a-f]{8,64}$")
+    model_enabled: bool
+    samples: int = Field(ge=1)
+    duration_ms: float = Field(ge=0)
+    categories: list[SelfTestCategory] = Field(min_length=1, max_length=8)
+    limits: str = Field(max_length=500)
+
+
+class SelfTestResponse(GatewaySelfTest):
+    radar_mode: Mode
+    output_check_mode: Mode
+    ran_at: datetime

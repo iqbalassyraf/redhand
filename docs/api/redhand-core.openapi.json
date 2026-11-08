@@ -3110,6 +3110,165 @@
         "title": "SecurityFindingPayload",
         "type": "object"
       },
+      "SelfTestCategory": {
+        "additionalProperties": false,
+        "description": "Counts for one check on the bundled held-out samples. No sample text and no sample ids: held-out misses are never listed.",
+        "properties": {
+          "benign": {
+            "minimum": 1.0,
+            "title": "Benign",
+            "type": "integer"
+          },
+          "category": {
+            "enum": [
+              "injection_indirect",
+              "output_xss",
+              "output_ssrf",
+              "output_path"
+            ],
+            "title": "Category",
+            "type": "string"
+          },
+          "detected": {
+            "minimum": 0.0,
+            "title": "Detected",
+            "type": "integer"
+          },
+          "detection_high": {
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Detection High",
+            "type": "number"
+          },
+          "detection_low": {
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Detection Low",
+            "type": "number"
+          },
+          "false_alarm_high": {
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "False Alarm High",
+            "type": "number"
+          },
+          "false_alarm_low": {
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "False Alarm Low",
+            "type": "number"
+          },
+          "false_alarms": {
+            "minimum": 0.0,
+            "title": "False Alarms",
+            "type": "integer"
+          },
+          "hard_benign": {
+            "minimum": 0.0,
+            "title": "Hard Benign",
+            "type": "integer"
+          },
+          "hard_false_alarms": {
+            "minimum": 0.0,
+            "title": "Hard False Alarms",
+            "type": "integer"
+          },
+          "malicious": {
+            "minimum": 1.0,
+            "title": "Malicious",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "category",
+          "malicious",
+          "benign",
+          "detected",
+          "false_alarms",
+          "detection_low",
+          "detection_high",
+          "false_alarm_low",
+          "false_alarm_high",
+          "hard_benign",
+          "hard_false_alarms"
+        ],
+        "title": "SelfTestCategory",
+        "type": "object"
+      },
+      "SelfTestResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "categories": {
+            "items": {
+              "$ref": "#/components/schemas/SelfTestCategory"
+            },
+            "maxItems": 8,
+            "minItems": 1,
+            "title": "Categories",
+            "type": "array"
+          },
+          "corpus": {
+            "pattern": "^[0-9a-f]{8,64}$",
+            "title": "Corpus",
+            "type": "string"
+          },
+          "duration_ms": {
+            "minimum": 0.0,
+            "title": "Duration Ms",
+            "type": "number"
+          },
+          "limits": {
+            "maxLength": 500,
+            "title": "Limits",
+            "type": "string"
+          },
+          "model_enabled": {
+            "title": "Model Enabled",
+            "type": "boolean"
+          },
+          "output_check_mode": {
+            "enum": [
+              "off",
+              "observe",
+              "block"
+            ],
+            "title": "Output Check Mode",
+            "type": "string"
+          },
+          "radar_mode": {
+            "enum": [
+              "off",
+              "observe",
+              "block"
+            ],
+            "title": "Radar Mode",
+            "type": "string"
+          },
+          "ran_at": {
+            "format": "date-time",
+            "title": "Ran At",
+            "type": "string"
+          },
+          "samples": {
+            "minimum": 1.0,
+            "title": "Samples",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "corpus",
+          "model_enabled",
+          "samples",
+          "duration_ms",
+          "categories",
+          "limits",
+          "radar_mode",
+          "output_check_mode",
+          "ran_at"
+        ],
+        "title": "SelfTestResponse",
+        "type": "object"
+      },
       "SeverityLevel": {
         "enum": [
           "low",
@@ -8028,6 +8187,72 @@
         "summary": "Unfreeze Agent",
         "tags": [
           "Agent Passports & Control Actions"
+        ]
+      }
+    },
+    "/v1/radar/self-test": {
+      "post": {
+        "description": "Asks the deployed gateway to run its Radar over the bundled held-out samples and shows the counts next to this organization's switches.\nIt proves the gateway's Radar code behaves as measured; it does not prove an agent's traffic goes through the gateway. Changes nothing,\ntakes no input, one run per organization per minute. A gateway that does not answer is an error: no result is ever invented.",
+        "operationId": "run_self_test_v1_radar_self_test_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-RedHand-Org",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Redhand-Org"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SelfTestResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Run Self Test",
+        "tags": [
+          "Prompt Injection Radar"
         ]
       }
     },

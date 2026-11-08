@@ -8,16 +8,21 @@ POST   /v1/findings/{id}/review         confirm a finding or mark it a false ala
 GET    /v1/radar/suppressions           live suppressions (security operator)
 POST   /v1/radar/suppressions           suppress one rule for one agent for 1 to 90 days (admin, confirmation, reason, audited)
 DELETE /v1/radar/suppressions/{id}      revoke a suppression (admin, audited)
+POST   /v1/radar/self-test              run the Radar over the bundled held-out samples in the gateway (security operator, once a minute)
 POST   /internal/v1/findings            gateway -> core: findings it raised (service token)
 """
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
+import logging
+import time
 from typing import Annotated, Any
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+import httpx
+from pydantic import ValidationError
 
 from redhand_core.auth.operator import AdminDep, SecurityOperatorDep
 from redhand_core.radar import service
@@ -28,19 +33,39 @@ from redhand_core.radar.models import (
     FindingReviewRequest,
     FindingReviewResponse,
     FindingsResponse,
+    GatewaySelfTest,
     RadarSettingsRequest,
     RadarSettingsResponse,
     SuppressionCreateRequest,
     SuppressionCreateResponse,
     SuppressionRevokeRequest,
     SuppressionRevokeResponse,
+    SelfTestResponse,
     SuppressionsResponse,
 )
+from redhand_core.config import Settings, get_settings
 from redhand_core.routers.agent_auth import require_internal_service
+from redhand_core.routers.mcp_scan import GatewayClientDep
 from redhand_core.routers.telegram import OptionalClientDep
 from redhand_core.routers.telemetry import get_supabase_service_client
 
+logger = logging.getLogger(__name__)
 router = APIRouter(tags=["Prompt Injection Radar"])
+
+SELF_TEST_INTERVAL_SECONDS = 60.0
+MAX_TRACKED_ORGANIZATIONS = 10_000
+_self_test_last_run: dict[UUID, float] = {}  # per instance, like the other in-memory limiters; one entry per organization
+
+
+def _self_test_wait(organization_id: UUID, now: float) -> float:
+    """Seconds an organization must still wait before another self-test (0 means go ahead, and the attempt is recorded)."""
+    last = _self_test_last_run.get(organization_id)
+    if last is not None and now - last < SELF_TEST_INTERVAL_SECONDS:
+        return SELF_TEST_INTERVAL_SECONDS - (now - last)
+    _self_test_last_run[organization_id] = now
+    while len(_self_test_last_run) > MAX_TRACKED_ORGANIZATIONS:
+        _self_test_last_run.pop(next(iter(_self_test_last_run)))
+    return 0.0
 
 SupabaseDep = Annotated[Any, Depends(get_supabase_service_client)]
 
@@ -55,6 +80,52 @@ async def put_radar_settings(payload: RadarSettingsRequest, operator: AdminDep, 
     """off: no checks of that kind and nothing stored. observe (default): findings are recorded and alerted; nothing is
     changed or blocked. Block mode is not available yet. Turning a check off needs confirm: true."""
     return await service.set_settings(supabase, operator, payload)
+
+
+@router.post("/v1/radar/self-test", response_model=SelfTestResponse)
+async def run_self_test(
+    operator: SecurityOperatorDep,
+    supabase: SupabaseDep,
+    gateway: GatewayClientDep,
+    settings: Annotated[Settings, Depends(get_settings)],
+) -> SelfTestResponse:
+    """
+    Asks the deployed gateway to run its Radar over the bundled held-out samples and shows the counts next to this organization's switches.
+    It proves the gateway's Radar code behaves as measured; it does not prove an agent's traffic goes through the gateway. Changes nothing,
+    takes no input, one run per organization per minute. A gateway that does not answer is an error: no result is ever invented.
+    """
+    if gateway is None or settings.INTERNAL_SERVICE_TOKEN is None:
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "The self-test is not configured.")
+    wait = _self_test_wait(operator.organization_id, time.monotonic())
+    if wait > 0:
+        raise HTTPException(
+            status.HTTP_429_TOO_MANY_REQUESTS, f"A self-test ran a moment ago; try again in {int(wait) + 1} seconds.",
+            headers={"Retry-After": str(int(wait) + 1)},
+        )
+    try:
+        response = await gateway.post(
+            "/internal/v1/radar/self-test", headers={"Authorization": f"Bearer {settings.INTERNAL_SERVICE_TOKEN.get_secret_value()}"}
+        )
+    except httpx.HTTPError as exc:
+        logger.error("Radar self-test: gateway unreachable: %s", type(exc).__name__)
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, "The gateway could not be reached for the self-test.") from None
+    if response.status_code == 429:
+        raise HTTPException(status.HTTP_429_TOO_MANY_REQUESTS, "A self-test is already running; try again in a moment.")
+    if response.status_code == 401:
+        logger.error("Gateway refused core's service token for the self-test")
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "The self-test is misconfigured.")
+    if response.status_code != 200:
+        logger.error("Radar self-test: gateway answered HTTP %s", response.status_code)
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, "The self-test could not be completed.")
+    try:
+        result = GatewaySelfTest.model_validate(response.json())
+    except (ValueError, ValidationError):
+        logger.error("Radar self-test: the gateway answered with an unexpected shape")
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, "The self-test could not be completed.") from None
+    current = await service.get_settings(supabase, operator)
+    return SelfTestResponse(
+        **result.model_dump(), radar_mode=current.radar_mode, output_check_mode=current.output_check_mode, ran_at=datetime.now(timezone.utc)
+    )
 
 
 @router.get("/v1/findings", response_model=FindingsResponse)

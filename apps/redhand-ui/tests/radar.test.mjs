@@ -100,3 +100,35 @@ test("the coverage file lists the known gaps and the three frozen blind rounds",
   assert.deepEqual(COVERAGE.blind_rounds.map((r) => r.key), ["round1", "round2", "round3"]);
   assert.ok(JSON.stringify(COVERAGE).length < 40_000);
 });
+
+import { falseAlarmText, foundText, pct, selfTestProblem, CHECK_LABEL } from "../src/lib/selfTest.ts";
+
+const CAT = { category: "output_path", malicious: 20, benign: 20, detected: 19, false_alarms: 0, detection_low: 0.76, detection_high: 0.99, false_alarm_low: 0, false_alarm_high: 0.16, hard_benign: 10, hard_false_alarms: 0 };
+
+test("self-test wording shows counts with their ranges and treats zero as a bound", () => {
+  assert.equal(pct(0.955), "96%");
+  assert.equal(foundText(CAT), "19 of 20 (95%, range 76% to 99%)");
+  assert.equal(falseAlarmText(CAT), "0 of 20 (at most 16% with 95% confidence)");
+  assert.equal(falseAlarmText({ ...CAT, false_alarms: 3, false_alarm_low: 0.05, false_alarm_high: 0.36 }), "3 of 20 (15%, range 5% to 36%)");
+  assert.equal(foundText({ ...CAT, malicious: 0, detected: 0 }), "0 of 0 (0%, range 76% to 99%)");
+});
+
+test("every check has a plain name and a failed run says nothing was measured", () => {
+  for (const key of ["injection_indirect", "output_xss", "output_ssrf", "output_path"]) assert.ok(CHECK_LABEL[key].length > 5, key);
+  for (const status of [429, 403, 502, 503, 500, null]) assert.ok(selfTestProblem(status).length > 20, String(status));
+  assert.match(selfTestProblem(502), /Nothing was measured/);
+  assert.match(selfTestProblem(429), /minute/);
+});
+
+test("the Radar page tells readers the self-test flatters the rules and points to the independent results", () => {
+  const page = readFileSync(new URL("../src/app/radar/page.tsx", import.meta.url), "utf8");
+  assert.match(page, /Do not read these numbers as how well the Radar works in real life/);
+  assert.match(page, /about 4 in 10 hidden instructions/);
+  assert.match(page, /href="\/coverage"/);
+});
+
+test("changing a switch clears the old notice and shows that the change is not saved yet", () => {
+  const page = readFileSync(new URL("../src/app/radar/page.tsx", import.meta.url), "utf8");
+  assert.equal((page.match(/setNotice\(null\); setError\(null\); setDraft(Radar|Output)\(/g) ?? []).length, 2);
+  assert.match(page, /Not saved yet: press Save to apply this change\./);
+});

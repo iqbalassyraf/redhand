@@ -109,3 +109,36 @@ async def test_core_refusing_the_report_never_affects_the_agent(monkeypatch: pyt
     response = await _call(stack, token)
     assert response.status_code == 200 and response.json()["result"]["content"][0]["text"] == ATTACK
     assert await _findings(stack) == []
+
+
+@pytest.mark.asyncio
+async def test_done_5b_the_self_test_runs_the_real_gateway_radar_through_core(monkeypatch: pytest.MonkeyPatch) -> None:
+    from pydantic import SecretStr
+
+    from agentwall.src import main as gateway_main
+    from redhand_core.routers import mcp_scan
+    from test_phase1_done import SERVICE_TOKEN
+
+    monkeypatch.setattr(gateway_main.settings, "CORE_SERVICE_TOKEN", SecretStr(SERVICE_TOKEN))
+    stack, _ = await _setup(monkeypatch)
+
+    async def real_gateway() -> httpx.AsyncClient:
+        return httpx.AsyncClient(transport=httpx.ASGITransport(app=gateway_main.app), base_url="http://gateway")
+
+    stack.core_app.dependency_overrides[mcp_scan.get_gateway_client] = real_gateway
+    from redhand_core.routers import radar as radar_router
+
+    radar_router._self_test_last_run.clear()
+    ok = await stack.core.post("/v1/radar/self-test", headers=stack.operator("operator"))
+    assert ok.status_code == 200, ok.text
+    body = ok.json()
+    names = {c["category"] for c in body["categories"]}
+    assert names == {"injection_indirect", "output_xss", "output_ssrf", "output_path"} and body["samples"] >= 100
+    assert body["radar_mode"] == "observe" and body["model_enabled"] is False
+    injection = next(c for c in body["categories"] if c["category"] == "injection_indirect")
+    assert injection["detected"] > 0 and injection["false_alarms"] <= injection["benign"]  # the real rules ran, not a stub
+    assert set(body) == {"corpus", "model_enabled", "samples", "duration_ms", "categories", "limits", "radar_mode", "output_check_mode", "ran_at"}
+    again = await stack.core.post("/v1/radar/self-test", headers=stack.operator("operator"))
+    assert again.status_code == 429  # once a minute per organization
+    viewer = await stack.core.post("/v1/radar/self-test", headers=stack.operator("viewer"))
+    assert viewer.status_code == 403
