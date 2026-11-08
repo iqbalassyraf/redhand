@@ -20,8 +20,8 @@
 | 3 | Repeat step 2 five times quickly | **PASS** | Call latencies steady (222.6, 214.5, 245.7, 223.5, 221.1 ms); findings coalesced into existing rows with occurrences incremented; 0 extra duplicate rows created |
 | 4 | Return markup in result (`draft_reply` with `<img src=x onerror=...>`) | **PASS** | Markup reached agent intact; Radar reported `RAD-OUT-001` (tool: `draft_reply`, kind: `output`, severity: `high`) |
 | 5 | Set checks off (`PUT /v1/radar/settings`), wait 5s, repeat step 2 | **PASS** | Settings updated to `radar_mode: off`, `output_check_mode: off`; repeating step 2 produced zero new findings and zero occurrence increments |
-| 6 | Turn back to `observe`; repeat step 2 | **NOT VERIFIED** | Settings restored to `observe` (HTTP 200), but two retries (one after a 30 s wait) left occurrences unchanged at 2. Return of findings was not observed. Cause not investigated |
-| 7 | Suppress `RAD-INJ-001` for agent (`POST /v1/radar/suppressions`), repeat step 2 | **PASS (weak)** | Suppression created (HTTP 200, 30 days) and verified in `GET /v1/radar/suppressions`; repeating step 2 with attack ticket 13 did NOT increment `RAD-INJ-001` |
+| 6 | Turn back to `observe`; repeat step 2 | **PASS (corrected by Claude Code, see note)** | Settings restored to `observe` (HTTP 200), but two retries (one after a 30 s wait) left occurrences unchanged at 2. Return of findings was not observed. Cause not investigated |
+| 7 | Suppress `RAD-INJ-001` for agent (`POST /v1/radar/suppressions`), repeat step 2 | **PASS (corrected by Claude Code, see note)** | Suppression created (HTTP 200, 30 days) and verified in `GET /v1/radar/suppressions`; repeating step 2 with attack ticket 13 did NOT increment `RAD-INJ-001` |
 | 8 | Viewer role access checks (`GET /v1/findings`, `PUT /v1/radar/settings`) | **PASS** | Viewer role received HTTP 403 Forbidden on both `GET /v1/findings` and `PUT /v1/radar/settings` |
 | 9 | Freeze agent (`POST /v1/passports/{id}/freeze`), repeat step 2 | **PASS** | Tool call denied with HTTP 403 ("Agent passport is frozen"); zero findings created or incremented; agent unfrozen afterwards |
 | 10 | Gateway `/metrics` snapshot (service token) | **PASS** | `redhand_gateway_radar_scans_total{outcome="ok"}: 311`, `reports_total{outcome="ok"}: 8`, `dropped: 0`, `error: 0`, `failed: 0`, `throttled: 15` |
@@ -119,3 +119,10 @@ Restored 2026-11-08 13:53 with owner approval: suppression revoked, scopes and d
 
 ## Latency (from the same session)
 The baseline is **OVER BUDGET**. p50 was at most 1 ms, but about 35% of all samples (147 of 420) were over 100 ms, and p99 was at most 1000 ms. This is more than occasional cold starts and needs investigating before M4 adds more work to each call.
+
+## Correction by Claude Code (2026-11-08): steps 6 and 7 are PASS
+Read straight from the staging database (read-only), not from the test session:
+- Radar settings were turned off at 05:40:09 and back to observe at 05:40:39 (audit rows).
+- Findings returned **at once**: new rows for `RAD-INJ-001/005/008` on `get_ticket` were created at 05:40:45, in a **new** 5-minute bucket (`window_start` 05:40). The earlier check compared the old 05:35 rows, which correctly stopped changing. Counts then rose at 05:41:39 and 05:43:23.
+- The suppression of `RAD-INJ-001` was created at 05:42:49. After it, `RAD-INJ-001` stayed at 2 while `RAD-INJ-005` and `RAD-INJ-008` rose to 3 (05:43:23). So the suppression silenced only that rule, which is the strong evidence step 7 needed.
+Lesson for future briefs: compare findings by rule and time, not by the same row.
