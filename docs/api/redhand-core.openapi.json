@@ -933,6 +933,241 @@
         "title": "EventPayloadResponse",
         "type": "object"
       },
+      "FindingReviewRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "note": {
+            "anyOf": [
+              {
+                "maxLength": 300,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "status": {
+            "enum": [
+              "confirmed",
+              "false_alarm"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "FindingReviewRequest",
+        "type": "object"
+      },
+      "FindingReviewResponse": {
+        "properties": {
+          "changed": {
+            "title": "Changed",
+            "type": "boolean"
+          },
+          "review_status": {
+            "enum": [
+              "open",
+              "confirmed",
+              "false_alarm"
+            ],
+            "title": "Review Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "review_status",
+          "changed"
+        ],
+        "title": "FindingReviewResponse",
+        "type": "object"
+      },
+      "FindingView": {
+        "properties": {
+          "agent_id": {
+            "format": "uuid",
+            "title": "Agent Id",
+            "type": "string"
+          },
+          "agent_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agent Name"
+          },
+          "confidence": {
+            "enum": [
+              "low",
+              "medium",
+              "high"
+            ],
+            "title": "Confidence",
+            "type": "string"
+          },
+          "evasion": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Evasion",
+            "type": "array"
+          },
+          "family": {
+            "title": "Family",
+            "type": "string"
+          },
+          "first_seen_at": {
+            "format": "date-time",
+            "title": "First Seen At",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "injection",
+              "output"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "last_seen_at": {
+            "format": "date-time",
+            "title": "Last Seen At",
+            "type": "string"
+          },
+          "occurrences": {
+            "title": "Occurrences",
+            "type": "integer"
+          },
+          "place": {
+            "enum": [
+              "text",
+              "hidden",
+              "decoded"
+            ],
+            "title": "Place",
+            "type": "string"
+          },
+          "review_note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Review Note"
+          },
+          "review_status": {
+            "enum": [
+              "open",
+              "confirmed",
+              "false_alarm"
+            ],
+            "title": "Review Status",
+            "type": "string"
+          },
+          "reviewed_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reviewed At"
+          },
+          "rule_id": {
+            "title": "Rule Id",
+            "type": "string"
+          },
+          "server_slug": {
+            "title": "Server Slug",
+            "type": "string"
+          },
+          "severity": {
+            "enum": [
+              "low",
+              "medium",
+              "high"
+            ],
+            "title": "Severity",
+            "type": "string"
+          },
+          "tool_name": {
+            "title": "Tool Name",
+            "type": "string"
+          },
+          "would_block": {
+            "title": "Would Block",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "agent_id",
+          "rule_id",
+          "family",
+          "kind",
+          "severity",
+          "confidence",
+          "place",
+          "evasion",
+          "tool_name",
+          "server_slug",
+          "would_block",
+          "occurrences",
+          "first_seen_at",
+          "last_seen_at",
+          "review_status"
+        ],
+        "title": "FindingView",
+        "type": "object"
+      },
+      "FindingsResponse": {
+        "properties": {
+          "findings": {
+            "items": {
+              "$ref": "#/components/schemas/FindingView"
+            },
+            "title": "Findings",
+            "type": "array"
+          },
+          "next_before": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Pass as `before` to read the next (older) page.",
+            "title": "Next Before"
+          }
+        },
+        "required": [
+          "findings"
+        ],
+        "title": "FindingsResponse",
+        "type": "object"
+      },
       "FirewallVerdict": {
         "enum": [
           "allow",
@@ -2251,6 +2486,143 @@
         "title": "PinModeResponse",
         "type": "object"
       },
+      "RadarCapabilities": {
+        "description": "What the signed-in operator may do, so the UI hides buttons the server would refuse. The server enforces it anyway.",
+        "properties": {
+          "can_change_modes": {
+            "title": "Can Change Modes",
+            "type": "boolean"
+          },
+          "can_review": {
+            "title": "Can Review",
+            "type": "boolean"
+          },
+          "can_suppress": {
+            "title": "Can Suppress",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "can_change_modes",
+          "can_review",
+          "can_suppress"
+        ],
+        "title": "RadarCapabilities",
+        "type": "object"
+      },
+      "RadarSettingsRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "confirm": {
+            "default": false,
+            "description": "Required when a check is turned off.",
+            "title": "Confirm",
+            "type": "boolean"
+          },
+          "output_check_mode": {
+            "enum": [
+              "off",
+              "observe"
+            ],
+            "title": "Output Check Mode",
+            "type": "string"
+          },
+          "radar_mode": {
+            "enum": [
+              "off",
+              "observe"
+            ],
+            "title": "Radar Mode",
+            "type": "string"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          }
+        },
+        "required": [
+          "radar_mode",
+          "output_check_mode"
+        ],
+        "title": "RadarSettingsRequest",
+        "type": "object"
+      },
+      "RadarSettingsResponse": {
+        "properties": {
+          "block_available": {
+            "default": false,
+            "description": "False until the measured block gate exists (plan section 11.2).",
+            "title": "Block Available",
+            "type": "boolean"
+          },
+          "capabilities": {
+            "$ref": "#/components/schemas/RadarCapabilities"
+          },
+          "last_7_days": {
+            "additionalProperties": true,
+            "title": "Last 7 Days",
+            "type": "object"
+          },
+          "output_check_mode": {
+            "enum": [
+              "off",
+              "observe",
+              "block"
+            ],
+            "title": "Output Check Mode",
+            "type": "string"
+          },
+          "output_check_mode_changed_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Output Check Mode Changed At"
+          },
+          "radar_mode": {
+            "enum": [
+              "off",
+              "observe",
+              "block"
+            ],
+            "title": "Radar Mode",
+            "type": "string"
+          },
+          "radar_mode_changed_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Radar Mode Changed At"
+          }
+        },
+        "required": [
+          "radar_mode",
+          "output_check_mode",
+          "last_7_days",
+          "capabilities"
+        ],
+        "title": "RadarSettingsResponse",
+        "type": "object"
+      },
       "RenewRequest": {
         "additionalProperties": false,
         "properties": {
@@ -2775,6 +3147,154 @@
           "expires_in_seconds"
         ],
         "title": "StreamTicketResponse",
+        "type": "object"
+      },
+      "SuppressionCreateRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "agent_id": {
+            "format": "uuid",
+            "title": "Agent Id",
+            "type": "string"
+          },
+          "confirm": {
+            "default": false,
+            "description": "Required: a suppression stops a check from recording findings for this agent.",
+            "title": "Confirm",
+            "type": "boolean"
+          },
+          "days": {
+            "default": 30,
+            "maximum": 90.0,
+            "minimum": 1.0,
+            "title": "Days",
+            "type": "integer"
+          },
+          "reason": {
+            "maxLength": 300,
+            "minLength": 3,
+            "title": "Reason",
+            "type": "string"
+          },
+          "rule_id": {
+            "pattern": "^RAD-(INJ|OUT)-[0-9]{3}$",
+            "title": "Rule Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "agent_id",
+          "rule_id",
+          "reason"
+        ],
+        "title": "SuppressionCreateRequest",
+        "type": "object"
+      },
+      "SuppressionCreateResponse": {
+        "properties": {
+          "created": {
+            "title": "Created",
+            "type": "boolean"
+          },
+          "expires_at": {
+            "format": "date-time",
+            "title": "Expires At",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "created",
+          "expires_at"
+        ],
+        "title": "SuppressionCreateResponse",
+        "type": "object"
+      },
+      "SuppressionRevokeResponse": {
+        "properties": {
+          "revoked": {
+            "title": "Revoked",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "revoked"
+        ],
+        "title": "SuppressionRevokeResponse",
+        "type": "object"
+      },
+      "SuppressionView": {
+        "properties": {
+          "agent_id": {
+            "format": "uuid",
+            "title": "Agent Id",
+            "type": "string"
+          },
+          "agent_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agent Name"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "expires_at": {
+            "format": "date-time",
+            "title": "Expires At",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "rule_id": {
+            "title": "Rule Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "agent_id",
+          "rule_id",
+          "reason",
+          "created_at",
+          "expires_at"
+        ],
+        "title": "SuppressionView",
+        "type": "object"
+      },
+      "SuppressionsResponse": {
+        "properties": {
+          "suppressions": {
+            "items": {
+              "$ref": "#/components/schemas/SuppressionView"
+            },
+            "title": "Suppressions",
+            "type": "array"
+          }
+        },
+        "required": [
+          "suppressions"
+        ],
+        "title": "SuppressionsResponse",
         "type": "object"
       },
       "TelegramLinkView": {
@@ -4732,6 +5252,269 @@
         "summary": "Verify Chain",
         "tags": [
           "Black Box Recorder"
+        ]
+      }
+    },
+    "/v1/findings": {
+      "get": {
+        "operationId": "get_findings_v1_findings_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "agent_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Agent Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "review_status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "pattern": "^(open|confirmed|false_alarm)$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Review Status"
+            }
+          },
+          {
+            "in": "query",
+            "name": "kind",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "pattern": "^(injection|output)$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Kind"
+            }
+          },
+          {
+            "in": "query",
+            "name": "rule_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "pattern": "^RAD-(INJ|OUT)-[0-9]{3}$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Rule Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "would_block",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Would Block"
+            }
+          },
+          {
+            "in": "query",
+            "name": "before",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Before"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-RedHand-Org",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Redhand-Org"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FindingsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Findings",
+        "tags": [
+          "Prompt Injection Radar"
+        ]
+      }
+    },
+    "/v1/findings/{finding_id}/review": {
+      "post": {
+        "operationId": "review_finding_v1_findings__finding_id__review_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "finding_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Finding Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-RedHand-Org",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Redhand-Org"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FindingReviewRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FindingReviewResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Review Finding",
+        "tags": [
+          "Prompt Injection Radar"
         ]
       }
     },
@@ -7245,6 +8028,376 @@
         "summary": "Unfreeze Agent",
         "tags": [
           "Agent Passports & Control Actions"
+        ]
+      }
+    },
+    "/v1/radar/settings": {
+      "get": {
+        "operationId": "get_radar_settings_v1_radar_settings_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-RedHand-Org",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Redhand-Org"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RadarSettingsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Radar Settings",
+        "tags": [
+          "Prompt Injection Radar"
+        ]
+      },
+      "put": {
+        "description": "off: no checks of that kind and nothing stored. observe (default): findings are recorded and alerted; nothing is\nchanged or blocked. Block mode is not available yet. Turning a check off needs confirm: true.",
+        "operationId": "put_radar_settings_v1_radar_settings_put",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-RedHand-Org",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Redhand-Org"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RadarSettingsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RadarSettingsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Put Radar Settings",
+        "tags": [
+          "Prompt Injection Radar"
+        ]
+      }
+    },
+    "/v1/radar/suppressions": {
+      "get": {
+        "operationId": "get_suppressions_v1_radar_suppressions_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-RedHand-Org",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Redhand-Org"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuppressionsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Suppressions",
+        "tags": [
+          "Prompt Injection Radar"
+        ]
+      },
+      "post": {
+        "description": "Stops one Radar rule from recording findings for one agent for a limited time. Needs confirm: true and a reason.",
+        "operationId": "post_suppression_v1_radar_suppressions_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-RedHand-Org",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Redhand-Org"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SuppressionCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuppressionCreateResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Post Suppression",
+        "tags": [
+          "Prompt Injection Radar"
+        ]
+      }
+    },
+    "/v1/radar/suppressions/{suppression_id}": {
+      "delete": {
+        "operationId": "delete_suppression_v1_radar_suppressions__suppression_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "suppression_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Suppression Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "reason",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 300,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Reason"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-RedHand-Org",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Redhand-Org"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuppressionRevokeResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Suppression",
+        "tags": [
+          "Prompt Injection Radar"
         ]
       }
     },
