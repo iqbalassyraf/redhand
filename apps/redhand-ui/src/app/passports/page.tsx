@@ -186,6 +186,9 @@ export default function PassportsPage() {
             <Link href="/scanner" className="rounded-full px-3 py-1.5 font-medium text-[#606060] hover:bg-[#F2F2F2]">
               MCP Scanner
             </Link>
+            <Link href="/radar" className="rounded-full px-3 py-1.5 font-medium text-[#606060] hover:bg-[#F2F2F2]">
+              Radar
+            </Link>
             <Link href="/" className="rounded-full px-3 py-1.5 font-medium text-[#606060] hover:bg-[#F2F2F2]">
               Command center (demo)
             </Link>
