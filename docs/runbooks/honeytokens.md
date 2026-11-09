@@ -45,3 +45,14 @@ Create a honeytoken (action: freeze on use) and a decoy tool for a test agent, t
 `python3 scripts/staging_agent.py run` style calls: one call carrying the value, one to the decoy. Expect: refusal,
 a Telegram alert within 10 seconds, the agent frozen after the first, the decoy never reaching upstream, and two
 events in the Black Box.
+
+## System-prompt canary (Phase 4 M5a)
+A **canary** is a honeytoken you paste into an agent's own system prompt. If that text later appears in a tool call or a tool answer that passes through the gateway, the prompt appears to have leaked.
+1. Dashboard -> **Honeytokens** -> **Create a system-prompt canary** (admin or owner). The form fills with the safer defaults: refuse the call and alert, never freeze. Press **Create honeytoken**.
+2. **Copy the sentence now** (the value in it is shown once) and paste it into the agent's system prompt, inside a normal sentence.
+3. When it trips you get one Telegram alert per agent and canary per 5 minutes, worded "Prompt canary seen ... appears to have leaked"; the call is refused (in a result the canary is redacted and the agent still gets its answer). The audit row `honeytoken.tripped` records kind `canary`.
+- **Not frozen by default.** Anyone who steals the prompt can replay the value to trigger an alert on purpose. An admin may choose freeze explicitly; know that a thief could then freeze that agent on demand.
+- **False alarms:** an agent that legitimately passes its instructions to a tool (a logging or "summarise your instructions" tool) trips it. The alert means "appears to have leaked", not "attacked".
+- **Limits:** only what flows through the gateway; not a prompt shown to a person in chat or sent to a model provider; a value the agent re-encodes, splits across fields or glues to other letters or digits is not found.
+- **Counts toward the 50 active honeytokens** per organization. Retire a canary when you change the prompt.
+- **Deploy order:** apply migration `20261119000000_canary_kind.sql`, deploy **core**, then the dashboard. **The gateway is not redeployed.** Rollback: `supabase/rollbacks/20261119000000_canary_kind.down.sql` deletes canaries and their trips.

@@ -13,6 +13,15 @@ Both tools work on RedHand and its demo projects. This file is how each learns w
 
 ---
 
+## 2026-11-09, Claude Code: core deployed to staging; M5a canary built (branch feat/phase4-m5a-canary)
+- **Staging change (owner asked for it):** `deploy.sh core` from `main` (`9503c4c`, includes M4.7a): core revision `redhand-core-00025-24n`. Smoke test: ALL CHECKS PASSED (13). The deployed OpenAPI has no `canary` (built before this branch). The gateway was not redeployed. `deploy.sh` replaces env values, so the same origins and bot name as before were passed.
+- **Built (not deployed):** migration `20261119000000_canary_kind` (+ rollback), a `canary` honeytoken kind (refuse and alert, never freeze by default), alert wording "appears to have leaked", dashboard preset on the Honeytokens page, Coverage row LLM07 "partly", OpenAPI regenerated. No gateway change. Docs: plan (section 10), ADR 0012 addendum, runbook, threat model, changelog.
+- **Verified locally:** 1,611 Python tests, ruff, mypy, 33 dashboard tests, `tsc`, `next build`, SQL tests with rollback and re-apply, 17 deliberate breakages (all caught), browser run of the page (desktop and 375 px).
+- **Not verified:** anything on staging for M5a; the result case through a real MCP server; latency with a canary present (the brief measures it).
+- **Deploy order for M5a (after the PR merges):** apply migration, deploy core, dashboard (merge to `main`). Not the gateway.
+- **For Antigravity and the owner:** `docs/testing/briefs/2026-11-09-m5a-canary.md` (17 steps) and `docs/testing/briefs/2026-11-09-f1-phase4-staging-sweep.md` (needs the viewer, operator and second-organization logins). Staging default daily call limit for new agents is now 1000 (owner changed it from 100 on 2026-11-09).
+- **Next for Claude Code:** M5b (secrets in prompts) and M6 (loop detection) are independent of each other.
+
 ## 2026-11-09, Claude Code: M4.7a built (branch fix/phase4-m4-7a-readiness-figure) and the F1 staging brief written
 - **Changed:** `services/redhand-core/src/redhand_core/radar/readiness.py` (the false alarm figure is capped at the results with a strong finding; ADR 0016 amendment); `scripts/radar_real_life_proof.py` (prints the reason for every call without a result, and a hint for the daily limit); tests in `test_radar_readiness.py` and `test_real_life_scripts.py`; runbook, changelog, finish plan. Five older test setups had rules with strong flags but zero strong results, which cannot happen in real data, so they now set `strong` consistently; no assertion about behaviour was weakened.
 - **Verified:** full suite 1,593 passed; ruff and mypy clean; nine deliberate breakages (cap removed, off by one, cap at scanned removed, refusals dropped from the detail, reason not truncated, control characters kept, note drops the reason, error shape check removed, explained failure counted as passed) were each caught.

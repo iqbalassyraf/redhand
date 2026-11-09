@@ -580,7 +580,7 @@ def _audit_blackbox_export(store: LocalSupabaseAdapter, p: dict[str, Any]) -> No
     )
 
 
-_HONEY_KINDS = ("api_key", "aws_key", "password")
+_HONEY_KINDS = ("api_key", "aws_key", "password", "canary")
 _ACTIONS = ("alert", "freeze")
 _TOOL_NAME = re.compile(r"^[A-Za-z][A-Za-z0-9_]{2,63}$")
 _SYSTEM_ACTOR = "00000000-0000-0000-0000-000000000000"
@@ -695,7 +695,9 @@ def _record_trip(store: LocalSupabaseAdapter, p: dict[str, Any]) -> dict[str, An
         found = next((r for r in store.tables.get("honeytokens", []) if r["id"] == ref and r["organization_id"] == org and r["status"] == "active"), None)
         action = None if found is None else (found["action_on_use"] if seen_in == "arguments" else found["action_on_read"])
         label = None if found is None else found["label"]
+        honeytoken_kind = None if found is None else found["kind"]
     else:
+        honeytoken_kind = None
         found = next(
             (r for r in store.tables.get("honey_tools", []) if r["id"] == ref and r["organization_id"] == org
              and r["agent_id"] == agent and r["status"] == "active"), None,
@@ -724,9 +726,11 @@ def _record_trip(store: LocalSupabaseAdapter, p: dict[str, Any]) -> dict[str, An
         store, org=org, actor=_SYSTEM_ACTOR, action="honeytoken.tripped" if kind == "honeytoken" else "honey_tool.tripped",
         target_type="agent", target_id=agent, reason=None,
         details={"ref_id": ref, "label": label, "seen_in": seen_in, "tool": str(p.get("p_tool") or "")[:128],
-                 "server": str(p.get("p_server") or "")[:128], "action": action},
+                 "server": str(p.get("p_server") or "")[:128], "action": action,
+                 **({"kind": honeytoken_kind} if honeytoken_kind else {})},
     )
-    return {"recorded": True, "label": label, "action": action, "agent_name": agent_row.get("name"), "alert": not recent}
+    return {"recorded": True, "label": label, "action": action, "agent_name": agent_row.get("name"), "alert": not recent,
+            **({"kind": honeytoken_kind} if honeytoken_kind else {})}
 
 
 _PIN_MODES = ("off", "alert", "enforce")

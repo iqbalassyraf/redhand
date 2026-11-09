@@ -22,7 +22,8 @@ OWASP_ITEMS: tuple[tuple[str, str, str], ...] = (
     ("LLM04", "Data and Model Poisoning", "Not covered: RedHand does not see training or fine-tuning data."),
     ("LLM05", "Improper Output Handling", ""),
     ("LLM06", "Excessive Agency", ""),
-    ("LLM07", "System Prompt Leakage", "Not measured here. System-prompt canaries are planned (Phase 4 M5)."),
+    ("LLM07", "System Prompt Leakage", "Partly: a system-prompt canary (Honeytokens page) alerts when planted text appears in a tool call or a tool answer. "
+     "Not measured here, and it cannot see a prompt shown to a person in chat."),
     ("LLM08", "Vector and Embedding Weaknesses", "Not covered: RAG checks are deferred (they need customer integration)."),
     ("LLM09", "Misinformation", "Not covered: outside what a control layer can judge."),
     ("LLM10", "Unbounded Consumption", "Budget Guard caps daily tool calls (tested elsewhere); not measured by this benchmark."),

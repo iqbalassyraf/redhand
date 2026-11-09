@@ -109,11 +109,20 @@ async def retire_honey_tool(supabase: Any, operator: OperatorContext, honey_tool
     return RetireResponse(changed=bool(data["changed"]))
 
 
-def _alert_text(report: TripReport, label: str, agent_name: str, frozen: bool) -> str:
+def _alert_text(report: TripReport, label: str, agent_name: str, frozen: bool, honeytoken_kind: str | None = None) -> str:
     where = f"on {report.server}" if report.server else "through RedHand"
     tool = f" in a call to {report.tool_name}" if report.tool_name else ""
     if report.kind == "honey_tool":
         text = f"Decoy tool called: {agent_name} called '{label}' {where}. The call was not forwarded."
+    elif honeytoken_kind == "canary":
+        # A canary sits in the agent's own system prompt, so its appearing here means prompt text leaked, not that bait was taken.
+        # "Appears to": RedHand cannot tell a leak from an agent that legitimately passed its instructions to a tool.
+        if report.seen_in == "arguments":
+            text = (f"Prompt canary seen: {agent_name} sent the canary '{label}'{tool} {where}, so its system prompt text appears to have leaked "
+                    "into a tool call. The call was refused.")
+        else:
+            text = (f"Prompt canary seen: the canary '{label}' appeared in a result {where}{tool} for {agent_name}, so system prompt text "
+                    "appears to have leaked into a tool answer.")
     elif report.seen_in == "arguments":
         text = f"Honeytoken used: {agent_name} sent the decoy '{label}'{tool} {where}. The call was refused."
     else:
@@ -165,6 +174,7 @@ async def handle_trip(supabase: Any, telegram: TelegramClient | None, report: Tr
     if data.get("alert"):
         await notify_organization(
             supabase, telegram, report.organization_id,
-            _alert_text(report, str(data.get("label")), str(data.get("agent_name")), frozen),
+            _alert_text(report, str(data.get("label")), str(data.get("agent_name")), frozen,
+                        str(data["kind"]) if isinstance(data.get("kind"), str) else None),
         )
     return True

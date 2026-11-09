@@ -69,3 +69,20 @@ argument key was not matched, and the tool name reached the event, the gateway l
 The scan now covers the tool name and every argument key and value. On a trip the redacted copies are what is
 recorded, logged and reported. Scan order is now bait first, then decoy.
 
+
+## Addendum (2026-11-09, Phase 4 M5a): a `canary` kind for the system prompt
+Phase 4 done test 7 asks that a marker put in a system prompt, which later appears in a tool call or a tool answer, trips an alert. That is the
+same mechanism as a honeytoken with a different purpose: the bait is planted in the agent's own prompt, so seeing it means prompt text leaked, not
+that an attacker took bait. Plan: `docs/plans/phase4-m5a-canary.md`.
+- **A fourth kind, `canary`.** Same value shape as `password` (24 mixed-case alphanumerics, no RedHand marker), generated and stored exactly like the others
+  (shown once, SHA-256 digest and last four characters only). Because the shape already exists, **the gateway is unchanged**: core already sends every
+  active honeytoken's digest whatever its kind.
+- **Defaults (decision F-D3).** Used in a call: refuse and alert, **no freeze**. In a result: alert. Anyone who steals a prompt can replay the value on purpose,
+  so freezing must be an explicit admin choice. The API defaults only the fields the caller did not send; the other kinds keep freeze and alert.
+- **Alert wording** says the prompt text "appears to have leaked" (an agent that legitimately passes its instructions to a tool trips it too). The trip function
+  `record_trip()` now also returns the honeytoken's kind (an added key) and writes it to the trip's audit row.
+- **Alternatives rejected:** a `password` honeytoken with a label (alerts and counts could not tell a leak from a taken decoy); a visible prefix (an attacker can strip it);
+  matching the prompt text itself (RedHand would have to hold the most sensitive text an owner has).
+- **Limits (unchanged, now shown next to the value):** only the gateway's view; a prompt shown to a person in chat or sent to a model provider is not seen; re-encoded, split or glued values are not found
+  (a test pins the glued case).
+- **Rollback** deletes canaries and their trips (they cannot exist under the old kind check); the audit rows stay.
