@@ -22,11 +22,13 @@ import {
   passportsApi,
 } from "@/lib/api";
 import { useAuth, useRequiredSession } from "@/lib/auth";
+import { CANARY_LABEL, CANARY_LIMITS, actionsFor, canarySentence } from "@/lib/canary";
 
 const KIND_LABEL: Record<HoneytokenKind, string> = {
   api_key: "API key (sk_live_…)",
   aws_key: "AWS-style key (AKIA…)",
   password: "Password (24 characters)",
+  canary: "System-prompt canary",
 };
 
 function when(iso: string | null): string {
@@ -55,6 +57,18 @@ export default function HoneytokensPage() {
   const [kind, setKind] = useState<HoneytokenKind>("api_key");
   const [onUse, setOnUse] = useState<HoneyAction>("freeze");
   const [onRead, setOnRead] = useState<HoneyAction>("alert");
+
+  // Choosing the canary kind sets its safer defaults (refuse and alert, never freeze); the admin may still change them.
+  const changeKind = (next: HoneytokenKind) => {
+    setKind(next);
+    const defaults = actionsFor(next);
+    setOnUse(defaults.onUse);
+    setOnRead(defaults.onRead);
+  };
+  const fillCanaryPreset = () => {
+    setLabel(CANARY_LABEL);
+    changeKind("canary");
+  };
 
   const [toolAgent, setToolAgent] = useState("");
   const [toolServer, setToolServer] = useState("");
@@ -203,15 +217,20 @@ export default function HoneytokensPage() {
 
         {revealed ? (
           <div className="mb-4 rounded-[10px] border border-[#FFE0B2] bg-[#FFF8EC] p-4 text-[12px]">
-            <div className="mb-1 font-semibold">Copy it now: this value is shown only once.</div>
+            <div className="mb-1 font-semibold">
+              {revealed.kind === "canary" ? "Copy this sentence now: the value in it is shown only once." : "Copy it now: this value is shown only once."}
+            </div>
             <p className="mb-2 text-[#8A5A00]">
-              Plant it where only a misbehaving agent would find it (a decoy file, a decoy database row). RedHand keeps
-              only a fingerprint, so it cannot show it to you again.
+              {revealed.kind === "canary"
+                ? "Paste it into the agent's system prompt. If that text later appears in a tool call or a tool answer that passes through RedHand, you are alerted. RedHand keeps only a fingerprint, so it cannot show it to you again."
+                : "Plant it where only a misbehaving agent would find it (a decoy file, a decoy database row). RedHand keeps only a fingerprint, so it cannot show it to you again."}
             </p>
             <div className="flex items-center gap-2">
-              <code className="flex-1 break-all rounded-[8px] bg-[#FFFFFF] px-2 py-1.5 font-mono">{revealed.value}</code>
+              <code className="flex-1 break-all rounded-[8px] bg-[#FFFFFF] px-2 py-1.5 font-mono">
+                {revealed.kind === "canary" ? canarySentence(revealed.value) : revealed.value}
+              </code>
               <button
-                onClick={() => navigator.clipboard?.writeText(revealed.value)}
+                onClick={() => navigator.clipboard?.writeText(revealed.kind === "canary" ? canarySentence(revealed.value) : revealed.value)}
                 className="flex items-center gap-1 rounded-full border border-[#E5E5E5] bg-[#FFFFFF] px-3 py-1.5 font-semibold hover:bg-[#F2F2F2]"
               >
                 <Copy className="h-3.5 w-3.5" /> Copy
@@ -223,11 +242,28 @@ export default function HoneytokensPage() {
                 I have saved it
               </button>
             </div>
+            {revealed.kind === "canary" ? (
+              <ul className="mt-3 list-disc space-y-1 pl-5 text-[#8A5A00]">
+                {CANARY_LIMITS.map((line) => (
+                  <li key={line}>{line}</li>
+                ))}
+              </ul>
+            ) : null}
           </div>
         ) : null}
 
         <section className="mb-6 rounded-[10px] border border-[#E5E5E5] bg-[#FFFFFF] p-4 text-[12px]">
-          <h2 className="mb-3 text-[14px] font-semibold">Honeytokens (fake credentials)</h2>
+          <h2 className="mb-1 text-[14px] font-semibold">Honeytokens (fake credentials) and system-prompt canaries</h2>
+          <p className="mb-3 text-[#606060]">
+            A canary is a honeytoken you paste into an agent&apos;s own system prompt: if it later appears in a tool call or a tool answer,
+            that prompt text appears to have leaked.
+            <button
+              onClick={fillCanaryPreset}
+              className="ml-2 rounded-full border border-[#E5E5E5] px-3 py-1 font-semibold hover:bg-[#F2F2F2]"
+            >
+              Create a system-prompt canary
+            </button>
+          </p>
           <div className="mb-4 flex flex-wrap items-end gap-3">
             <label className="flex flex-col gap-1">
               <span className="text-[#606060]">Label</span>
@@ -235,7 +271,7 @@ export default function HoneytokensPage() {
             </label>
             <label className="flex flex-col gap-1">
               <span className="text-[#606060]">Looks like</span>
-              <select value={kind} onChange={(e) => setKind(e.target.value as HoneytokenKind)} className={field}>
+              <select value={kind} onChange={(e) => changeKind(e.target.value as HoneytokenKind)} className={field}>
                 {(Object.keys(KIND_LABEL) as HoneytokenKind[]).map((k) => (
                   <option key={k} value={k}>{KIND_LABEL[k]}</option>
                 ))}

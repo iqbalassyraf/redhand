@@ -81,6 +81,7 @@ def _agent(env: Env, name: str = "Alpha") -> str:
 
 @pytest.mark.parametrize(("kind", "pattern"), [
     ("api_key", r"^sk_live_[A-Za-z0-9]{32}$"), ("aws_key", r"^AKIA[A-Z0-9]{16}$"), ("password", r"^[A-Za-z0-9]{24}$"),
+    ("canary", r"^[A-Za-z0-9]{24}$"),
 ])
 def test_generated_values_have_the_documented_shape_and_are_unique(kind: str, pattern: str) -> None:
     values = {generator.generate_value(kind) for _ in range(200)}  # type: ignore[arg-type]
@@ -334,3 +335,125 @@ def test_the_honeytoken_value_is_never_logged(env: Env, caplog: pytest.LogCaptur
         env.trip(agent, token["id"])
         env.context(agent)
     assert token["value"] not in caplog.text
+
+
+# --- system-prompt canaries (Phase 4 M5a, docs/plans/phase4-m5a-canary.md) --------------------------------------
+
+def test_an_unknown_kind_is_an_error_and_never_quietly_a_password() -> None:
+    with pytest.raises(ValueError, match="unknown honeytoken kind"):
+        generator.generate_value("rsa")  # type: ignore[arg-type]  # the point: a value outside the Literal must not produce a password
+
+
+def test_canaries_mix_letter_cases_and_digits_and_never_repeat() -> None:
+    values = {generator.generate_value("canary") for _ in range(200)}
+    assert len(values) == 200
+    assert all(any(c.islower() for c in v) and any(c.isupper() for c in v) and any(c.isdigit() for c in v) for v in values)
+
+
+def test_a_canary_defaults_to_refuse_and_alert_but_never_freeze(env: Env) -> None:
+    """Decision F-D3: a stolen prompt would let anyone freeze an agent on demand if freezing were the default."""
+    canary = env.create_ok(label="System prompt canary", kind="canary")
+    assert canary["kind"] == "canary" and canary["action_on_use"] == "alert" and canary["action_on_read"] == "alert"
+    assert re.match(r"^[A-Za-z0-9]{24}$", canary["value"]) and canary["hint"] == canary["value"][-4:]
+    other = env.create_ok(label="Decoy", kind="api_key")
+    assert other["action_on_use"] == "freeze" and other["action_on_read"] == "alert"  # the other kinds keep their defaults
+
+
+def test_a_canary_may_still_be_told_to_freeze_when_an_admin_asks(env: Env) -> None:
+    canary = env.create_ok(kind="canary", action_on_use="freeze", action_on_read="freeze")
+    assert canary["action_on_use"] == "freeze" and canary["action_on_read"] == "freeze"
+    half = env.create_ok(label="Half", kind="canary", action_on_use="freeze")
+    assert half["action_on_use"] == "freeze" and half["action_on_read"] == "alert"  # only what was asked is changed
+
+
+def test_a_canary_is_stored_as_a_digest_listed_without_its_value_and_audited_with_its_kind(env: Env) -> None:
+    canary = env.create_ok(label="System prompt canary", kind="canary")
+    value = canary["value"]
+    assert env.store.tables["honeytokens"][0]["digest"] == generator.digest_of(value) and value not in json.dumps(env.store.tables["honeytokens"])
+    listing = env.client.get("/v1/honeytokens", headers=env.h("operator"))
+    assert listing.json()[0]["kind"] == "canary" and value not in listing.text and "digest" not in listing.text
+    (audit,) = env.audit_actions("honeytoken.created")
+    assert audit["details"]["kind"] == "canary" and value not in json.dumps(audit)
+
+
+def test_only_admins_create_or_retire_canaries(env: Env) -> None:
+    assert env.create("viewer", kind="canary").status_code == 403 and env.create("operator", kind="canary").status_code == 403
+    created = env.create_ok(kind="canary")
+    assert env.client.post(f"/v1/honeytokens/{created['id']}/retire", headers=env.h("operator")).status_code == 403
+    assert env.client.post(f"/v1/honeytokens/{created['id']}/retire", headers=env.h("admin")).json() == {"changed": True}
+
+
+def test_canaries_count_toward_the_fifty_active_limit(env: Env) -> None:
+    env.create_ok(label="canary", kind="canary")
+    for i in range(49):
+        env.create_ok(label=f"bulk {i}", kind="password")
+    assert env.create(kind="canary").status_code == 409
+
+
+def test_the_gateway_is_told_a_canary_digest_like_any_honeytoken_and_only_its_own_organizations(env: Env) -> None:
+    agent = _agent(env)
+    mine = env.create_ok(label="mine", kind="canary")
+    theirs = env.client.post("/v1/honeytokens", json={"label": "theirs", "kind": "canary"}, headers=env.other_org_headers())
+    assert theirs.status_code == 201
+    body = env.context(agent).json()["agent"]
+    assert body["honeytokens"] == [{"id": mine["id"], "digest": generator.digest_of(mine["value"])}]
+    assert theirs.json()["value"] not in json.dumps(body) and mine["value"] not in json.dumps(body)
+
+
+def test_a_canary_in_a_call_alerts_with_leak_wording_and_does_not_freeze(env: Env) -> None:
+    env.link()
+    agent = _agent(env)
+    canary = env.create_ok(label="System prompt canary", kind="canary")
+    assert env.trip(agent, canary["id"]).json() == {"recorded": True}
+    assert env.statuses()["Alpha"] == "active"
+    alert = env.fake.last(OWNER_CHAT)
+    assert "canary" in alert.lower() and "leak" in alert and "Alpha" in alert and "System prompt canary" in alert and "refused" in alert
+    assert "decoy" not in alert.lower() and canary["value"] not in alert
+    assert env.audit_actions("honeytoken.tripped")[0]["details"]["kind"] == "canary"
+
+
+def test_a_canary_in_a_result_alerts_with_leak_wording(env: Env) -> None:
+    env.link()
+    agent = _agent(env)
+    canary = env.create_ok(label="System prompt canary", kind="canary")
+    env.trip(agent, canary["id"], seen_in="result")
+    alert = env.fake.last(OWNER_CHAT)
+    assert "canary" in alert.lower() and "result" in alert and "leak" in alert and "decoy" not in alert.lower() and "refused" not in alert
+    assert env.statuses()["Alpha"] == "active"
+
+
+def test_a_canary_set_to_freeze_does_freeze_and_says_so(env: Env) -> None:
+    env.link()
+    agent = _agent(env)
+    canary = env.create_ok(kind="canary", action_on_use="freeze")
+    env.trip(agent, canary["id"])
+    assert env.statuses()["Alpha"] == "frozen" and "frozen" in env.fake.last(OWNER_CHAT)
+
+
+def test_other_honeytoken_alerts_keep_their_decoy_wording_and_audit_kind(env: Env) -> None:
+    env.link()
+    agent = _agent(env)
+    bait = env.create_ok(label="Decoy prod key", kind="api_key", action_on_use="alert")
+    env.trip(agent, bait["id"])
+    assert "Honeytoken used" in env.fake.last(OWNER_CHAT) and "canary" not in env.fake.last(OWNER_CHAT).lower()
+    assert env.audit_actions("honeytoken.tripped")[0]["details"]["kind"] == "api_key"
+
+
+def test_a_retired_canary_no_longer_trips_and_another_organizations_cannot_be_tripped(env: Env) -> None:
+    env.link()
+    agent = _agent(env)
+    canary = env.create_ok(kind="canary")
+    env.client.post(f"/v1/honeytokens/{canary['id']}/retire", headers=env.h("admin"))
+    assert env.trip(agent, canary["id"]).json() == {"recorded": False}
+    assert env.trip(agent, canary["id"], org=OTHER_ORG).status_code == 404
+    assert env.alerts() == []
+
+
+def test_the_canary_value_is_never_logged(env: Env, caplog: pytest.LogCaptureFixture) -> None:
+    env.link()
+    agent = _agent(env)
+    with caplog.at_level(logging.DEBUG):
+        canary = env.create_ok(kind="canary")
+        env.trip(agent, canary["id"])
+        env.context(agent)
+    assert canary["value"] not in caplog.text

@@ -18,7 +18,7 @@ analysis and templates. Any per-event LLM use needs an explicit cost estimate an
 | 1 | Identity & control | Agent Passport, one-click revoke, dashboard kill switch, MCP gateway | **Built** (see below) |
 | 2 | Stop things | Budget Guard, Safe Mode, WhatsApp/Telegram panic command | **Complete** (2026-11-04) |
 | 3 | See things | Black Box Recorder, Honeytokens | Built: Black Box, payload capture and export, honeytokens and decoy tools; done tests 4 and 5 verified on staging, test 3's dashboard half partly (`docs/plans/phase3-plan.md` section 9.4) |
-| 4 | Check inputs | MCP Scanner, tool pinning, Prompt Injection Radar (deterministic), output checks, canaries, loop detection, destination allowlist | In progress: M0 to M4 built (the Radar is Watch only; Scanner and tool pinning still need a staging check). M5, M6 and M7 not started (`docs/plans/phase4-finish-plan.md`) |
+| 4 | Check inputs | MCP Scanner, tool pinning, Prompt Injection Radar (deterministic), output checks, canaries, loop detection, destination allowlist | In progress: M0 to M4 built (the Radar is Watch only; Scanner and tool pinning still need a staging check). M5a (canary) built, staging test pending; M5b, M6 and M7 not started (`docs/plans/phase4-finish-plan.md`) |
 | 4.5 | Model proxy (evaluation) | Dollar budgets, approved models, user-input checks | Build plan approved 2026-11-06, proxy gated on a measured prototype (`docs/plans/phase4.5-build-plan.md`) |
 | 5 | Prove it | Compliance reports, Trust Score | Not started |
 | Parked | Higher tiers | Red Team service, Shadow Agent Finder, Cross-agent firewall, Policy marketplace | Fuzzer exists in `redhand-sdk` |

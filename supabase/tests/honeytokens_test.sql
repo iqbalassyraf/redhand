@@ -121,6 +121,55 @@ BEGIN
     PERFORM pg_temp.check((t->>'trips')::int = 0, 'purge keeps recent data');
 END $$;
 
+-- canaries (Phase 4 M5a) -------------------------------------------------------------------------------------
+INSERT INTO public.organizations (id, name, slug) VALUES ('00000000-0000-0000-0000-0000b0b00003', 'Canary Org C', 'canary-org-c');
+INSERT INTO public.agents (id, organization_id, external_agent_id, name) VALUES
+    ('00000000-0000-0000-0000-0000b0b0000c', '00000000-0000-0000-0000-0000b0b00003', 'cny-bot-c', 'Canary Bot C');
+
+DO $$
+DECLARE
+    c uuid := '00000000-0000-0000-0000-0000b0b00003';
+    bot_c uuid := '00000000-0000-0000-0000-0000b0b0000c';
+    actor uuid := '00000000-0000-0000-0000-0000b0b0a001';
+    can jsonb; pw jsonb; r jsonb; tool jsonb;
+BEGIN
+    can := public.control_honeytoken_create(c, actor, 'System prompt canary', 'canary', repeat('7', 64), 'qqqq', 'alert', 'alert');
+    PERFORM pg_temp.check(can->>'kind' = 'canary' AND can->>'action_on_use' = 'alert' AND NOT (can ? 'digest'), 'a canary can be created and returns no digest');
+    PERFORM pg_temp.check((SELECT details->>'kind' = 'canary' AND details::text NOT LIKE '%7777777%' FROM public.control_audit_log
+        WHERE action = 'honeytoken.created' AND organization_id = c), 'the canary creation audit names the kind and has no digest');
+    PERFORM pg_temp.expect_error(format('SELECT public.control_honeytoken_create(%L, %L, ''x'', ''canary_x'', %L, ''wxyz'', ''alert'', ''alert'')', c, actor, repeat('8', 64)),
+        '23514', 'an unknown kind is still refused');
+
+    r := public.record_trip(c, gen_random_uuid(), bot_c, 'honeytoken', (can->>'id')::uuid, 'arguments', 'send_email', 'mail');
+    PERFORM pg_temp.check((r->>'recorded')::boolean AND r->>'kind' = 'canary' AND r->>'action' = 'alert' AND (r->>'alert')::boolean,
+        'a canary trip returns its kind and uses the use action');
+    PERFORM pg_temp.check((SELECT details->>'kind' = 'canary' FROM public.control_audit_log WHERE action = 'honeytoken.tripped' AND organization_id = c),
+        'the trip audit records the kind');
+    r := public.record_trip(c, gen_random_uuid(), bot_c, 'honeytoken', (can->>'id')::uuid, 'result', 'read_doc', 'docs');
+    PERFORM pg_temp.check(r->>'kind' = 'canary' AND r->>'action' = 'alert', 'a canary trip in a result uses the read action');
+
+    pw := public.control_honeytoken_create(c, actor, 'Plain decoy', 'password', repeat('6', 64), 'pppp', 'freeze', 'alert');
+    r := public.record_trip(c, gen_random_uuid(), bot_c, 'honeytoken', (pw->>'id')::uuid, 'arguments', 'x', 'y');
+    PERFORM pg_temp.check(r->>'kind' = 'password' AND r->>'action' = 'freeze', 'other honeytoken kinds still behave as before and report their kind');
+
+    tool := public.control_honey_tool_create(c, actor, bot_c, 'deepwiki', 'export_everything', 'Exports everything', 'alert');
+    r := public.record_trip(c, gen_random_uuid(), bot_c, 'honey_tool', (tool->>'id')::uuid, 'call', 'export_everything', 'deepwiki');
+    PERFORM pg_temp.check((r->>'recorded')::boolean AND NOT (r ? 'kind'), 'a decoy tool trip has no kind');
+    PERFORM pg_temp.check((SELECT NOT (details ? 'kind') FROM public.control_audit_log WHERE action = 'honey_tool.tripped' AND organization_id = c),
+        'a decoy tool trip audit has no kind');
+
+    -- canaries share the 50 active honeytokens limit
+    FOR i IN 1..48 LOOP
+        PERFORM public.control_honeytoken_create(c, actor, 'fill ' || i, 'password', lpad(i::text, 64, '5'), 'ffff', 'alert', 'alert');
+    END LOOP;
+    PERFORM pg_temp.expect_error(format('SELECT public.control_honeytoken_create(%L, %L, ''one too many'', ''canary'', %L, ''abcd'', ''alert'', ''alert'')', c, actor, repeat('4', 64)),
+        '23514', 'a canary counts toward the 50 active honeytokens limit');
+
+    PERFORM public.control_honeytoken_retire(c, actor, (can->>'id')::uuid);
+    r := public.record_trip(c, gen_random_uuid(), bot_c, 'honeytoken', (can->>'id')::uuid, 'arguments', 'x', 'y');
+    PERFORM pg_temp.check(NOT (r->>'recorded')::boolean, 'a retired canary no longer records trips');
+END $$;
+
 SELECT pg_temp.check(NOT has_function_privilege('authenticated', 'public.record_trip(uuid,uuid,uuid,text,uuid,text,text,text)', 'EXECUTE')
     AND NOT has_function_privilege('anon', 'public.control_honeytoken_create(uuid,uuid,text,text,text,text,text,text)', 'EXECUTE')
     AND has_function_privilege('service_role', 'public.record_trip(uuid,uuid,uuid,text,uuid,text,text,text)', 'EXECUTE'),

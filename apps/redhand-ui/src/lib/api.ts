@@ -384,7 +384,7 @@ export const telegramApi = {
     apiFetch<{ link_id: string; changed: boolean }>(`/v1/telegram/links/${id}/unlink`, t, { method: "POST" }),
 };
 
-export type HoneytokenKind = "api_key" | "aws_key" | "password";
+export type HoneytokenKind = "api_key" | "aws_key" | "password" | "canary";
 export type HoneyAction = "alert" | "freeze";
 
 export interface Honeytoken {

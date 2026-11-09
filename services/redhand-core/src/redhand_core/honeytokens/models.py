@@ -6,7 +6,7 @@ from datetime import datetime
 from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from redhand_core.honeytokens.generator import HoneytokenKind
 from redhand_core.passports.models import SERVER_SLUG_PATTERN
@@ -23,8 +23,19 @@ class HoneytokenCreateRequest(BaseModel):
 
     label: str = Field(pattern=LABEL_PATTERN, description="What the owner calls it, for example 'Decoy prod key in .env'.")
     kind: HoneytokenKind
-    action_on_use: Action = Field(default="freeze", description="When an agent USES it in a tool call (the call is refused).")
+    action_on_use: Action = Field(
+        default="freeze",
+        description="When an agent USES it in a tool call (the call is refused). Default: freeze, except for a canary (alert).",
+    )
     action_on_read: Action = Field(default="alert", description="When it appears in a tool RESULT (the agent read it).")
+
+    @model_validator(mode="after")
+    def _a_canary_does_not_freeze_unless_asked(self) -> "HoneytokenCreateRequest":
+        # Decision F-D3 (docs/plans/phase4-m5a-canary.md): anyone who steals a system prompt can replay the canary on purpose, so
+        # freezing must be an explicit choice, never the default. Only a field the caller did not send is defaulted.
+        if self.kind == "canary" and "action_on_use" not in self.model_fields_set:
+            self.action_on_use = "alert"
+        return self
 
 
 class HoneytokenView(BaseModel):

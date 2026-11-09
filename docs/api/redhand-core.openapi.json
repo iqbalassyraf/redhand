@@ -1692,7 +1692,7 @@
           },
           "action_on_use": {
             "default": "freeze",
-            "description": "When an agent USES it in a tool call (the call is refused).",
+            "description": "When an agent USES it in a tool call (the call is refused). Default: freeze, except for a canary (alert).",
             "enum": [
               "alert",
               "freeze"
@@ -1704,7 +1704,8 @@
             "enum": [
               "api_key",
               "aws_key",
-              "password"
+              "password",
+              "canary"
             ],
             "title": "Kind",
             "type": "string"
@@ -1760,7 +1761,8 @@
             "enum": [
               "api_key",
               "aws_key",
-              "password"
+              "password",
+              "canary"
             ],
             "title": "Kind",
             "type": "string"
@@ -1852,7 +1854,8 @@
             "enum": [
               "api_key",
               "aws_key",
-              "password"
+              "password",
+              "canary"
             ],
             "title": "Kind",
             "type": "string"

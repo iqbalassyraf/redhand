@@ -125,7 +125,7 @@ Block mode does not exist: SQL, core and the gateway all refuse it. This table s
 | LLM04 | Data and Model Poisoning | not measured | Not covered: RedHand does not see training or fine-tuning data. |
 | LLM05 | Improper Output Handling | `output_path`: covered (held-out); `output_ssrf`: covered (held-out); `output_xss`: covered (held-out) |  |
 | LLM06 | Excessive Agency | `manifest_risk`: partial (dev only) |  |
-| LLM07 | System Prompt Leakage | not measured | Not measured here. System-prompt canaries are planned (Phase 4 M5). |
+| LLM07 | System Prompt Leakage | not measured | Partly: a system-prompt canary (Honeytokens page) alerts when planted text appears in a tool call or a tool answer. Not measured here, and it cannot see a prompt shown to a person in chat. |
 | LLM08 | Vector and Embedding Weaknesses | not measured | Not covered: RAG checks are deferred (they need customer integration). |
 | LLM09 | Misinformation | not measured | Not covered: outside what a control layer can judge. |
 | LLM10 | Unbounded Consumption | not measured | Budget Guard caps daily tool calls (tested elsewhere); not measured by this benchmark. |

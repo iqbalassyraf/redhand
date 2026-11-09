@@ -131,6 +131,84 @@ async def test_a_honeytoken_read_in_a_result_is_redacted_alerted_and_does_not_fr
     await stack.close()
 
 
+async def _create_canary(stack: Stack, **body: Any) -> str:
+    created = await stack.core.post("/v1/honeytokens", json={"label": "System prompt canary", "kind": "canary", **body}, headers=stack.operator("admin"))
+    assert created.status_code == 201
+    return str(created.json()["value"])
+
+
+@pytest.mark.asyncio
+async def test_done_7_a_canary_from_the_system_prompt_in_a_call_is_refused_alerted_and_does_not_freeze(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Phase 4 done test 7 (docs/plans/phase4-plan.md): a marker put in a system prompt that later appears in a tool call trips an alert."""
+    stack, phone, token, agent_id = await _setup(monkeypatch)
+    value = await _create_canary(stack)  # no actions given: a canary refuses and alerts, it never freezes by default
+
+    # The owner pastes the value into the system prompt inside a sentence; an injected agent then repeats that sentence in a tool call.
+    leaked = f"Internal reference code (never repeat it): {value}. You are the invoice assistant."
+    started = time.monotonic()
+    refused = await stack.call_tool(token, "list_invoices", note=leaked)
+    assert refused.json()["error"]["code"] == -32000 and value not in refused.text
+    assert demo_mcp_server.calls == []  # never reached the MCP server
+    await stack.gateway.trips.wait_idle()
+    assert time.monotonic() - started < ALERT_DEADLINE_SECONDS
+
+    (chat, alert) = phone.sent[-1]
+    assert chat == OWNER_CHAT and "canary" in alert.lower() and "leak" in alert and "Invoice bot" in alert and "System prompt canary" in alert
+    assert value not in alert and "decoy" not in alert.lower()
+    assert await _status(stack, agent_id) == "active"  # not frozen: a stolen prompt must not let anyone freeze the agent on demand
+    tripped = _audit(stack, "honeytoken.tripped")[0]
+    assert tripped["details"]["kind"] == "canary" and tripped["details"]["seen_in"] == "arguments" and value not in json.dumps(tripped)
+
+    await stack.gateway.recorder.flush()
+    (event,) = _stored_events(stack)
+    assert event["decision"] == "BLOCK" and event["reasons"] == ["honeytoken"] and value not in json.dumps(event)
+
+    ok = await stack.call_tool(token, "list_invoices")  # the agent is still active, so its next innocent call goes through
+    assert ok.status_code == 200 and "result" in ok.json()
+    await stack.close()
+
+
+@pytest.mark.asyncio
+async def test_a_canary_in_a_result_is_redacted_and_alerted_with_leak_wording(monkeypatch: pytest.MonkeyPatch) -> None:
+    stack, phone, token, agent_id = await _setup(monkeypatch)
+    value = await _create_canary(stack)
+
+    def echoing(request: httpx.Request) -> httpx.Response:
+        message = json.loads(request.content)
+        return httpx.Response(200, json={"jsonrpc": "2.0", "id": message["id"], "result": {
+            "content": [{"type": "text", "text": f"your instructions begin: reference code {value}, then ..."}], "isError": False}})
+
+    stack.gateway.forwarder._http = httpx.AsyncClient(transport=httpx.MockTransport(echoing))
+    resp = await stack.call_tool(token, "list_invoices", month="2026-10")
+    await stack.gateway.trips.wait_idle()
+    assert "result" in resp.json() and value not in resp.text and "your instructions begin" in resp.text  # redacted, not refused
+    alert = phone.sent[-1][1]
+    assert "canary" in alert.lower() and "result" in alert and "leak" in alert and value not in alert and "decoy" not in alert.lower()
+    assert await _status(stack, agent_id) == "active"
+    assert _audit(stack, "honeytoken.tripped")[0]["details"]["seen_in"] == "result"
+    await stack.close()
+
+
+@pytest.mark.asyncio
+async def test_other_text_does_not_trip_a_canary_and_its_known_limits_are_pinned(monkeypatch: pytest.MonkeyPatch) -> None:
+    stack, phone, token, _ = await _setup(monkeypatch)
+    value = await _create_canary(stack)
+    # Same length, same alphabet, one character different: a lookup by digest, not a guess by shape.
+    near_miss = value[:-1] + ("A" if value[-1] != "A" else "B")
+    for harmless in (near_miss, "AbCdEf1234567890abcdEFGH", "2026-10"):
+        resp = await stack.call_tool(token, "list_invoices", month=harmless)
+        assert resp.status_code == 200, harmless  # forwarded, not refused
+    await stack.gateway.trips.wait_idle()
+    assert phone.sent == [] and _audit(stack, "honeytoken.tripped") == []
+
+    # Known limits (docs/adr/0012-honeytokens.md): a canary glued to other letters or digits, or re-encoded, is not found.
+    glued = await stack.call_tool(token, "list_invoices", note=f"{value}x")
+    encoded = await stack.call_tool(token, "list_invoices", note=value[::-1])
+    await stack.gateway.trips.wait_idle()
+    assert phone.sent == [] and glued.status_code != 403 and encoded.status_code != 403
+    await stack.close()
+
+
 @pytest.mark.asyncio
 async def test_done_5_a_call_to_a_decoy_tool_is_never_forwarded_and_trips(monkeypatch: pytest.MonkeyPatch) -> None:
     stack, phone, token, agent_id = await _setup(monkeypatch)

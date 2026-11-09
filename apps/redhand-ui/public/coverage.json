@@ -718,7 +718,7 @@
     {
       "item": "LLM07",
       "name": "System Prompt Leakage",
-      "note": "Not measured here. System-prompt canaries are planned (Phase 4 M5).",
+      "note": "Partly: a system-prompt canary (Honeytokens page) alerts when planted text appears in a tool call or a tool answer. Not measured here, and it cannot see a prompt shown to a person in chat.",
       "status": []
     },
     {
