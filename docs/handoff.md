@@ -13,6 +13,25 @@ Both tools work on RedHand and its demo projects. This file is how each learns w
 
 ---
 
+## 2026-11-09, Antigravity & Owner: Block gate and real-life proof verified (Phase 4 M4.6)
+- **Changed:**
+  - Tested branch `feat/phase4-m4-6a-gate` (`0943e5d`) on staging with owner.
+  - Deployed revisions: `redhand-core-00024-jzp`, `redhand-gateway-00021-4kx`, production Vercel.
+  - Authored test result at `docs/testing/results/2026-11-09-m4-6-block-gate-and-real-life-proof.md`.
+  - Created test agent `radar-proof` (`agent-6d0c9faadbf0`) with scope `deepwiki/read_wiki_contents:read`; revoked in Step 12. Switches left on Watch.
+- **Verified:**
+  - **Verdict:** **GOOD.** Every step passed and the counts matched exactly ($N - B = 100 - 0 = 100$).
+  - **Real-life proof:** `python3 scripts/radar_real_life_proof.py --calls 120` made 120 calls to DeepWiki against 120 public repo wikis; 100 returned long documents (61.7 MiB total, all $\ge$ 2 KiB); gateway scanned all 100 with zero dropped/failed scans; 23 evidence-count reports reached core with zero failures.
+  - **Exact count match:** `/radar` results scanned increased from 0 to 100 ($N - B = 100$), exactly matching the script's 100 results received for both checks. *Same rules the whole time* condition displays **pass** ("The same rules ran the whole window").
+  - **Findings review:** 11 `radar-proof` findings reviewed and marked `False alarm`. Hidden instructions false alarms rose from 36 to 81 (95% upper bound 87.5%); Risky output false alarms rose from 0 to 6 (95% upper bound 12.5%).
+  - **No Block option:** Dropdown under Checks contains only `Watch (record findings)` and `Off`. Text confirms blocking is not available.
+  - **Coverage page block gate:** `/coverage` lists "Ready to block? Not yet." with five rules (G1 to G5). Script and active markup correctly shows G1 pass, G2 pass, G3 not yet (0/120, upper bound 3.1%, limit 3.0%), G4 pass (74/80, 92%), G5 not yet (0 long samples).
+  - **Unauthenticated endpoint protection:** `POST /internal/v1/radar/scan-counts` without service token returns HTTP 401 ("Invalid service credentials").
+  - **Responsive layout:** 375 px mobile width verified on both pages without sideways scroll.
+  - **Cleanup:** `radar-proof` revoked; switches remain on Watch.
+- **Next for Claude Code:**
+  - Proceed with Phase 4 closeout or Phase 5 planning.
+
 ## 2026-11-08, Antigravity & Owner: Radar page verified on production Vercel (Phase 4 M4.4)
 - **Changed:**
   - Verified production Vercel deploy of `main` for Phase 4 M4.4 Radar page (`https://redhand.archtificial.com/radar`).
