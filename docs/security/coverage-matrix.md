@@ -88,9 +88,26 @@ Author: Grok 4 (xAI). 250 samples (240 after removing exact duplicates) by an au
 | Bahasa Indonesia | no | not measured | 2/32 | No Indonesian-specific rules. The only independent samples (round 3) were all harmless, so attack detection is not measured at all. |
 | Chinese (Simplified) | no | not measured | not measured | Not covered: no rules and no samples. Do not assume anything here is detected. |
 
+## Ready to block? (the block gate)
+
+Block mode does not exist: SQL, core and the gateway all refuse it. This table says whether the measured evidence would be enough to ever offer it. It reads only the frozen blind rounds above, never our own held-out samples, and a change to the rules file makes old rounds stale (rules fingerprint `a7818a78351aa02e`). Rules: **G1** Independent evidence: A frozen test round written by someone other than the rule author, scored once. **G2** Measured on these rules: That round was scored on exactly the rules that run now (same fingerprint, helper model off). **G3** False alarms low enough: The 95% upper bound of false alarms is at most 3%, with at least 40 harmless samples built to look like attacks. **G4** Catches enough: The 95% lower bound of attacks found is at least 50%. **G5** Tested on long, realistic text: At least 40 harmless samples are 2 KiB or longer (pages, emails, documents).
+
+| Check | Evidence | G1 | G2 | G3 | G4 | G5 | Eligible |
+|---|---|---|---|---|---|---|---|
+| Hidden instructions in tool answers | round3 | pass | pass | **fail** | **fail** | **fail** | no |
+| Script and active markup | round2 | pass | pass | **fail** | pass | **fail** | no |
+| Internal and cloud-metadata addresses | round2 | pass | pass | **fail** | pass | **fail** | no |
+| Sensitive file paths | round2 | pass | pass | **fail** | pass | **fail** | no |
+
+- **Hidden instructions in tool answers:** False alarms: 10 of 146 harmless samples, 95% upper bound 12.1% (limit 3.0%); 48 built to look like attacks (need 40). Even with no false alarm, at least 125 harmless samples are needed. Attacks found: 34 of 94, 95% lower bound 27.2% (need at least 50.0%). Long harmless samples (2 KiB or more): 0 (need 40). Real tool answers are pages and documents; the samples we have are short.
+- **Script and active markup:** False alarms: 0 of 120 harmless samples, 95% upper bound 3.1% (limit 3.0%); 45 built to look like attacks (need 40). Even with no false alarm, at least 125 harmless samples are needed. Long harmless samples (2 KiB or more): 0 (need 40). Real tool answers are pages and documents; the samples we have are short.
+- **Internal and cloud-metadata addresses:** False alarms: 3 of 120 harmless samples, 95% upper bound 7.1% (limit 3.0%); 45 built to look like attacks (need 40). Even with no false alarm, at least 125 harmless samples are needed. Long harmless samples (2 KiB or more): 0 (need 40). Real tool answers are pages and documents; the samples we have are short.
+- **Sensitive file paths:** False alarms: 6 of 120 harmless samples, 95% upper bound 10.5% (limit 3.0%); 45 built to look like attacks (need 40). Even with no false alarm, at least 125 harmless samples are needed. Long harmless samples (2 KiB or more): 0 (need 40). Real tool answers are pages and documents; the samples we have are short.
+
 ## Known gaps (read these first)
 
 - Hidden instructions are found about 4 times in 10 on text the rules have not seen, with about 7 to 8 false alarms per 100 harmless documents.
+- On real long documents the checks flag more than on our short samples: 10 of 10 real web pages raised a script flag, and on 186 strangers' READMEs the hidden-instruction check flagged 12% and the risky-output check 6% (a recorded measurement, not blind evidence: docs/security/real-document-replay.md).
 - A rephrased or politely worded attack, and an attack buried in the middle of a long document, are often missed.
 - Malay hidden-instruction detection found 4 of 25 attacks in the independent round; Indonesian attacks were not measured; Chinese is not covered.
 - Documentation, runbooks and security write-ups that quote attacks cause false alarms.

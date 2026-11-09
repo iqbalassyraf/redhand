@@ -204,3 +204,113 @@ class SelfTestResponse(GatewaySelfTest):
     radar_mode: Mode
     output_check_mode: Mode
     ran_at: datetime
+
+
+# --- Evidence from real traffic (Phase 4 M4.6b, docs/plans/phase4-m4-6-block-gate.md) ------------------------------------------------
+
+MAX_SCAN_COUNT = 1_000_000
+FINGERPRINT_PATTERN = r"^(unknown|[0-9a-f]{16}(\+model)?)$"
+
+
+class ScanRuleCount(BaseModel):
+    """How many scanned results one rule flagged (any confidence) and flagged strongly. Numbers only."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    rule_id: str = Field(pattern=RULE_ID_PATTERN)
+    flagged: int = Field(ge=0, le=MAX_SCAN_COUNT)
+    strong: int = Field(ge=0, le=MAX_SCAN_COUNT)
+
+
+class ScanCountItem(BaseModel):
+    """The gateway's totals for one organization and one check since its last report. No text, no tool name, no agent."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    organization_id: UUID
+    kind: FindingKind
+    scanned: int = Field(ge=0, le=MAX_SCAN_COUNT)
+    dropped: int = Field(ge=0, le=MAX_SCAN_COUNT)
+    errors: int = Field(ge=0, le=MAX_SCAN_COUNT)
+    flagged: int = Field(ge=0, le=MAX_SCAN_COUNT)
+    strong: int = Field(ge=0, le=MAX_SCAN_COUNT)
+    rules: list[ScanRuleCount] = Field(default_factory=list, max_length=40)
+
+
+class ScanCountsReport(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    report_id: UUID = Field(description="Chosen by the gateway for each report; a report sent again with the same id is counted once.")
+    rules_fingerprint: str = Field(pattern=FINGERPRINT_PATTERN)
+    items: list[ScanCountItem] = Field(min_length=1, max_length=50)
+
+
+class ScanCountsResponse(BaseModel):
+    recorded: int
+    skipped: int
+    duplicate: bool = False
+
+
+class RuleCounts(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    flagged: int = Field(ge=0)
+    strong: int = Field(ge=0)
+
+
+class KindInputs(BaseModel):
+    """What the database knows about one check over the window. Read strictly: anything unexpected is an error, never a verdict."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    mode: Mode
+    mode_changed_at: datetime
+    scanned: int = Field(ge=0)
+    dropped: int = Field(ge=0)
+    errors: int = Field(ge=0)
+    flagged: int = Field(ge=0)
+    strong: int = Field(ge=0)
+    fingerprints: list[str]
+    rules: dict[str, RuleCounts]
+    stored_occurrences: dict[str, int]
+    strong_open: int = Field(ge=0)
+    false_alarm_rules: list[str]
+    silences_in_window: int = Field(ge=0)
+    max_findings_per_agent_day: int = Field(ge=0)
+
+
+class ReadinessInputs(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    now: datetime
+    window_start: datetime
+    kinds: dict[FindingKind, KindInputs]
+
+
+class ReadinessCondition(BaseModel):
+    id: str
+    name: str
+    passed: bool
+    detail: str
+
+
+class ReadinessCheck(BaseModel):
+    kind: FindingKind
+    label: str
+    ready: bool
+    scanned: int
+    strong: int
+    strong_rate: float | None = Field(description="Strong findings per result scanned on this organization's traffic, or null when nothing was scanned.")
+    false_alarms_worst_case: int
+    false_alarm_upper: float | None
+    conditions: list[ReadinessCondition]
+
+
+class ReadinessResponse(BaseModel):
+    """Whether this organization's own traffic has produced enough clean evidence to CONSIDER block mode. It grants nothing."""
+
+    block_available: Literal[False] = False
+    window_start: datetime
+    window_days: int
+    checks: list[ReadinessCheck]
+    note: str

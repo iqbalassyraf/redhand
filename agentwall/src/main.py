@@ -33,7 +33,7 @@ from .gateway.context import CoreContextClient
 from .gateway.identity import AgentTokenVerifier
 from .gateway.metrics import GatewayMetrics
 from .gateway.pins import HttpPinReporter, PinCoordinator
-from .gateway.radar_scan import HttpFindingsReporter, RadarScanner
+from .gateway.radar_scan import HttpFindingsReporter, HttpScanCountsReporter, RadarScanner
 from .gateway.selftest import BusyError, SelfTestError, SelfTestRunner
 from .gateway.recorder import EventRecorder, HttpEventReporter
 from .gateway.trips import HttpTripReporter, TripDispatcher
@@ -91,6 +91,7 @@ def build_gateway(settings: Settings, firewall: FirewallPolicyEngine, audit: Tam
         pins=PinCoordinator(reporter=HttpPinReporter(core_url=core, service_token=token), metrics=metrics),
         radar=RadarScanner(
             reporter=HttpFindingsReporter(core_url=core, service_token=token), metrics=metrics, use_model=settings.RADAR_MODEL_ENABLED,
+            counts_reporter=HttpScanCountsReporter(core_url=core, service_token=token),
         ),
     )
 

@@ -33,6 +33,7 @@ class GatewayMetrics:
         self._radar_scans: Counter[str] = Counter()
         self._radar_findings: Counter[str] = Counter()
         self._radar_reports: Counter[str] = Counter()
+        self._radar_count_reports: Counter[str] = Counter()
         self._radar_ms_sum = 0.0
         self._radar_ms_count = 0
 
@@ -87,6 +88,10 @@ class GatewayMetrics:
     def record_radar_report(self, outcome: str) -> None:
         with self._lock:
             self._radar_reports[outcome] += 1
+
+    def record_radar_counts_report(self, outcome: str) -> None:
+        with self._lock:
+            self._radar_count_reports[outcome] += 1
 
     def record_radar_duration(self, ms: float) -> None:
         with self._lock:
@@ -198,6 +203,12 @@ class GatewayMetrics:
             ]
             for outcome, count in sorted(self._radar_reports.items()):
                 lines.append(f'redhand_gateway_radar_reports_total{{outcome="{outcome}"}} {count}')
+            lines += [
+                "# HELP redhand_gateway_radar_count_reports_total Evidence-count reports to core, by outcome (ok, refused, failed, dropped).",
+                "# TYPE redhand_gateway_radar_count_reports_total counter",
+            ]
+            for outcome, count in sorted(self._radar_count_reports.items()):
+                lines.append(f'redhand_gateway_radar_count_reports_total{{outcome="{outcome}"}} {count}')
             lines += [
                 "# HELP redhand_gateway_radar_scan_ms Time spent scanning one result on the background worker (not added to calls).",
                 "# TYPE redhand_gateway_radar_scan_ms summary",

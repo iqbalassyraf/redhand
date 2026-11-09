@@ -24,6 +24,10 @@ the text. Mark one `confirmed` or `false_alarm` with `POST /v1/findings/{id}/rev
 | `radar_reports_total{outcome="refused"}` rising | Core rejected the reports (bad token or invalid fields) | Check the gateway and core service token match; check versions |
 | Every call is denied after a deploy | Gateway deployed before core, so the context lacks the new fields | Deploy core first (it is backward compatible), then the gateway |
 | Too many false alarms on one tool | Documentation-like text trips a rule | Review them as `false_alarm`; suppress that rule for that agent with a reason |
+| Readiness panel says "figures not available" | Core could not read the counts (database error) or answered an unexpected shape | Refresh; check core logs for "readiness inputs"; the rest of the page is unaffected |
+| Readiness shows 0 results scanned though findings exist | The gateway is not sending counts: older gateway, wrong service token, or core refusing | Check `redhand_gateway_radar_count_reports_total{outcome}` (ok should rise about once a minute); `refused` means token or version mismatch, `failed` means core unreachable |
+| Readiness condition "Counts are complete" fails | Some results were lost (queue full, scan errors), an agent produced 1,000+ findings in a day, or findings are stored that the gateway never counted | Read the detail line; if it names rules, counts were lost on the way: check count report metrics for the days in the window |
+| Readiness "Same rules the whole time" fails | The rules changed, the helper model was on, or the gateway cannot tell its rules | Expected after a gateway deploy that changed the Radar; evidence starts again on the new rules |
 
 ## Honest limits
 Measured on unseen samples (blind round 2): injection 41% found with 8% false alarms on hard benign documents; markup about 92%;
@@ -41,3 +45,15 @@ block mode will not exist until a measured gate is passed.
 | "The gateway could not run the self-test. Nothing was measured." | The gateway is down, restarting, or cannot be reached from core. Check `GATEWAY_URL` on core and the gateway's health (`gateway-denies-all-traffic.md`). No result is ever shown for a failed run. |
 | Same message with the gateway healthy | Core and gateway disagree on the internal service token (core logs "Gateway refused core's service token for the self-test"), or the gateway image is older than core (deploy the gateway). |
 | A switch shows off in the result | The code works but the gateway is not scanning for you. Turn the check back on. |
+
+## Could blocking ever be switched on? (the readiness panel, M4.6)
+Blocking does not exist: SQL, core and the gateway all refuse it, and nothing on this page can change that. The panel on the **Radar** page shows, per check, the two things that would both have to look
+good before anyone could even consider it: **our independent tests** (summarised from the Coverage page, which has the full gate) and **your own traffic** over the last 7 UTC days: results scanned,
+strong findings, the false alarm figure counted the hard way (one false alarm marks every strong flag of that rule), and seven conditions (R1 to R7, ADR 0016). "Candidate" never means "safe to block".
+- To move a check toward "candidate": keep it on Watch without changing it, let traffic build up (at least 200 results), review every strong finding as Real or False alarm, and do not silence rules.
+  Silencing a rule to reduce noise also resets the evidence on purpose: a silence hides findings.
+- The panel's numbers come from the gateway's counts, which are taken before the 30-second repeat limit, so they are higher than the number of stored findings. That is correct.
+- Real-life proof of the counting on staging: `scripts/radar_real_life_proof.py` and `docs/testing/briefs/2026-11-09-m4-6-block-gate-and-real-life-proof.md`. Local check on real long documents:
+  `scripts/radar_real_documents.py`, recorded in `docs/security/real-document-replay.md`.
+- Deploy order for M4.6b: **migration `20261118000000_radar_scan_counts`, then core, then gateway.** An older gateway sends no counts (the panel shows 0 scanned); a gateway newer than core gets
+  404 on the counts route and its reports are "refused" (calls are never affected).

@@ -17,12 +17,15 @@ import {
   type RadarFinding,
   type RadarSettings,
   type RadarSuppression,
+  type ReadinessResult,
   type SelfTestResult,
   radarApi,
   selfTestApi,
 } from "@/lib/api";
 import { useAuth, useRequiredSession } from "@/lib/auth";
+import { type BlockGate, isCoverageData } from "@/lib/coverage";
 import { EVASION_LABEL, describeRule } from "@/lib/radarRules";
+import { evidenceFor, falseAlarmText as readinessFalseAlarmText, headline, isReadinessResult, trafficText } from "@/lib/readiness";
 import { CHECK_LABEL, falseAlarmText, foundText, selfTestProblem } from "@/lib/selfTest";
 import {
   NOTE_MAX,
@@ -84,6 +87,10 @@ export default function RadarPage() {
   const [draftOutput, setDraftOutput] = useState<"off" | "observe">("observe");
   const [confirmOff, setConfirmOff] = useState(false);
 
+  const [readiness, setReadiness] = useState<ReadinessResult | null>(null);
+  const [readinessFailed, setReadinessFailed] = useState(false);
+  const [gate, setGate] = useState<BlockGate | null>(null);
+
   const [selfTest, setSelfTest] = useState<SelfTestResult | null>(null);
   const [selfTestRunning, setSelfTestRunning] = useState(false);
   const [selfTestError, setSelfTestError] = useState<string | null>(null);
@@ -131,6 +138,19 @@ export default function RadarPage() {
       setDraftRadar(s.radar_mode === "off" ? "off" : "observe");
       setDraftOutput(s.output_check_mode === "off" ? "off" : "observe");
       setConfirmOff(false);
+      try {
+        const r: unknown = await radarApi.readiness(token);
+        if (isReadinessResult(r)) {
+          setReadiness(r);
+          setReadinessFailed(false);
+        } else {
+          setReadiness(null);
+          setReadinessFailed(true);
+        }
+      } catch {
+        setReadiness(null);
+        setReadinessFailed(true); // the panel says "not available"; it never blocks the rest of the page
+      }
       await loadFindings(false);
     } catch (err) {
       handleError(err);
@@ -155,6 +175,21 @@ export default function RadarPage() {
       setBusy(false);
     }
   };
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/coverage.json")
+      .then((resp) => (resp.ok ? resp.json() : Promise.reject(new Error("not found"))))
+      .then((body: unknown) => {
+        if (!cancelled && isCoverageData(body)) setGate(body.block_gate);
+      })
+      .catch(() => {
+        /* the panel then shows our tests as unavailable and links to the Coverage page */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   if (!session || !token) return null;
 
@@ -347,7 +382,8 @@ export default function RadarPage() {
                 </label>
               ) : null}
               <p className="text-[#606060]">
-                Blocking is not available. It stays off until we have enough measured evidence that it would not stop real work.
+                Blocking is not available. It stays off until measured evidence shows it would not stop real work; the{" "}
+                <Link href="/coverage" className="font-semibold underline">Coverage page</Link> lists what is still missing, check by check.
                 {settings ? ` Injection check changed ${when(settings.radar_mode_changed_at)}; output check changed ${when(settings.output_check_mode_changed_at)}.` : ""}
               </p>
               <div className="mt-3 flex flex-wrap gap-4 text-[#606060]">
@@ -356,10 +392,65 @@ export default function RadarPage() {
                 <span><b className="text-[#0F0F0F]">{week.open ?? 0}</b> not reviewed</span>
                 <span><b className="text-[#0F0F0F]">{week.confirmed ?? 0}</b> real</span>
                 <span><b className="text-[#0F0F0F]">{week.false_alarm ?? 0}</b> false alarms</span>
-                <span title="Findings a future blocking mode would have stopped">
-                  <b className="text-[#0F0F0F]">{week.would_block ?? 0}</b> would have been blocked
+                <span title="Findings that were not low confidence. Nothing was blocked: the Radar only watches.">
+                  <b className="text-[#0F0F0F]">{week.would_block ?? 0}</b> strong findings
                 </span>
               </div>
+            </section>
+
+            <section className="mb-6 rounded-[10px] border border-[#E5E5E5] bg-[#FFFFFF] p-4 text-[12px]">
+              <h2 className="mb-1 text-[14px] font-semibold">Could blocking ever be switched on?</h2>
+              <p className="mb-3 text-[#606060]">
+                Not today: blocking is not available. Two separate things must both look good before anyone could even consider it: our tests on
+                independent samples, and your own traffic. This panel shows both. It only reads numbers and changes nothing.
+              </p>
+              {readinessFailed ? (
+                <p className="rounded-[8px] border border-[#E5E5E5] bg-[#F8F8F8] px-3 py-2 text-[#606060]">
+                  The figures from your traffic are not available right now. Nothing is wrong with your checks; try Refresh in a moment.
+                </p>
+              ) : null}
+              {readiness ? (
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {readiness.checks.map((check) => (
+                    <div key={check.kind} className="rounded-[8px] border border-[#E5E5E5] p-3">
+                      <div className="mb-1 flex items-center justify-between gap-2">
+                        <span className="text-[13px] font-semibold">{check.label}</span>
+                        <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold ${check.ready ? "bg-[#FFF8EC] text-[#8A5A00]" : "bg-[#F2F2F2] text-[#606060]"}`}>
+                          {check.ready ? "candidate" : "not yet"}
+                        </span>
+                      </div>
+                      <p className="mb-2 text-[#606060]">{headline(check)}</p>
+                      <p className="mb-1 font-semibold">Your traffic, last {readiness.window_days} days</p>
+                      <p className="text-[#606060]">{trafficText(check)}</p>
+                      <p className="mb-2 text-[#606060]">{readinessFalseAlarmText(check)}</p>
+                      <ul className="mb-2 space-y-1">
+                        {check.conditions.map((c) => (
+                          <li key={c.id} className="flex gap-2">
+                            <span className={`mt-0.5 h-fit shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold ${c.passed ? "bg-[#E6F4EA] text-[#1E7B34]" : "bg-[#FDECEC] text-[#B42318]"}`}>
+                              {c.passed ? "pass" : "not yet"}
+                            </span>
+                            <span className="text-[#606060]"><b className="text-[#0F0F0F]">{c.name}:</b> {c.detail}</span>
+                          </li>
+                        ))}
+                      </ul>
+                      <p className="mb-1 font-semibold">Our independent tests</p>
+                      {evidenceFor(gate, check.kind).length > 0 ? (
+                        <ul className="text-[#606060]">
+                          {evidenceFor(gate, check.kind).map((line) => (
+                            <li key={line.label}>{line.label}: {line.passed} of {line.total} rules pass{line.eligible ? "" : " (not ready)"}</li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <p className="text-[#606060]">Not loaded.</p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              ) : null}
+              <p className="mt-3 text-[#606060]">
+                {readiness?.note ?? "Blocking is not available and cannot be switched on."} Details of our tests are on the{" "}
+                <Link href="/coverage" className="font-semibold underline">Coverage page</Link>.
+              </p>
             </section>
 
             <section className="mb-6 rounded-[10px] border border-[#E5E5E5] bg-[#FFFFFF] p-4 text-[12px]">
@@ -455,7 +546,7 @@ export default function RadarPage() {
                         {f.severity} severity, {f.confidence} confidence, {PLACE_LABEL[f.place]}
                         {f.evasion.length ? `, tricks: ${f.evasion.map((e) => EVASION_LABEL[e] ?? e).join(", ")}` : ""}
                         {` · seen ${f.occurrences} time${f.occurrences === 1 ? "" : "s"}`}
-                        {f.would_block ? " · would be blocked" : ""} · <b className="text-[#0F0F0F]">{STATUS_LABEL[f.review_status]}</b>
+                        {f.would_block ? " · strong finding" : ""} · <b className="text-[#0F0F0F]">{STATUS_LABEL[f.review_status]}</b>
                         {f.review_note ? ` · note: ${shorten(f.review_note, 120)}` : ""}
                       </p>
                       {caps?.can_review || caps?.can_suppress ? (

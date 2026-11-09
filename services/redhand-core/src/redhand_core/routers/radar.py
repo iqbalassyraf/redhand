@@ -9,7 +9,9 @@ GET    /v1/radar/suppressions           live suppressions (security operator)
 POST   /v1/radar/suppressions           suppress one rule for one agent for 1 to 90 days (admin, confirmation, reason, audited)
 DELETE /v1/radar/suppressions/{id}      revoke a suppression (admin, audited)
 POST   /v1/radar/self-test              run the Radar over the bundled held-out samples in the gateway (security operator, once a minute)
+GET    /v1/radar/readiness              has your own traffic produced enough clean evidence to CONSIDER blocking? display only (security operator)
 POST   /internal/v1/findings            gateway -> core: findings it raised (service token)
+POST   /internal/v1/radar/scan-counts   gateway -> core: how many results it scanned and flagged, numbers only (service token)
 """
 
 from __future__ import annotations
@@ -36,6 +38,9 @@ from redhand_core.radar.models import (
     GatewaySelfTest,
     RadarSettingsRequest,
     RadarSettingsResponse,
+    ReadinessResponse,
+    ScanCountsReport,
+    ScanCountsResponse,
     SuppressionCreateRequest,
     SuppressionCreateResponse,
     SuppressionRevokeRequest,
@@ -128,6 +133,13 @@ async def run_self_test(
     )
 
 
+@router.get("/v1/radar/readiness", response_model=ReadinessResponse)
+async def get_radar_readiness(operator: SecurityOperatorDep, supabase: SupabaseDep) -> ReadinessResponse:
+    """Per check: what your own traffic shows over the last 7 UTC days (results scanned, strong findings, false alarms counted the hard way)
+    and which conditions for even considering blocking hold. Blocking is not available and this grants nothing."""
+    return await service.get_readiness(supabase, operator)
+
+
 @router.get("/v1/findings", response_model=FindingsResponse)
 async def get_findings(
     operator: SecurityOperatorDep,
@@ -182,3 +194,13 @@ async def delete_suppression(
 )
 async def report_findings(report: FindingReport, supabase: SupabaseDep, telegram: OptionalClientDep) -> FindingReportResponse:
     return await service.record_findings(supabase, telegram, report)
+
+
+@router.post(
+    "/internal/v1/radar/scan-counts",
+    response_model=ScanCountsResponse,
+    dependencies=[Depends(require_internal_service)],
+    include_in_schema=False,
+)
+async def report_scan_counts(report: ScanCountsReport, supabase: SupabaseDep) -> ScanCountsResponse:
+    return await service.record_scan_counts(supabase, report)

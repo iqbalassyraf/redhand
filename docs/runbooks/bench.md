@@ -44,3 +44,9 @@ results (the first held-out run for tool poisoning was 12 of 20; one pattern add
 - A category with fewer than 20 samples on either side is reported as insufficient data, never as covered.
 - OWASP numbering follows the 2025 list as the project understands it; verify before quoting externally.
 - It measures detectors on text; it says nothing about agents or traffic that do not flow through the gateway.
+
+## The block gate (M4.6a)
+`python -m agentwall.src.bench --format gate` prints, per check, whether the frozen independent rounds would allow block mode (rules G1 to G5, ADR 0016). The same verdict is in
+`coverage.json` and the matrix. After ANY edit of `agentwall/src/firewall/radar.py` the rules fingerprint changes: regenerate `coverage.json` and the matrix (a test fails until you do) and
+expect every check to say "the rules changed after this round was scored". Do not copy the new fingerprint into `ROUND_2_AND_3_RULES` in `report.py` unless a person has checked that the change cannot
+affect what those rounds measured, and wrote why next to it. `BLOCK_ELIGIBLE` in `gate.py` stays empty until a check passes and a person decides.

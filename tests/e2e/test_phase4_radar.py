@@ -142,3 +142,96 @@ async def test_done_5b_the_self_test_runs_the_real_gateway_radar_through_core(mo
     assert again.status_code == 429  # once a minute per organization
     viewer = await stack.core.post("/v1/radar/self-test", headers=stack.operator("viewer"))
     assert viewer.status_code == 403
+
+
+# --- M4.6b: real traffic becomes evidence (counts from the gateway, readiness from core), and nothing can block --------------------
+
+async def _readiness(stack: Stack) -> dict[str, Any]:
+    resp = await stack.core.get("/v1/radar/readiness", headers=stack.operator("operator"))
+    assert resp.status_code == 200, resp.text
+    return dict(resp.json())
+
+
+def _check(body: dict[str, Any], kind: str) -> dict[str, Any]:
+    return next(c for c in body["checks"] if c["kind"] == kind)
+
+
+async def _flush(stack: Stack) -> None:
+    stack.gateway.radar.flush_counts()
+    await stack.gateway.radar.wait_idle()
+
+
+@pytest.mark.asyncio
+async def test_done_6_real_calls_through_the_gateway_become_counts_in_core_before_any_repeat_limit(monkeypatch: pytest.MonkeyPatch) -> None:
+    stack, token = await _setup(monkeypatch)
+    harmless = _upstream("Invoice 1001 was paid on 3 March, total 120.00")
+    attack = stack.gateway.forwarder
+    for _ in range(3):
+        assert (await _call(stack, token)).status_code == 200  # the same attack three times: the findings report is throttled to one...
+    stack.gateway.forwarder = UpstreamForwarder(allow_insecure=True, max_response_bytes=1_000_000, connect_timeout=2, total_timeout=5, http_client=harmless)
+    for _ in range(5):
+        assert (await _call(stack, token)).status_code == 200
+    assert attack is not None
+    await _flush(stack)
+
+    findings = await _findings(stack)
+    assert findings and all(f["occurrences"] == 1 for f in findings)  # ...so each stored finding says "seen once" for what happened three times
+    body = await _readiness(stack)
+    injection, output = _check(body, "injection"), _check(body, "output")
+    assert (injection["scanned"], injection["strong"]) == (8, 3)  # ...but the counts did not: 8 results scanned, 3 of them flagged strongly
+    assert (output["scanned"], output["strong"]) == (8, 0)
+    assert injection["strong_rate"] == pytest.approx(3 / 8)
+    conditions = {c["id"]: c["passed"] for c in injection["conditions"]}
+    assert conditions["R5"] is True  # what core stored never exceeds what the gateway counted
+    assert conditions["R6"] is True  # one rules version reported, not unknown, helper model off
+    assert body["block_available"] is False and injection["ready"] is False and output["ready"] is False
+
+
+@pytest.mark.asyncio
+async def test_a_second_report_with_the_same_id_changes_nothing_and_blocking_stays_unavailable(monkeypatch: pytest.MonkeyPatch) -> None:
+    stack, token = await _setup(monkeypatch, "Invoice paid")
+    await _call(stack, token)
+    stack.gateway.radar.flush_counts()
+    await stack.gateway.radar.wait_idle()
+    reporter = stack.gateway.radar._counts_reporter
+    assert reporter is not None
+    sent = []
+    original = reporter.send
+
+    async def twice(report: Any) -> Any:  # a network hiccup: the same report is delivered two times
+        sent.append(report.report_id)
+        await original(report)
+        return await original(report)
+
+    monkeypatch.setattr(reporter, "send", twice)
+    await _call(stack, token)
+    await _flush(stack)
+    body = await _readiness(stack)
+    assert len(sent) == 1 and _check(body, "injection")["scanned"] == 2  # 1 + 1, not 1 + 2
+    for put in ({"radar_mode": "block", "output_check_mode": "observe"}, {"radar_mode": "observe", "output_check_mode": "block"}):
+        assert (await stack.core.put("/v1/radar/settings", json=put, headers=stack.operator("admin"))).status_code == 422
+    assert (await stack.core.get("/v1/radar/settings", headers=stack.operator("operator"))).json()["block_available"] is False
+
+
+@pytest.mark.asyncio
+async def test_core_refusing_the_counts_never_affects_the_agent_and_loses_no_finding(monkeypatch: pytest.MonkeyPatch) -> None:
+    stack, token = await _setup(monkeypatch)
+    reporter = stack.gateway.radar._counts_reporter
+    assert reporter is not None
+    reporter._token = "wrong-token-" + "x" * 30
+    response = await _call(stack, token)
+    await _flush(stack)
+    assert response.status_code == 200 and response.json()["result"]["content"][0]["text"] == ATTACK
+    assert await _findings(stack)  # the finding still arrived: it uses its own report
+    assert _check(await _readiness(stack), "injection")["scanned"] == 0  # and the refused counts changed nothing in core
+
+
+def test_the_gate_and_the_readiness_limits_cannot_drift_apart_and_use_the_benchmarks_formula() -> None:
+    from agentwall.src.bench import gate
+    from agentwall.src.bench.metrics import wilson
+    from redhand_core.radar import readiness
+
+    assert readiness.MAX_FALSE_ALARM_UPPER == gate.FALSE_ALARM_UPPER_LIMIT
+    for successes, total in [(0, 1), (0, 125), (1, 200), (2, 200), (5, 250), (12, 400), (30, 1000), (0, 5000), (3, 3)]:
+        assert readiness.wilson_upper(successes, total) == pytest.approx(wilson(successes, total)[1], abs=1e-12)
+    assert readiness.MIN_SCANNED == 200 and gate.min_samples_without_false_alarms() == 125

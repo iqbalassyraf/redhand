@@ -44,6 +44,32 @@ export interface LanguageCoverage {
   blind3: { attacks_found: number; attacks: number; harmless_flagged: number; harmless: number } | null;
 }
 
+export interface GateRule {
+  id: string;
+  name: string;
+  description: string;
+}
+
+export interface GateCheck {
+  category: string;
+  label: string;
+  eligible: boolean;
+  evidence_round: string | null;
+  evidence_title: string | null;
+  numbers: Record<string, number | string>;
+  results: { id: string; passed: boolean; detail: string }[];
+}
+
+/** The block gate: whether measured evidence would ever allow block mode. It grants nothing; blocking does not exist. */
+export interface BlockGate {
+  rules_fingerprint: string;
+  block_available: boolean;
+  eligible: string[];
+  rules: GateRule[];
+  min_harmless_without_false_alarms: number;
+  checks: GateCheck[];
+}
+
 export interface CoverageData {
   corpus: string;
   total_samples: number;
@@ -54,10 +80,19 @@ export interface CoverageData {
   blind_rounds: BlindRound[];
   languages: LanguageCoverage[];
   known_gaps: string[];
+  block_gate: BlockGate;
   owasp: { item: string; name: string; note: string; status: string[] }[];
 }
 
 const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
+
+function isBlockGate(value: unknown): value is BlockGate {
+  if (!isRecord(value) || value.block_available !== false) return false; // a file that claims blocking is available is refused, not shown
+  if (typeof value.rules_fingerprint !== "string" || !Array.isArray(value.eligible) || !Array.isArray(value.rules) || !Array.isArray(value.checks)) return false;
+  return (value.checks as unknown[]).every(
+    (c) => isRecord(c) && typeof c.label === "string" && typeof c.eligible === "boolean" && isRecord(c.numbers) && Array.isArray(c.results),
+  );
+}
 
 /** Cheap structural check so a broken or old file shows an error instead of a half-empty page. */
 export function isCoverageData(value: unknown): value is CoverageData {
@@ -65,6 +100,7 @@ export function isCoverageData(value: unknown): value is CoverageData {
   const lists = ["holdout", "dev", "blind_rounds", "languages", "known_gaps", "owasp", "detectors"] as const;
   if (!lists.every((k) => Array.isArray(value[k]))) return false;
   if (typeof value.corpus !== "string" || typeof value.total_samples !== "number" || !isRecord(value.status_rules)) return false;
+  if (!isBlockGate(value.block_gate)) return false;
   const languages = value.languages as unknown[];
   return languages.every((l) => isRecord(l) && typeof l.code === "string" && typeof l.native_reviewed === "boolean" && typeof l.note === "string");
 }

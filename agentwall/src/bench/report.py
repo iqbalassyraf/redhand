@@ -6,6 +6,8 @@ from dataclasses import dataclass
 import json
 from typing import Any
 
+from ..firewall.radar_fingerprint import rules_fingerprint
+from .gate import evaluate_gate, gate_json, render_gate_text
 from .metrics import (
     COVERED_DETECTION, COVERED_FALSE_ALARM, MIN_SAMPLES_PER_SIDE, PARTIAL_DETECTION, PARTIAL_FALSE_ALARM,
     CategoryResult, Evaluation, wilson,
@@ -38,6 +40,7 @@ class BlindRow:
     benign: int
     hard_false_alarms: int
     hard_benign: int
+    long_benign: int = 0  # harmless samples of 2 KiB or more (block gate G5); counted from the samples, 0 when there are none
 
 
 @dataclass(frozen=True, slots=True)
@@ -48,7 +51,16 @@ class BlindRound:
     record: str  # the frozen document with the full account
     note: str
     rows: tuple[BlindRow, ...]
+    # Block gate (agentwall/src/bench/gate.py): did this round's samples stay out of rule development, and which rules was it scored on?
+    independent: bool = False
+    scored_on: str | None = None  # rules fingerprint (agentwall/src/firewall/radar_fingerprint.py); None = those rules no longer exist
 
+
+# The fingerprint of agentwall/src/firewall/radar.py that rounds 2 and 3 count for. Round 2 was scored on the commit before M4.1c, which differs
+# from today's file by exactly one table row (RAD-INJ-012, used only by the helper model, so no rule that rounds 2 or 3 exercised changed);
+# round 3 was scored on today's file. Verified with `git diff 52fdfeb HEAD -- agentwall/src/firewall/radar.py` on 2026-11-09. Any later edit of
+# the rules file changes the fingerprint and the gate then says "needs a new round".
+ROUND_2_AND_3_RULES = "a7818a78351aa02e"
 
 # Frozen records. They are NOT recomputed (the samples became development data, or the rules changed afterwards); every number is copied
 # from the document named in `record`, and a test checks that the intervals printed here follow from the counts.
@@ -66,6 +78,7 @@ BLIND_ROUNDS: tuple[BlindRound, ...] = (
         "available estimate for output checks on text the rules have not seen. It is not comparable one to one with round 1.",
         (BlindRow("injection_indirect", 33, 80, 10, 120, 10, 45), BlindRow("output_xss", 74, 80, 0, 120, 0, 45),
          BlindRow("output_ssrf", 50, 80, 3, 120, 3, 45), BlindRow("output_path", 51, 80, 6, 120, 6, 45)),
+        independent=True, scored_on=ROUND_2_AND_3_RULES,
     ),
     BlindRound(
         "round3", "Independent blind round 3 (frozen: hidden instructions only, a different author)", "Grok 4 (xAI)", "docs/security/blind-round-3.md",
@@ -73,6 +86,7 @@ BLIND_ROUNDS: tuple[BlindRound, ...] = (
         "default (the helper model is off and adds 2 attacks, 36 of 94). One author, labels not independently reviewed, few long harmless texts, "
         "and no Indonesian attacks. This is the best available estimate for hidden-instruction detection.",
         (BlindRow("injection_indirect", 34, 94, 10, 146, 5, 48),),
+        independent=True, scored_on=ROUND_2_AND_3_RULES,
     ),
 )
 
@@ -96,6 +110,8 @@ LANGUAGES: tuple[dict[str, Any], ...] = (
 
 KNOWN_GAPS: tuple[str, ...] = (
     "Hidden instructions are found about 4 times in 10 on text the rules have not seen, with about 7 to 8 false alarms per 100 harmless documents.",
+    "On real long documents the checks flag more than on our short samples: 10 of 10 real web pages raised a script flag, and on 186 strangers' READMEs the hidden-instruction check "
+    "flagged 12% and the risky-output check 6% (a recorded measurement, not blind evidence: docs/security/real-document-replay.md).",
     "A rephrased or politely worded attack, and an attack buried in the middle of a long document, are often missed.",
     "Malay hidden-instruction detection found 4 of 25 attacks in the independent round; Indonesian attacks were not measured; Chinese is not covered.",
     "Documentation, runbooks and security write-ups that quote attacks cause false alarms.",
@@ -232,6 +248,7 @@ def to_ui_json(ev: Evaluation, digest: str) -> dict[str, Any]:
             for (f, a, fa, b) in [BLIND3_LANGUAGES.get(lang["code"], (0, 0, 0, 0))]
         ],
         "known_gaps": list(KNOWN_GAPS),
+        "block_gate": gate_json(BLIND_ROUNDS, rules_fingerprint()),
         "owasp": [
             {
                 "item": item, "name": name, "note": note,
@@ -240,6 +257,32 @@ def to_ui_json(ev: Evaluation, digest: str) -> dict[str, Any]:
             for item, name, note in OWASP_ITEMS
         ],
     }
+
+
+def render_gate(ev: Evaluation, digest: str) -> str:
+    """The block gate alone, as text. It reads only the frozen blind rounds and the rules fingerprint, so `ev` and `digest` are unused."""
+    return render_gate_text(BLIND_ROUNDS, rules_fingerprint())
+
+
+def _gate_markdown_lines() -> list[str]:
+    fingerprint = rules_fingerprint()
+    rules = gate_json(BLIND_ROUNDS, fingerprint)["rules"]
+    lines = [
+        "", "## Ready to block? (the block gate)", "",
+        "Block mode does not exist: SQL, core and the gateway all refuse it. This table says whether the measured evidence would be enough to ever "
+        "offer it. It reads only the frozen blind rounds above, never our own held-out samples, and a change to the rules file makes old rounds stale "
+        f"(rules fingerprint `{fingerprint}`). Rules: " + " ".join(f"**{r['id']}** {r['name']}: {r['description']}" for r in rules),
+        "",
+        "| Check | Evidence | G1 | G2 | G3 | G4 | G5 | Eligible |", "|---|---|---|---|---|---|---|---|",
+    ]
+    gates = evaluate_gate(BLIND_ROUNDS, fingerprint)
+    for g in gates:
+        cells = " | ".join("pass" if r.passed else "**fail**" for r in g.results)
+        lines.append(f"| {g.label} | {g.evidence_round or 'none'} | {cells} | {'**yes**' if g.eligible else 'no'} |")
+    lines.append("")
+    for g in gates:
+        lines.append(f"- **{g.label}:** " + (" ".join(g.missing) if g.missing else "all rules pass."))
+    return lines
 
 
 def render_ui_json(ev: Evaluation, digest: str) -> str:
@@ -323,6 +366,7 @@ def render_markdown(ev: Evaluation, digest: str) -> str:
         attacks = f"{found}/{total}" if total else "not measured"
         flagged = f"{fa}/{benign}" if benign else "not measured"
         lines.append(f"| {lang['name']} | {'yes' if lang['native_reviewed'] else 'no'} | {attacks} | {flagged} | {lang['note']} |")
+    lines += _gate_markdown_lines()
     lines += ["", "## Known gaps (read these first)", "", *(f"- {gap}" for gap in KNOWN_GAPS)]
     lines += ["", "## OWASP LLM Top 10 (2025 numbering as understood by the project; verify before quoting)", "",
               "| Item | Name | Benchmark categories and status | Notes |", "|---|---|---|---|"]
