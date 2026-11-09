@@ -53,12 +53,18 @@ def _pct(value: float) -> str:
 
 
 def false_alarms_worst_case(inputs: KindInputs) -> int:
-    """Results counted as false alarms: every strong flag of each rule that had a strong finding marked a false alarm."""
+    """
+    Results counted as false alarms: every strong flag of each rule that had a strong finding marked a false alarm.
+
+    A result is one false alarm however many rules flagged it, but each rule's own count includes every result it flagged, so a document hit by
+    two reviewed rules is in both counts and the sum overstates. The figure is therefore capped at the results with a strong finding: it cannot
+    be higher than the number of results that were flagged strongly at all. (The M4.6 staging run summed to 81 where at most 36 results qualified.)
+    """
     total = 0
     for rule in set(inputs.false_alarm_rules):
         counts = inputs.rules.get(rule)
         total += counts.strong if counts is not None else inputs.strong  # no per-rule count: assume the worst, all of this check's strong flags
-    return min(total, inputs.scanned)
+    return min(total, inputs.strong, inputs.scanned)
 
 
 def _condition(cid: str, name: str, passed: bool, detail: str) -> ReadinessCondition:

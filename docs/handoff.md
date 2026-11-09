@@ -13,6 +13,13 @@ Both tools work on RedHand and its demo projects. This file is how each learns w
 
 ---
 
+## 2026-11-09, Claude Code: M4.7a built (branch fix/phase4-m4-7a-readiness-figure) and the F1 staging brief written
+- **Changed:** `services/redhand-core/src/redhand_core/radar/readiness.py` (the false alarm figure is capped at the results with a strong finding; ADR 0016 amendment); `scripts/radar_real_life_proof.py` (prints the reason for every call without a result, and a hint for the daily limit); tests in `test_radar_readiness.py` and `test_real_life_scripts.py`; runbook, changelog, finish plan. Five older test setups had rules with strong flags but zero strong results, which cannot happen in real data, so they now set `strong` consistently; no assertion about behaviour was weakened.
+- **Verified:** full suite 1,593 passed; ruff and mypy clean; nine deliberate breakages (cap removed, off by one, cap at scanned removed, refusals dropped from the detail, reason not truncated, control characters kept, note drops the reason, error shape check removed, explained failure counted as passed) were each caught.
+- **Not verified:** nothing on staging. **Deploy:** core only (display change); no migration, no gateway change. Not deployed.
+- **For Antigravity and the owner:** run `docs/testing/briefs/2026-11-09-f1-phase4-staging-sweep.md` (needs a viewer, a security operator and a second organization made by the owner first). Before the next real-life proof run, set the proof agent's daily limit above the number of calls.
+- **Next for Claude Code:** M4.7b (quieter rules, scan window, new blind round) starts with the blind-sample brief for Antigravity and the 60/60 split of the real documents, before any rule is touched; M5a (canary) does not depend on it.
+
 ## 2026-11-09, Claude Code: M4.6 result checked against the database; plan to finish Phase 4 approved (F0)
 - **Changed (docs only):** a correction section in `docs/testing/results/2026-11-09-m4-6-block-gate-and-real-life-proof.md`; new `docs/plans/phase4-finish-plan.md` (approved, F-D1 to F-D7); `docs/plans/phase4-plan.md` (milestone statuses, done tests 5 and 10 re-worded for Watch only, new done test 11 and milestone M7); `docs/briefing.md` (Phase 4 status).
 - **Verified on the staging database:** 100 scanned on both checks, 0 dropped, 0 errors; 23 distinct count reports; strong findings 36 and 6; `radar-proof` revoked.

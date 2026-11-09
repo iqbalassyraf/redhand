@@ -49,11 +49,11 @@ block mode will not exist until a measured gate is passed.
 ## Could blocking ever be switched on? (the readiness panel, M4.6)
 Blocking does not exist: SQL, core and the gateway all refuse it, and nothing on this page can change that. The panel on the **Radar** page shows, per check, the two things that would both have to look
 good before anyone could even consider it: **our independent tests** (summarised from the Coverage page, which has the full gate) and **your own traffic** over the last 7 UTC days: results scanned,
-strong findings, the false alarm figure counted the hard way (one false alarm marks every strong flag of that rule), and seven conditions (R1 to R7, ADR 0016). "Candidate" never means "safe to block".
+strong findings, the false alarm figure counted the hard way (one false alarm marks every strong flag of that rule, and the figure never exceeds the results that had a strong finding), and seven conditions (R1 to R7, ADR 0016). "Candidate" never means "safe to block".
 - To move a check toward "candidate": keep it on Watch without changing it, let traffic build up (at least 200 results), review every strong finding as Real or False alarm, and do not silence rules.
   Silencing a rule to reduce noise also resets the evidence on purpose: a silence hides findings.
 - The panel's numbers come from the gateway's counts, which are taken before the 30-second repeat limit, so they are higher than the number of stored findings. That is correct.
-- Real-life proof of the counting on staging: `scripts/radar_real_life_proof.py` and `docs/testing/briefs/2026-11-09-m4-6-block-gate-and-real-life-proof.md`. Local check on real long documents:
+- Real-life proof of the counting on staging: `scripts/radar_real_life_proof.py` and `docs/testing/briefs/2026-11-09-m4-6-block-gate-and-real-life-proof.md`. The proof agent must have a daily call limit above the number of calls: Budget Guard refuses calls past the limit (in the 2026-11-09 run, 20 of 120), and the script now prints the gateway's reason for each call without a result, and a hint when the cause is the daily limit. Local check on real long documents:
   `scripts/radar_real_documents.py`, recorded in `docs/security/real-document-replay.md`.
 - Deploy order for M4.6b: **migration `20261118000000_radar_scan_counts`, then core, then gateway.** An older gateway sends no counts (the panel shows 0 scanned); a gateway newer than core gets
   404 on the counts route and its reports are "refused" (calls are never affected).

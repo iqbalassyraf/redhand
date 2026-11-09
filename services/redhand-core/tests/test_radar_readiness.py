@@ -66,7 +66,7 @@ def test_clean_traffic_over_a_full_window_is_ready() -> None:
         ("R6", {"fingerprints": [FP, "ffffffffffffffff"]}),
         ("R6", {"fingerprints": ["unknown"]}),
         ("R6", {"fingerprints": [FP + "+model"]}),
-        ("R7", {"false_alarm_rules": ["RAD-INJ-008"], "rules": {"RAD-INJ-008": RuleCounts(flagged=9, strong=9)}}),
+        ("R7", {"strong": 9, "false_alarm_rules": ["RAD-INJ-008"], "rules": {"RAD-INJ-008": RuleCounts(flagged=9, strong=9)}}),
     ],
 )
 def test_each_condition_fails_on_its_own_and_blocks_readiness(condition: str, over: dict[str, Any]) -> None:
@@ -103,12 +103,12 @@ def test_stored_findings_may_equal_but_never_exceed_what_was_counted() -> None:
 
 @pytest.mark.parametrize(("false_alarms", "passes"), [(0, True), (1, True), (2, False)])
 def test_false_alarm_limit_at_200_results_allows_at_most_one(false_alarms: int, passes: bool) -> None:
-    check = judged(scanned=200, false_alarm_rules=["RAD-INJ-008"] if false_alarms else [], rules={"RAD-INJ-008": RuleCounts(flagged=false_alarms, strong=false_alarms)})
+    check = judged(scanned=200, strong=false_alarms, false_alarm_rules=["RAD-INJ-008"] if false_alarms else [], rules={"RAD-INJ-008": RuleCounts(flagged=false_alarms, strong=false_alarms)})
     assert check.false_alarms_worst_case == false_alarms and ("R7" not in failed(check)) is passes
 
 
 def test_a_false_alarm_counts_every_strong_flag_of_that_rule_not_just_the_reviewed_one() -> None:
-    check = judged(scanned=1000, false_alarm_rules=["RAD-INJ-008"], rules={"RAD-INJ-008": RuleCounts(flagged=40, strong=35), "RAD-INJ-001": RuleCounts(flagged=5, strong=5)})
+    check = judged(scanned=1000, strong=40, false_alarm_rules=["RAD-INJ-008"], rules={"RAD-INJ-008": RuleCounts(flagged=40, strong=35), "RAD-INJ-001": RuleCounts(flagged=5, strong=5)})
     assert check.false_alarms_worst_case == 35 and "R7" in failed(check)  # 35 of 1000, though only one finding was marked
 
 
@@ -119,7 +119,7 @@ def test_a_rule_with_no_count_is_assumed_to_be_the_worst_case() -> None:
 
 def test_the_worst_case_is_capped_at_the_results_scanned_and_each_rule_counts_once() -> None:
     assert judged(scanned=250, strong=999, false_alarm_rules=["RAD-INJ-008"], rules={}).false_alarms_worst_case == 250
-    two = judged(scanned=1000, false_alarm_rules=["RAD-INJ-008", "RAD-INJ-008"], rules={"RAD-INJ-008": RuleCounts(flagged=9, strong=9)})
+    two = judged(scanned=1000, strong=9, false_alarm_rules=["RAD-INJ-008", "RAD-INJ-008"], rules={"RAD-INJ-008": RuleCounts(flagged=9, strong=9)})
     assert two.false_alarms_worst_case == 9
 
 
@@ -313,6 +313,22 @@ def test_the_whole_story_a_finding_a_review_a_silence_and_a_mode_change(env: Env
 
     assert env.settings_put("off", "observe", confirm=True).status_code == 200
     assert conditions(check_of(env))["R1"] is False and conditions(check_of(env, "output"))["R1"] is True
+
+
+def test_false_alarms_never_exceed_the_results_with_a_strong_finding_even_when_rules_overlap() -> None:
+    """The M4.6 staging run: 36 results had a strong injection finding, yet five reviewed rules' own counts add up to 45 because one document is
+    counted under every rule that flagged it. A result is one false alarm however many rules flagged it, so the figure is capped at the strong results."""
+    rules = {"RAD-INJ-002": RuleCounts(flagged=2, strong=2), "RAD-INJ-003": RuleCounts(flagged=48, strong=30), "RAD-INJ-004": RuleCounts(flagged=1, strong=1),
+             "RAD-INJ-005": RuleCounts(flagged=10, strong=10), "RAD-INJ-007": RuleCounts(flagged=2, strong=2)}
+    check = judged(scanned=100, strong=36, false_alarm_rules=sorted(rules), rules=rules)
+    assert check.false_alarms_worst_case == 36
+    assert check.false_alarms_worst_case <= check.strong
+
+
+def test_the_cap_does_not_hide_a_larger_figure_the_other_way_round() -> None:
+    rules = {"RAD-INJ-003": RuleCounts(flagged=30, strong=30), "RAD-INJ-005": RuleCounts(flagged=10, strong=10)}
+    assert judged(scanned=100, strong=60, false_alarm_rules=sorted(rules), rules=rules).false_alarms_worst_case == 40  # rules overlap less than the cap allows
+    assert judged(scanned=100, strong=40, false_alarm_rules=sorted(rules), rules=rules).false_alarms_worst_case == 40  # exactly at the cap
 
 
 def test_a_gap_between_what_was_stored_and_what_was_counted_is_noticed(env: Env) -> None:

@@ -101,8 +101,35 @@ def result_text_bytes(body: object) -> int | None:
     return sum(len(str(part.get("text", "")).encode("utf-8")) for part in content if isinstance(part, dict))
 
 
-def judge(calls: int, received: int, long_results: int, moved: dict[str, dict[str, float]]) -> list[tuple[str, bool, str]]:
-    """Plain checks, each (name, passed, detail). Only exact matches pass: 'about the same' is not proof."""
+MAX_REASON_CHARS = 120
+
+
+def refusal_reason(body: object) -> str | None:
+    """
+    The words a JSON-RPC error answer gives for refusing a call, as one short plain line, or None when the answer carries none. The text may come from an
+    upstream server, so control characters are replaced and the length is capped before it is printed to the owner's terminal.
+    """
+    if not isinstance(body, dict):
+        return None
+    error = body.get("error")
+    message = error.get("message") if isinstance(error, dict) else None
+    if not isinstance(message, str):
+        return None
+    line = " ".join("".join(c if c.isprintable() else " " for c in message).split())
+    return line[:MAX_REASON_CHARS] or None
+
+
+def failure_note(number: int, repo: str, status: int, body: object) -> str:
+    """One line for a call that returned no result. A refusal comes back as HTTP 200 with an error inside, so the reason is what tells it from a fault."""
+    reason = refusal_reason(body)
+    return f"call {number} ({repo}): HTTP {status}" + (f", refused: {reason}" if reason else "")
+
+
+def judge(
+    calls: int, received: int, long_results: int, moved: dict[str, dict[str, float]], refusals: dict[str, int] | None = None,
+) -> list[tuple[str, bool, str]]:
+    """Plain checks, each (name, passed, detail). Only exact matches pass: 'about the same' is not proof. Refusals explain a failure; they never excuse it."""
+    refused = "".join(f"; {count} refused: {reason}" for reason, count in sorted((refusals or {}).items(), key=lambda item: (-item[1], item[0])))
     scans_ok = moved["scans"].get("ok", 0.0)
     lost = moved["scans"].get("dropped", 0.0) + moved["scans"].get("error", 0.0)
     count_ok, count_bad = moved["count_reports"].get("ok", 0.0), moved["count_reports"].get("failed", 0.0) + moved["count_reports"].get("refused", 0.0)
@@ -114,7 +141,7 @@ def judge(calls: int, received: int, long_results: int, moved: dict[str, dict[st
         ("real long documents were used", long_results >= max(1, received // 2),
          f"{long_results} of {received} results are {LONG_BYTES // 1024} KiB or longer"),
         ("enough calls to mean something", received >= 100, f"{received} results received (at least 100 needed for a 3% false alarm bound)"),
-        ("no call failed", received == calls, f"{received} of {calls} calls returned a result"),
+        ("no call failed", received == calls, f"{received} of {calls} calls returned a result{refused}"),
     ]
 
 
@@ -171,6 +198,7 @@ def main() -> int:
     before = parse_counters(fetch_metrics(gateway, token))
     received = long_results = total_bytes = 0
     failures: list[str] = []
+    refusals: dict[str, int] = {}
     for i, repo in enumerate(REPOS[: args.calls]):
         status, body = agent.call_tool(args.tool, {"repoName": repo})
         size = result_text_bytes(body)
@@ -179,12 +207,15 @@ def main() -> int:
             total_bytes += size
             long_results += 1 if size >= LONG_BYTES else 0
         else:
-            failures.append(f"call {i + 1} ({repo}): HTTP {status}")
+            failures.append(failure_note(i + 1, repo, status, body))
+            reason = refusal_reason(body)
+            if reason:
+                refusals[reason] = refusals.get(reason, 0) + 1
         time.sleep(args.interval)
     print(f"Made {args.calls} calls; {received} returned a result ({total_bytes // 1024} KiB of real documents in total). Waiting {args.wait} s for the counts report...")
     after = parse_counters(keepalive_wait(lambda: fetch_metrics(gateway, token), args.wait))
     moved = delta(before, after)
-    checks = judge(args.calls, received, long_results, moved)
+    checks = judge(args.calls, received, long_results, moved, refusals)
 
     print("\nWhat the gateway counted (difference during this test):")
     for family, label in (("scans", "scans by outcome"), ("findings", "findings by check, before the repeat limit"), ("count_reports", "evidence-count reports"), ("reports", "findings reports")):
@@ -194,6 +225,10 @@ def main() -> int:
         print(f"  {'GOOD' if passed else 'BAD '} {name}: {detail}")
     for line in failures[:10]:
         print(f"  note: {line}")
+    if len(failures) > 10:
+        print(f"  note: and {len(failures) - 10} more calls without a result")
+    if any("daily limit" in reason.lower() for reason in refusals):
+        print("  hint: the agent's daily call limit stopped the test. Raise that agent's daily limit above the number of calls (Passports), then run it again if fewer than 100 results arrived.")
     print(
         f"\nNow open the Radar page and read 'Your traffic, last 7 days': the results scanned must have grown by exactly {received} for each check that is on Watch, "
         "and 'strong findings' is the number of real documents a check flagged. Review each strong finding as Real or False alarm, then read the false alarm figure."
