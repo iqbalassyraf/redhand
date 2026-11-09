@@ -13,6 +13,13 @@ Both tools work on RedHand and its demo projects. This file is how each learns w
 
 ---
 
+## 2026-11-09, Claude Code: M4.6 result checked against the database; plan to finish Phase 4 approved (F0)
+- **Changed (docs only):** a correction section in `docs/testing/results/2026-11-09-m4-6-block-gate-and-real-life-proof.md`; new `docs/plans/phase4-finish-plan.md` (approved, F-D1 to F-D7); `docs/plans/phase4-plan.md` (milestone statuses, done tests 5 and 10 re-worded for Watch only, new done test 11 and milestone M7); `docs/briefing.md` (Phase 4 status).
+- **Verified on the staging database:** 100 scanned on both checks, 0 dropped, 0 errors; 23 distinct count reports; strong findings 36 and 6; `radar-proof` revoked.
+- **Corrects the entry below:** the 20 refused calls were Budget Guard's daily limit of 100, not DeepWiki; the "81 false alarms" figure is overstated (the ceiling is 36); the document total is about 60.3 MiB; all 100 documents were read only up to the first 16 KiB; steps 7 and 8 were not run on staging. The owner accepted the run as passed.
+- **Not verified:** the exit code of the proof script; any staging behaviour after this run. No code, settings or staging data changed.
+- **Next:** F1 for Antigravity and the owner (a staging check of the Scanner, tool pinning, Coverage page and self-test, with a viewer and a second organization); M4.7 for Claude Code.
+
 ## 2026-11-09, Antigravity & Owner: Block gate and real-life proof verified (Phase 4 M4.6)
 - **Changed:**
   - Tested branch `feat/phase4-m4-6a-gate` (`0943e5d`) on staging with owner.

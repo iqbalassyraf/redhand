@@ -69,3 +69,19 @@ Verdict:
 
 Now open the Radar page and read 'Your traffic, last 7 days': the results scanned must have grown by exactly 100 for each check that is on Watch, and 'strong findings' is the number of real documents a check flagged. Review each strong finding as Real or False alarm, then read the false alarm figure.
 ```
+
+---
+
+## Correction by Claude Code (2026-11-09): what the staging database shows
+
+The report above is kept as written. These notes correct it, from the counts tables, `security_findings`, `agent_events` and `agents`.
+
+**Verdict after this check: accepted by the owner as passed (2026-11-09).** The exact-count proof holds. "Every step passed" does not: steps 7 and 8 were not run, and step 3 printed a BAD line.
+
+- **Confirmed:** `radar_scan_counts` shows 100 scanned for both checks, 0 dropped, 0 errors, strong 36 (injection) and 6 (output). `radar_count_reports` holds 23 reports, all distinct. `radar-proof` has status `revoked`.
+- **Step 3, wrong explanation.** Calls 101 to 120 did not get "no wiki text in DeepWiki". The Black Box holds 100 ALLOW followed by 20 BLOCK for this agent, each with the reason "Daily limit of 100 tool calls reached". Budget Guard stopped them, correctly, so the BAD line is explained and is not a gateway or DeepWiki fault. The proof had exactly the 100 results it needed, with no margin. The exit code was not reported.
+- **Step 3, size.** 61718 KiB is about 60.3 MiB, not the 61.7 MiB in the handoff entry.
+- **Step 4, what "scanned" means.** All 100 results also counted as truncated. The rules read the first 16 KiB of each document (`MAX_CHARS` in `radar.py`) and the average document was about 617 KiB, so these are 100 openings of documents, not 100 whole documents.
+- **Step 5, the review is complete for this agent.** The 11 reviewed findings are all of the `radar-proof` findings. The larger "still not reviewed" numbers before the review included findings from 2026-11-08. Those are still open (6 injection, 1 output), so *Every strong finding reviewed* cannot pass yet. The report does not quote that condition after the review.
+- **Step 5, the figure 81 is overstated.** At most 36 results had a strong injection finding. `false_alarms_worst_case` adds each false-alarm rule's strong count: `RAD-INJ-002` 2, `-003` 30, `-004` 1, `-005` 10, `-007` 2, which makes 45, then adds the whole check's 36 for `RAD-INJ-008`, whose review predates per-rule counts. The true ceiling is 36 of 100. The panel only displays this figure and it errs on the safe side. The fix is M4.7a in `docs/plans/phase4-finish-plan.md`.
+- **Steps 7 and 8** stay NOT RUN on staging. Local tests are not staging evidence. They move to step F1 of the same plan.
