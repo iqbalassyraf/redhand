@@ -784,6 +784,66 @@
         "title": "ControlAuditEntry",
         "type": "object"
       },
+      "DevLoginRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "user": {
+            "default": "owner",
+            "enum": [
+              "owner",
+              "admin",
+              "operator",
+              "operator2",
+              "viewer"
+            ],
+            "title": "User",
+            "type": "string"
+          }
+        },
+        "title": "DevLoginRequest",
+        "type": "object"
+      },
+      "DevLoginResponse": {
+        "properties": {
+          "access_token": {
+            "title": "Access Token",
+            "type": "string"
+          },
+          "email": {
+            "title": "Email",
+            "type": "string"
+          },
+          "organization_id": {
+            "format": "uuid",
+            "title": "Organization Id",
+            "type": "string"
+          },
+          "role": {
+            "title": "Role",
+            "type": "string"
+          },
+          "token_type": {
+            "const": "bearer",
+            "default": "bearer",
+            "title": "Token Type",
+            "type": "string"
+          },
+          "user_id": {
+            "format": "uuid",
+            "title": "User Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "access_token",
+          "user_id",
+          "email",
+          "role",
+          "organization_id"
+        ],
+        "title": "DevLoginResponse",
+        "type": "object"
+      },
       "DownscopedTokenRequest": {
         "additionalProperties": false,
         "properties": {
@@ -2621,6 +2681,148 @@
           "capabilities"
         ],
         "title": "RadarSettingsResponse",
+        "type": "object"
+      },
+      "ReadinessCheck": {
+        "properties": {
+          "conditions": {
+            "items": {
+              "$ref": "#/components/schemas/ReadinessCondition"
+            },
+            "title": "Conditions",
+            "type": "array"
+          },
+          "false_alarm_upper": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "False Alarm Upper"
+          },
+          "false_alarms_worst_case": {
+            "title": "False Alarms Worst Case",
+            "type": "integer"
+          },
+          "kind": {
+            "enum": [
+              "injection",
+              "output"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "ready": {
+            "title": "Ready",
+            "type": "boolean"
+          },
+          "scanned": {
+            "title": "Scanned",
+            "type": "integer"
+          },
+          "strong": {
+            "title": "Strong",
+            "type": "integer"
+          },
+          "strong_rate": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Strong findings per result scanned on this organization's traffic, or null when nothing was scanned.",
+            "title": "Strong Rate"
+          }
+        },
+        "required": [
+          "kind",
+          "label",
+          "ready",
+          "scanned",
+          "strong",
+          "strong_rate",
+          "false_alarms_worst_case",
+          "false_alarm_upper",
+          "conditions"
+        ],
+        "title": "ReadinessCheck",
+        "type": "object"
+      },
+      "ReadinessCondition": {
+        "properties": {
+          "detail": {
+            "title": "Detail",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "passed": {
+            "title": "Passed",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "passed",
+          "detail"
+        ],
+        "title": "ReadinessCondition",
+        "type": "object"
+      },
+      "ReadinessResponse": {
+        "description": "Whether this organization's own traffic has produced enough clean evidence to CONSIDER block mode. It grants nothing.",
+        "properties": {
+          "block_available": {
+            "const": false,
+            "default": false,
+            "title": "Block Available",
+            "type": "boolean"
+          },
+          "checks": {
+            "items": {
+              "$ref": "#/components/schemas/ReadinessCheck"
+            },
+            "title": "Checks",
+            "type": "array"
+          },
+          "note": {
+            "title": "Note",
+            "type": "string"
+          },
+          "window_days": {
+            "title": "Window Days",
+            "type": "integer"
+          },
+          "window_start": {
+            "format": "date-time",
+            "title": "Window Start",
+            "type": "string"
+          }
+        },
+        "required": [
+          "window_start",
+          "window_days",
+          "checks",
+          "note"
+        ],
+        "title": "ReadinessResponse",
         "type": "object"
       },
       "RenewRequest": {
@@ -5414,6 +5616,47 @@
         ]
       }
     },
+    "/v1/dev/login": {
+      "post": {
+        "operationId": "dev_login_v1_dev_login_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DevLoginRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DevLoginResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Development operator login",
+        "tags": [
+          "Development"
+        ]
+      }
+    },
     "/v1/findings": {
       "get": {
         "operationId": "get_findings_v1_findings_get",
@@ -8187,6 +8430,72 @@
         "summary": "Unfreeze Agent",
         "tags": [
           "Agent Passports & Control Actions"
+        ]
+      }
+    },
+    "/v1/radar/readiness": {
+      "get": {
+        "description": "Per check: what your own traffic shows over the last 7 UTC days (results scanned, strong findings, false alarms counted the hard way)\nand which conditions for even considering blocking hold. Blocking is not available and this grants nothing.",
+        "operationId": "get_radar_readiness_v1_radar_readiness_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-RedHand-Org",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Redhand-Org"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReadinessResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Radar Readiness",
+        "tags": [
+          "Prompt Injection Radar"
         ]
       }
     },

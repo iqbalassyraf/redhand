@@ -154,7 +154,7 @@ string" box (it would let anyone with access tune an evasion against the live ru
 and a per-agent destination allowlist for arguments. The allowlist is the strongest defence against exfiltration, but it is a
 separate control with its own settings and false alarm profile, so it is recommended as the first follow-up after M4.
 
-### 11.2 The block gate, corrected (replaces "at most 1% false alarms on at least 50 benign samples")
+### 11.2 The block gate, corrected (SUPERSEDED in its numbers by ADR 0016 and `docs/plans/phase4-m4-6-block-gate.md`: 100 samples cannot reach a 3% upper bound; 125 are needed) (replaces "at most 1% false alarms on at least 50 benign samples")
 With 50 benign samples and zero false alarms, the true rate could still be 7%; 1% needs about 380 clean benign samples. The new
 gate has two parts, both required:
 1. **Global:** a rule family is block-eligible only if, on the held-out benign set, its false alarm rate has a 95% upper bound of

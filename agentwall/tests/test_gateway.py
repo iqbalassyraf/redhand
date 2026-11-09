@@ -29,7 +29,7 @@ from agentwall.src.gateway.identity import AgentTokenVerifier
 from agentwall.src.gateway.metrics import GatewayMetrics
 from agentwall.src.gateway.recorder import EventRecorder
 from agentwall.src.gateway.pins import PinCoordinator, PinReport
-from agentwall.src.gateway.radar_scan import FindingsReport, RadarScanner
+from agentwall.src.gateway.radar_scan import FindingsReport, RadarScanner, ScanCountsReport
 from agentwall.src.gateway.trips import Outcome, Trip, TripDispatcher
 from agentwall.src.gateway.service import (
     JSONRPC_GATEWAY_UNAVAILABLE,
@@ -102,6 +102,18 @@ class FakeFindingsReporter:
         self.outcomes: list[Outcome] = []
 
     async def send(self, report: FindingsReport) -> Outcome:
+        self.reports.append(report)
+        return self.outcomes.pop(0) if self.outcomes else "ok"
+
+
+class FakeScanCountsReporter:
+    """Stands in for core's /internal/v1/radar/scan-counts."""
+
+    def __init__(self) -> None:
+        self.reports: list[ScanCountsReport] = []
+        self.outcomes: list[Outcome] = []
+
+    async def send(self, report: ScanCountsReport) -> Outcome:
         self.reports.append(report)
         return self.outcomes.pop(0) if self.outcomes else "ok"
 
@@ -229,8 +241,12 @@ class Harness:
         self.pin_reporter = FakePinReporter()
         self.pins = PinCoordinator(reporter=self.pin_reporter, retry_delays=())
         self.findings_reporter = FakeFindingsReporter()
+        self.counts_reporter = FakeScanCountsReporter()
         self.metrics = GatewayMetrics()
-        self.radar = RadarScanner(reporter=self.findings_reporter, metrics=self.metrics, retry_delays=())
+        self.radar = RadarScanner(
+            reporter=self.findings_reporter, metrics=self.metrics, retry_delays=(), counts_reporter=self.counts_reporter,
+            fingerprint="0123456789abcdef",
+        )
         self.gateway = McpGateway(
             verifier=AgentTokenVerifier(public_key_pem=public_pem, jwks_url=None),
             contexts=CoreContextClient(

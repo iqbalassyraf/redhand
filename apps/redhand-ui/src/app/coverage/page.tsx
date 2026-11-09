@@ -12,7 +12,7 @@ import Link from "next/link";
 import { Hand, LogOut } from "lucide-react";
 
 import { useAuth, useRequiredSession } from "@/lib/auth";
-import { type CoverageData, type CoverageResult, isCoverageData, measured, statusStyle } from "@/lib/coverage";
+import { type BlockGate, type CoverageData, type CoverageResult, isCoverageData, measured, statusStyle } from "@/lib/coverage";
 
 function NavLink({ href, label, active }: { href: string; label: string; active?: boolean }) {
   return (
@@ -56,6 +56,55 @@ function ResultsTable({ rows }: { rows: CoverageResult[] }) {
         </tbody>
       </table>
     </div>
+  );
+}
+
+function GatePill({ passed }: { passed: boolean }) {
+  return (
+    <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${passed ? "bg-[#E6F4EA] text-[#1E7B34]" : "bg-[#FDECEC] text-[#B42318]"}`}>
+      {passed ? "pass" : "not yet"}
+    </span>
+  );
+}
+
+/** Whether the measured evidence would ever allow blocking. Blocking does not exist; this explains, check by check, why it stays off. */
+function BlockGateSection({ gate, className }: { gate: BlockGate; className: string }) {
+  return (
+    <section className={className}>
+      <h2 className="mb-1 text-[14px] font-semibold">{gate.eligible.length === 0 ? "Ready to block? Not yet." : "Ready to block? Some checks pass this test."}</h2>
+      <p className="mb-2 text-[#606060]">
+        Blocking is not available and cannot be switched on. This is the test a check must pass first, using only the independent test
+        rounds below (never samples we wrote ourselves). A check is ready only when every one of these holds:
+      </p>
+      <ul className="mb-3 list-disc space-y-0.5 pl-5 text-[#606060]">
+        {gate.rules.map((rule) => (
+          <li key={rule.id}><b className="text-[#0F0F0F]">{rule.name}.</b> {rule.description}</li>
+        ))}
+      </ul>
+      <div className="grid gap-3 sm:grid-cols-2">
+        {gate.checks.map((check) => (
+          <div key={check.category} className="rounded-[8px] border border-[#E5E5E5] p-3">
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <span className="text-[13px] font-semibold">{check.label}</span>
+              <GatePill passed={check.eligible} />
+            </div>
+            <ul className="space-y-1.5">
+              {check.results.map((r) => (
+                <li key={r.id} className="flex gap-2">
+                  <span className="mt-0.5 shrink-0"><GatePill passed={r.passed} /></span>
+                  <span className="text-[#606060]">{r.detail}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ))}
+      </div>
+      <p className="mt-3 text-[#606060]">
+        Even a check that passes all of this would still be only a candidate: blocking would also need a speed test, a person reviewing the
+        labels, and a separate decision. Rules version <code>{gate.rules_fingerprint}</code>: if the rules change, earlier rounds stop
+        counting until they are measured again.
+      </p>
+    </section>
   );
 }
 
@@ -145,6 +194,8 @@ export default function CoveragePage() {
                 ))}
               </ul>
             </section>
+
+            <BlockGateSection gate={data.block_gate} className={card} />
 
             <section className={card}>
               <h2 className="mb-1 text-[14px] font-semibold">How to read this</h2>

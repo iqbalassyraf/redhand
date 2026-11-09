@@ -600,8 +600,37 @@ export interface RadarSuppression {
   expires_at: string;
 }
 
+export interface ReadinessCondition {
+  id: string;
+  name: string;
+  passed: boolean;
+  detail: string;
+}
+
+export interface ReadinessCheck {
+  kind: "injection" | "output";
+  label: string;
+  ready: boolean;
+  scanned: number;
+  strong: number;
+  strong_rate: number | null;
+  false_alarms_worst_case: number;
+  false_alarm_upper: number | null;
+  conditions: ReadinessCondition[];
+}
+
+/** Whether this organization's own traffic is clean evidence for even CONSIDERING block mode. It grants nothing: block_available is always false. */
+export interface ReadinessResult {
+  block_available: false;
+  window_start: string;
+  window_days: number;
+  checks: ReadinessCheck[];
+  note: string;
+}
+
 export const radarApi = {
   settings: (t: string) => apiFetch<RadarSettings>("/v1/radar/settings", t),
+  readiness: (t: string) => apiFetch<ReadinessResult>("/v1/radar/readiness", t),
   saveSettings: (
     t: string,
     body: { radar_mode: "off" | "observe"; output_check_mode: "off" | "observe"; confirm: boolean }

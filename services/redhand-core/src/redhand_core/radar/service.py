@@ -14,9 +14,11 @@ from uuid import UUID
 
 from fastapi import HTTPException, status
 from postgrest.exceptions import APIError
+from pydantic import ValidationError
 
 from redhand_core.auth.operator import OperatorContext, Role
 from redhand_core.passports.service import StateConflictError, _require_confirmation, _rpc, retry_once_on_conflict
+from redhand_core.radar import readiness
 from redhand_core.radar.models import (
     FindingReport,
     FindingReportResponse,
@@ -27,6 +29,10 @@ from redhand_core.radar.models import (
     RadarCapabilities,
     RadarSettingsRequest,
     RadarSettingsResponse,
+    ReadinessInputs,
+    ReadinessResponse,
+    ScanCountsReport,
+    ScanCountsResponse,
     SuppressionCreateRequest,
     SuppressionCreateResponse,
     SuppressionRevokeRequest,
@@ -220,3 +226,36 @@ async def record_findings(supabase: Any, telegram: TelegramClient | None, report
         new=int(data["new"]), coalesced=int(data["coalesced"]), suppressed=int(data["suppressed"]),
         capped=int(data["capped"]), skipped=int(data["skipped"]), disabled=int(data["disabled"]),
     )
+
+
+async def get_readiness(supabase: Any, operator: OperatorContext) -> ReadinessResponse:
+    """Whether this organization's own traffic is good enough evidence to consider block mode. Display only. Unreadable or unexpected
+    inputs are an error, never a verdict."""
+    data = await _rpc(
+        supabase, "radar_readiness_inputs", {"p_org": str(operator.organization_id)},
+        not_found_detail="Organization not found.", conflict_detail="The readiness figures could not be read.",
+    )
+    try:
+        return readiness.judge(ReadinessInputs.model_validate(data))
+    except (ValidationError, KeyError):
+        logger.error("Radar readiness inputs had an unexpected shape")
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "The readiness figures could not be read.") from None
+
+
+async def record_scan_counts(supabase: Any, report: ScanCountsReport) -> ScanCountsResponse:
+    """Stores the gateway's totals (numbers only). Items that do not fit are skipped in SQL and counted, never partly stored."""
+    items = [i.model_dump(mode="json") for i in report.items]
+    try:
+        response = await supabase.rpc(
+            "record_radar_scan_counts",
+            {"p_report_id": str(report.report_id), "p_fingerprint": report.rules_fingerprint, "p_items": items},
+        ).execute()
+    except APIError as exc:
+        logger.error("Radar scan counts could not be recorded: sqlstate=%s", exc.code)
+        if exc.code == "22023":
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Invalid scan counts report.") from None
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "The scan counts could not be recorded.") from None
+    data = response.data
+    if int(data["skipped"]):
+        get_metrics().increment_counter("redhand_radar_scan_counts_skipped_total", float(data["skipped"]))
+    return ScanCountsResponse(recorded=int(data["recorded"]), skipped=int(data["skipped"]), duplicate=bool(data["duplicate"]))

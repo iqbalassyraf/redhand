@@ -1278,6 +1278,147 @@ def _radar_summary(store: LocalSupabaseAdapter, p: dict[str, Any]) -> dict[str, 
     }
 
 
+# --- Radar evidence from real traffic (Phase 4 M4.6b): emulation of supabase/migrations/20261118000000_radar_scan_counts.sql -----------
+
+_FINGERPRINT = re.compile(r"^(unknown|[0-9a-f]{16}(\+model)?)$")
+_UUID_TEXT = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", re.IGNORECASE)
+_MAX_SCAN_COUNT = 1_000_000
+
+
+def _count_of(value: Any, maximum: int) -> int | None:
+    """Mirrors radar_count_of(): the json value as text must be plain digits (a numeric string passes, a float or a bool does not)."""
+    if isinstance(value, bool) or not isinstance(value, (int, str)):
+        return None
+    text = str(value)
+    return min(int(text), maximum) if re.fullmatch(r"[0-9]{1,18}", text) else None
+
+
+def _scan_count_item(item: Any, org_ids: set[str]) -> dict[str, Any] | None:
+    """The validated item, or None when it must be skipped whole (see record_radar_scan_counts in SQL)."""
+    if not isinstance(item, dict):
+        return None
+    kind = item.get("kind")
+    scanned, dropped, errors, flagged, strong = (
+        _count_of(item.get(k), _MAX_SCAN_COUNT) for k in ("scanned", "dropped", "errors", "flagged", "strong")
+    )
+    rules = item.get("rules", [])
+    org = item.get("organization_id")
+    if (
+        kind not in ("injection", "output") or None in (scanned, dropped, errors, flagged, strong)
+        or not isinstance(org, str) or not _UUID_TEXT.match(org) or not isinstance(rules, list) or len(rules) > 40
+    ):
+        return None
+    assert scanned is not None and flagged is not None and strong is not None and dropped is not None and errors is not None
+    if flagged > scanned or strong > flagged or org.lower() not in org_ids:
+        return None
+    clean_rules: list[dict[str, Any]] = []
+    for rule in rules:
+        rid = rule.get("rule_id") if isinstance(rule, dict) else None
+        rf = _count_of(rule.get("flagged"), _MAX_SCAN_COUNT) if isinstance(rule, dict) else None
+        rs = _count_of(rule.get("strong"), _MAX_SCAN_COUNT) if isinstance(rule, dict) else None
+        if (
+            not isinstance(rid, str) or not _RULE_ID.match(rid) or (kind == "injection") != rid.startswith("RAD-INJ-")
+            or rf is None or rs is None or rf > scanned or rs > rf
+        ):
+            return None
+        clean_rules.append({"rule_id": rid, "flagged": rf, "strong": rs})
+    return {
+        "organization_id": org.lower(), "kind": kind, "scanned": scanned, "dropped": dropped, "errors": errors,
+        "flagged": flagged, "strong": strong, "rules": clean_rules,
+    }
+
+
+def _record_radar_scan_counts(store: LocalSupabaseAdapter, p: dict[str, Any]) -> dict[str, Any]:
+    report_id, fingerprint, items = p.get("p_report_id"), p["p_fingerprint"], p["p_items"]
+    if report_id is None:
+        raise _error("22023", "a report id is required")
+    if not isinstance(items, list) or len(items) > 50:
+        raise _error("22023", "items must be an array of at most 50")
+    if not isinstance(fingerprint, str) or not _FINGERPRINT.match(fingerprint):
+        raise _error("22023", "invalid rules fingerprint")
+    seen_reports = store.tables.setdefault("radar_count_reports", [])
+    if any(r["report_id"] == str(report_id) for r in seen_reports):
+        return {"recorded": 0, "skipped": 0, "duplicate": True}  # a retry or a double delivery: already counted
+    seen_reports.append({"report_id": str(report_id), "received_at": _now()})
+    org_ids = {str(o.get("id")).lower() for o in store.tables.get("organizations", [])}
+    day = datetime.now(timezone.utc).date().isoformat()
+    scan_rows = store.tables.setdefault("radar_scan_counts", [])
+    rule_rows = store.tables.setdefault("radar_rule_counts", [])
+    recorded = skipped = 0
+    for raw in items:
+        item = _scan_count_item(raw, org_ids)
+        if item is None:
+            skipped += 1
+            continue
+        key = {"organization_id": item["organization_id"], "day": day, "kind": item["kind"], "rules_fingerprint": fingerprint}
+        row = next((r for r in scan_rows if all(r[k] == v for k, v in key.items())), None)
+        if row is None:
+            row = {**key, "scanned": 0, "dropped": 0, "errors": 0, "flagged": 0, "strong": 0}
+            scan_rows.append(row)
+        for field in ("scanned", "dropped", "errors", "flagged", "strong"):
+            row[field] += item[field]
+        for rule in item["rules"]:
+            rkey = {"organization_id": item["organization_id"], "day": day, "rule_id": rule["rule_id"], "rules_fingerprint": fingerprint}
+            rrow = next((r for r in rule_rows if all(r[k] == v for k, v in rkey.items())), None)
+            if rrow is None:
+                rrow = {**rkey, "flagged": 0, "strong": 0}
+                rule_rows.append(rrow)
+            rrow["flagged"] += rule["flagged"]
+            rrow["strong"] += rule["strong"]
+        recorded += 1
+    return {"recorded": recorded, "skipped": skipped, "duplicate": False}
+
+
+def _radar_readiness_inputs(store: LocalSupabaseAdapter, p: dict[str, Any]) -> dict[str, Any]:
+    org = str(p["p_org"])
+    row = _org_row(store, org)
+    now = datetime.now(timezone.utc)
+    first = now.date() - timedelta(days=6)
+    window_start = datetime(first.year, first.month, first.day, tzinfo=timezone.utc)
+    mine_counts = [c for c in store.tables.get("radar_scan_counts", []) if c["organization_id"] == org.lower() and date.fromisoformat(c["day"]) >= first]
+    mine_rules = [c for c in store.tables.get("radar_rule_counts", []) if c["organization_id"] == org.lower() and date.fromisoformat(c["day"]) >= first]
+    findings = [
+        f for f in store.tables.get("security_findings", [])
+        if str(f["organization_id"]) == org and _parse_ts(f["window_start"]) >= window_start
+    ]
+    silences = [s for s in store.tables.get("radar_suppressions", []) if str(s["organization_id"]) == org]
+    per_agent_day: dict[tuple[str, date], int] = {}
+    for f in findings:
+        key = (str(f["agent_id"]), _parse_ts(f["window_start"]).date())
+        per_agent_day[key] = per_agent_day.get(key, 0) + 1
+    kinds: dict[str, Any] = {}
+    for kind, prefix, mode_key, changed_key in (
+        ("injection", "RAD-INJ-", "radar_mode", "radar_mode_changed_at"),
+        ("output", "RAD-OUT-", "output_check_mode", "output_check_mode_changed_at"),
+    ):
+        mine = [c for c in mine_counts if c["kind"] == kind]
+        rules: dict[str, dict[str, int]] = {}
+        for rr in mine_rules:
+            if rr["rule_id"].startswith(prefix):
+                slot = rules.setdefault(rr["rule_id"], {"flagged": 0, "strong": 0})
+                slot["flagged"] += rr["flagged"]
+                slot["strong"] += rr["strong"]
+        kind_findings = [f for f in findings if f["kind"] == kind]
+        stored: dict[str, int] = {}
+        for f in kind_findings:
+            stored[f["rule_id"]] = stored.get(f["rule_id"], 0) + f["occurrences"]
+        kinds[kind] = {
+            "mode": row.get(mode_key, "observe"), "mode_changed_at": row.get(changed_key),
+            **{field: sum(c[field] for c in mine) for field in ("scanned", "dropped", "errors", "flagged", "strong")},
+            "fingerprints": sorted({c["rules_fingerprint"] for c in mine}),
+            "rules": rules, "stored_occurrences": stored,
+            "strong_open": sum(1 for f in kind_findings if f["would_block"] and f["review_status"] == "open"),
+            "false_alarm_rules": sorted({f["rule_id"] for f in kind_findings if f["would_block"] and f["review_status"] == "false_alarm"}),
+            "silences_in_window": sum(
+                1 for s in silences
+                if s["rule_id"].startswith(prefix) and _parse_ts(s["expires_at"]) >= window_start
+                and (s.get("revoked_at") is None or _parse_ts(s["revoked_at"]) >= window_start)
+            ),
+            "max_findings_per_agent_day": max(per_agent_day.values(), default=0),
+        }
+    return {"now": now.isoformat(), "window_start": window_start.isoformat(), "kinds": kinds}
+
+
 HANDLERS: dict[str, RpcHandler] = {
     "control_agent_change": _control_agent_change,
     "control_freeze_all": _control_freeze_all,
@@ -1305,6 +1446,8 @@ HANDLERS: dict[str, RpcHandler] = {
     "control_radar_suppression_create": _control_radar_suppression_create,
     "control_radar_suppression_revoke": _control_radar_suppression_revoke,
     "radar_summary": _radar_summary,
+    "record_radar_scan_counts": _record_radar_scan_counts,
+    "radar_readiness_inputs": _radar_readiness_inputs,
     "record_usage": _record_usage,
     "mark_budget_frozen": _mark_budget_frozen,
     "usage_by_others": _usage_by_others,
