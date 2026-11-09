@@ -13,6 +13,16 @@ Both tools work on RedHand and its demo projects. This file is how each learns w
 
 ---
 
+## 2026-11-09, Claude Code: M5a deployed to staging; F1 accounts attached
+- **Staging changes (the owner asked for each):**
+  - **Roles:** in the staging organization `RedHand Staging`: `iassyraf+viewer@gmail.com` is a viewer and `iassyraf+operator@gmail.com` a security operator (rows in `organization_members`). A second organization `F1 Second Org` (slug `f1-second-org`) was created with `iassyraf+org2@gmail.com` as its owner. The three Auth users were created by the owner in the Supabase dashboard. To undo: delete those three membership rows and the second organization (cascades its members).
+  - **Migration** `canary_kind` applied (the repo file `20261119000000_canary_kind.sql`, without its BEGIN and COMMIT lines because the migration tool wraps its own transaction). Checked afterwards: the kind check allows `canary`, `record_trip()` returns the kind, and its privileges are unchanged (service role only).
+  - **Core** `deploy.sh core` from `main` at `3f930bd`: revision `redhand-core-00026-w6k`, same origins and bot name as before. Smoke test: ALL CHECKS PASSED (13). The deployed API lists the `canary` kind. The gateway was not redeployed.
+  - **Dashboard:** Vercel production deployment of `3f930bd` is READY.
+  - Earlier today the owner raised the default daily call limit for new agents from 100 to 1000 (Passports page).
+- **Ready to run:** `docs/testing/briefs/2026-11-09-m5a-canary.md` and `docs/testing/briefs/2026-11-09-f1-phase4-staging-sweep.md`.
+- **Not verified:** anything about the canary on staging yet; the F1 sign-ins with the new accounts.
+
 ## 2026-11-09, Claude Code: core deployed to staging; M5a canary built (branch feat/phase4-m5a-canary)
 - **Staging change (owner asked for it):** `deploy.sh core` from `main` (`9503c4c`, includes M4.7a): core revision `redhand-core-00025-24n`. Smoke test: ALL CHECKS PASSED (13). The deployed OpenAPI has no `canary` (built before this branch). The gateway was not redeployed. `deploy.sh` replaces env values, so the same origins and bot name as before were passed.
 - **Built (not deployed):** migration `20261119000000_canary_kind` (+ rollback), a `canary` honeytoken kind (refuse and alert, never freeze by default), alert wording "appears to have leaked", dashboard preset on the Honeytokens page, Coverage row LLM07 "partly", OpenAPI regenerated. No gateway change. Docs: plan (section 10), ADR 0012 addendum, runbook, threat model, changelog.
