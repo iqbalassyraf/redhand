@@ -55,3 +55,16 @@ The gate above says whether OUR evidence could ever allow blocking. M4.6b adds t
   edit makes evidence stale (the plan said comments would not matter); (4) reports carry an id and are de-duplicated (not in the plan).
 - **Residual risks:** the final counts before an idle period are delayed until the next request or a clean shutdown (default Cloud Run CPU); counts lost in transit make the rate optimistic, which the R5 gap check catches only when findings arrived but counts did not; the gateway does not count more than 5,000 organizations
   per minute; the per-organization minute limits elsewhere are per core instance. An admin who marks every finding "real" can make R7 look better; every review is audited and nothing is unlocked by it.
+
+## Amendment, 2026-11-09 (M4.7a): the false alarm figure is capped at the strong results
+
+Found on staging in the M4.6 run (`docs/testing/results/2026-11-09-m4-6-block-gate-and-real-life-proof.md`): 36 of 100 results had a strong injection finding, yet the panel said 81 false alarms.
+Each rule's own count includes every result that rule flagged, so a document hit by two reviewed rules was in both counts and the sum counted it twice; a check whose review predated per-rule counts added
+all of the check's strong results on top.
+
+- **Change:** "counted the hard way" is now `min(sum over reviewed rules, results with a strong finding, results scanned)`. A result is one false alarm however many rules flagged it, so the figure can never
+  exceed the results with a strong finding. Nothing else about R7 changes: still a 95% Wilson upper bound of at most 3%.
+- **Why this is still safe:** it is still an upper bound on the true number of false alarms, never lower than it. The cap removes only impossible double counting, so it can make R7 easier to pass only
+  where the old figure was wrong. The gateway counts `strong` once per result per check (before the repeat limit and suppressions), which is what makes the cap valid.
+- **Effect on the staging run:** injection 81 becomes 36 (upper bound 45.8%, not 87.5%); output 6 stays 6. Both are still far above the 3% limit, so no conclusion about blocking changes.
+- **Display only, as before.** Nothing is unlocked by this figure.

@@ -46,8 +46,8 @@ M0, M1 and the M4 sub-plan are built. Other open items:
 | # | Milestone | Done test | Size | Staging test |
 |---|---|---|---|---|
 | F0 | Paperwork: correct the M4.6 result, land it on `main`, fix stale statuses | - | S | no |
-| F1 | Staging sweep of what is built: M2, M3, M4.5a, M4.5b, roles, second organization | 2, 3, 4 | S (test only) | **yes** |
-| M4.7a | Readiness figure fix and proof script reports refusal reasons | - | S | with M4.7b |
+| F1 | Staging sweep of what is built: M2, M3, M4.5a, M4.5b, roles, second organization (**brief written 2026-11-09**: `docs/testing/briefs/2026-11-09-f1-phase4-staging-sweep.md`) | 2, 3, 4 | S (test only) | **yes** |
+| M4.7a | Readiness figure fix and proof script reports refusal reasons (**built 2026-11-09**, PR pending) | - | S | with M4.7b |
 | M4.7b | Quieter rules, scan window, new blind round | 5, 6 | L | **yes** |
 | M5a | Canary | 7 | S to M | **yes** |
 | M5b | Secrets in prompts and config files | 8 | M | no (local) |

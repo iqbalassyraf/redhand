@@ -71,6 +71,35 @@ def test_the_size_of_a_result_is_known_only_when_there_is_one(body: Any, expecte
     assert proof.result_text_bytes(body) == expected
 
 
+DAILY_LIMIT_ERROR = {"jsonrpc": "2.0", "id": 7, "error": {"code": -32000, "message": "PolicyViolation: daily limit of 100 tool calls reached; it resets at 2026-11-09T16:00:00+00:00."}}
+
+
+def test_a_refused_call_says_why_it_was_refused() -> None:
+    """In the M4.6 staging run 20 calls came back as 'HTTP 200' with no result and the notes could not tell a refusal from a server fault."""
+    assert proof.refusal_reason(DAILY_LIMIT_ERROR) == DAILY_LIMIT_ERROR["error"]["message"]
+    assert proof.failure_note(101, "facebook/react-native", 200, DAILY_LIMIT_ERROR) == f"call 101 (facebook/react-native): HTTP 200, refused: {DAILY_LIMIT_ERROR['error']['message']}"
+    assert proof.failure_note(5, "a/b", 502, None) == "call 5 (a/b): HTTP 502"  # nothing to say about a non-answer
+
+
+@pytest.mark.parametrize("body", [None, "text", [], {}, {"result": {"content": []}}, {"error": "x"}, {"error": {}}, {"error": {"message": 5}}, {"error": {"message": "   "}}])
+def test_no_reason_is_given_unless_the_error_carries_a_message(body: Any) -> None:
+    assert proof.refusal_reason(body) is None
+
+
+def test_a_reason_is_one_short_line_of_plain_text() -> None:
+    long_reason = proof.refusal_reason({"error": {"message": "a" * 500}})
+    assert long_reason is not None and len(long_reason) <= 120
+    assert proof.refusal_reason({"error": {"message": "line one\nline two\x1b[31m\t end"}}) == "line one line two [31m end"
+
+
+def test_the_no_call_failed_line_names_the_refusals_and_still_fails() -> None:
+    checks = {name: (passed, detail) for name, passed, detail in proof.judge(120, 100, 100, moved(ok=100), refusals={"PolicyViolation: daily limit of 100 tool calls reached.": 20})}
+    passed, detail = checks["no call failed"]
+    assert passed is False  # an explained failure is still a failure: the proof did not get all 120 results
+    assert detail == "100 of 120 calls returned a result; 20 refused: PolicyViolation: daily limit of 100 tool calls reached."
+    assert dict((n, d) for n, _, d in proof.judge(120, 120, 120, moved()))["no call failed"] == "120 of 120 calls returned a result"
+
+
 def test_the_wait_keeps_talking_to_the_gateway_so_a_paused_timer_can_fire_and_returns_the_last_reading() -> None:
     now = [0.0]
     readings = iter(f"reading {i}" for i in range(100))
