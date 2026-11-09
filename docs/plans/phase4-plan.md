@@ -20,7 +20,8 @@ an owner submits to the scanner. It does not see user prompts, or anything the a
 4. **Tool pinning:** when a server changes an approved tool's description, the owner is alerted. In enforce mode the
    tool is hidden and refused until re-approved.
 5. **Radar:** a tool result with an injection (English or Malay, or hidden in invisible Unicode) is recorded and
-   alerted. In block mode it never reaches the agent. A benign result passes.
+   alerted in Watch mode. A benign result passes. (Re-worded 2026-11-09, F-D1: block mode is not part of Phase 4. It can
+   exist only if a check passes the block gate in ADR 0016 and a person decides.)
 6. **Output checks:** script tags, image-based data exfiltration and private or metadata addresses in a result are
    flagged. A normal URL is not.
 7. **Canary:** a marker in a system prompt that later appears in a tool call or result trips an alert.
@@ -28,8 +29,10 @@ an owner submits to the scanner. It does not see user prompts, or anything the a
    SARIF, without printing the value.
 9. **Loop detection:** an agent repeating the same call past the limit is flagged or throttled, and the owner is
    alerted.
-10. **Fail behaviour:** in block mode a scanner error denies. In observe mode it never changes the decision, and the
-    error is counted.
+10. **Fail behaviour:** in Watch mode a scanner error never changes the decision, and the error is counted. In any mode
+    that refuses calls (loop throttle, destination enforce) an unexpected error denies. (Re-worded 2026-11-09, F-D1.)
+11. **Destination allowlist (added 2026-11-09, F-D2):** in enforce mode a tool call whose arguments name a host outside
+    the agent's list is refused and recorded. In observe mode it is only recorded.
 
 ## 2. Current state, and where this differs from the cloud draft
 
@@ -105,15 +108,17 @@ risk to measure. No LLM calls, no new services, no new dependencies.
 ## 7. Milestones
 | | Milestone | Done tests |
 |---|---|---|
-| M0 | Foundations | n/a |
-| M1 | Measurement | 1 |
+| M0 | Foundations (built) | n/a |
+| M1 | Measurement (built) | 1 |
 | M2 | MCP Scanner (built 2026-11-07; staging check pending) | 2, 3 |
 | M3 | Tool pinning (built 2026-11-07; staging check pending) | 4 |
-| M4 | Radar and output checks | 5, 6, 10 |
-| M5 | Canary and secret scanning | 7, 8 |
-| M6 | Loop detection | 9 |
+| M4 | Radar and output checks (built and on staging, Watch only; quieter rules are M4.7) | 5, 6, 10 |
+| M5 | Canary and secret scanning (not started) | 7, 8 |
+| M6 | Loop detection (not started) | 9 |
+| M7 | Per-agent destination allowlist (not started; added 2026-11-09, F-D2) | 11 |
 
-M0 to M4 are a coherent first release. Each milestone is its own PR with tests and a staging check.
+M0 to M4 are a coherent first release. Each milestone is its own PR with tests and a staging check. The order and details
+of the remaining work are in `docs/plans/phase4-finish-plan.md`.
 
 ## 8. Decisions (owner approved as recommended, 2026-11-06)
 P4-D1 scope M0 to M6, allowlist and permission checks deferred. P4-D2 first release after M4. P4-D3 block mode only at
