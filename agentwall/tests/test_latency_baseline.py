@@ -56,6 +56,17 @@ def test_the_verdict_follows_the_budget(p50: float, p99: float, text: str) -> No
     assert text in lb.verdict({"p50_upper_ms": p50, "p99_upper_ms": p99})
 
 
+def test_slow_calls_are_counted_from_one_and_a_half_seconds() -> None:
+    assert lb.count_slow_calls([0.2, 1.49, 1.5, 3.0, 7.0]) == 3
+    assert lb.count_slow_calls([]) == 0
+    assert lb.count_slow_calls([1.0, 2.0], threshold=2.0) == 1
+
+
+def test_the_summary_reports_slow_calls_and_still_no_secret() -> None:
+    source = Path(lb.__file__).read_text(encoding="utf-8")
+    assert '"calls_taking_1_5s_or_more_end_to_end": count_slow_calls(durations)' in source
+
+
 def test_the_script_has_no_place_to_print_a_secret() -> None:
     source = (Path(lb.__file__)).read_text(encoding="utf-8")
     for name in ("token", "key"):

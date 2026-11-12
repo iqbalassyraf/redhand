@@ -118,6 +118,15 @@ def summarise(before: dict[str, object], after: dict[str, object]) -> dict[str, 
     }
 
 
+SLOW_CALL_SECONDS = 1.5
+
+
+def count_slow_calls(durations: list[float], threshold: float = SLOW_CALL_SECONDS) -> int:
+    """How many calls took at least `threshold` seconds from start to finish (mostly the upstream tool). A call this slow can leave the
+    gateway's passport entry expired for the next call, so this number is printed next to the cache misses."""
+    return sum(1 for d in durations if d >= threshold)
+
+
 def verdict(summary: dict[str, object]) -> str:
     p50, p99 = float(summary["p50_upper_ms"]), float(summary["p99_upper_ms"])  # type: ignore[arg-type]
     ok50, ok99 = p50 <= BUDGET_P50_MS, p99 <= BUDGET_P99_MS
@@ -172,8 +181,11 @@ def main() -> int:
     before, before_stages = parse_overhead(before_text), parse_stages(before_text)
     arguments = json.loads(args.args)
     failures = 0
+    durations: list[float] = []
     for i in range(args.calls):
+        call_started = time.monotonic()
         status, body = agent.call_tool(args.tool, arguments)
+        durations.append(time.monotonic() - call_started)
         if status != 200 or not isinstance(body, dict) or "result" not in body:
             failures += 1
             sys.stderr.write(f"\n[Call #{i+1} failed]: status={status}, body={str(body)[:150]}\n")
@@ -181,7 +193,11 @@ def main() -> int:
     after_text = fetch_metrics(gateway, token)
     after, after_stages = parse_overhead(after_text), parse_stages(after_text)
     summary = summarise(before, after)
-    summary.update({"requested_calls": args.calls, "failed_calls": failures, "verdict": verdict(summary)})
+    summary.update({
+        "requested_calls": args.calls, "failed_calls": failures,
+        "calls_taking_1_5s_or_more_end_to_end": count_slow_calls(durations),
+        "verdict": verdict(summary),
+    })
     summary["stages"] = summarise_stages(before_stages, after_stages)  # which step the time went into (empty on an older gateway)
     print(json.dumps(summary, indent=2))
     print("\nWhat this means: the gateway adds at most p50 and p99 above, per call, not counting the upstream server.")
