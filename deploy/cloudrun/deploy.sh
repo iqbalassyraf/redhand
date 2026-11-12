@@ -219,7 +219,7 @@ deploy_gateway() {
   say "Deploying the gateway (talks to core at $core_url)"
   gcloud run deploy redhand-gateway --image "$IMAGE" --region "$REGION" --project "$PROJECT_ID" \
     --service-account "$(sa_email "$GATEWAY_SA")" \
-    --allow-unauthenticated --min-instances 0 --max-instances 1 --cpu 1 --memory 512Mi --timeout 300 \
+    --allow-unauthenticated --min-instances 0 --max-instances 1 --cpu-throttling --cpu 1 --memory 512Mi --timeout 300 \
     --set-env-vars "^@^AGENTWALL_ENVIRONMENT=staging@AGENTWALL_CORE_URL=${core_url}@AGENTWALL_CONTEXT_CACHE_TTL_SECONDS=2@AGENTWALL_CORS_ALLOWED_ORIGINS=$(cors_json)" \
     --set-secrets "AGENTWALL_CORE_SERVICE_TOKEN=${SECRET_INTERNAL}:latest"
   say "gateway: $(service_url redhand-gateway)"
