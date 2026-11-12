@@ -247,6 +247,23 @@ class CoreContextClient:
             self._cache.popitem(last=False)
         return context
 
+    def refresh_if_ageing(self, agent_id: UUID, organization_id: UUID, server: str) -> None:
+        """
+        Called when a call ends upstream. A refresh is otherwise only started at the START of a call, so a call that stays open
+        for about the whole lifetime (a slow tool) would leave the NEXT call with an expired entry and a wait for core. This starts
+        the same background refresh when the entry is at least REFRESH_AHEAD_FRACTION of its lifetime old, or has expired.
+        Synchronous, does no I/O, never raises. It does not make any served entry older than the TTL: the refresh is stamped with the
+        time it was requested, a failure changes nothing, and an unknown key (no lookup was made) starts nothing.
+        """
+        if self._ttl <= 0:
+            return
+        key = (str(agent_id), str(organization_id), server)
+        cached = self._cache.get(key)
+        if cached is None:
+            return
+        if self._clock() - cached[0] >= self._ttl * REFRESH_AHEAD_FRACTION:
+            self._start_refresh(key, agent_id, organization_id, server)
+
     def _start_refresh(self, key: tuple[str, str, str], agent_id: UUID, organization_id: UUID, server: str) -> None:
         """Starts one background refresh per key. Never raises or waits; a failed refresh changes nothing (the old entry just expires)."""
         if key in self._refreshing or len(self._refreshing) >= MAX_BACKGROUND_REFRESHES:

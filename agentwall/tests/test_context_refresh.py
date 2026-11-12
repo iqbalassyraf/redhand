@@ -211,6 +211,165 @@ async def test_a_refresh_older_than_the_lifetime_is_not_used_when_a_call_waits_f
     assert (await get(h, agent)).status == "frozen"  # a fresh lookup, not the old entry
 
 
+# ---------------------------------------------------------------------------
+# Refresh when a call ends (docs/plans/phase4-context-refresh-after-call.md): a call that stays open upstream for as long as the
+# lifetime must not leave the NEXT call waiting for core.
+# ---------------------------------------------------------------------------
+
+
+def after_call(h: Harness, agent: UUID) -> None:
+    h.gateway.contexts.refresh_if_ageing(agent, ORG, "xero")
+
+
+def stage_count(h: Harness, stage: str) -> int:
+    prefix = f'redhand_gateway_stage_ms_count{{stage="{stage}"}} '
+    for line in h.metrics.render().splitlines():
+        if line.startswith(prefix):
+            return int(float(line[len(prefix):]))
+    return 0
+
+
+async def test_after_a_slow_call_the_next_call_is_a_hit_not_a_lookup() -> None:
+    h, agent = setup()
+    await get(h, agent)                 # the call starts: lookup at t=0
+    h.clock.now += 2.5                  # the upstream tool takes 2.5 s
+    after_call(h, agent)                # the call ends
+    await settle(h)
+    h.clock.now += 0.2
+    calls_before = h.core.calls
+    await get(h, agent)                 # the next call
+    assert h.core.calls == calls_before  # served from the cache: the call itself did not go to core
+    assert stage_count(h, "context_miss") == 1  # only the very first lookup was a miss
+    assert stage_count(h, "context_hit") == 1
+
+
+async def test_a_young_entry_starts_no_refresh_when_a_call_ends() -> None:
+    h, agent = setup()
+    await get(h, agent)
+    h.clock.now += TTL * REFRESH_AHEAD_FRACTION - 0.01
+    after_call(h, agent)
+    assert h.gateway.contexts._refreshing == {}
+    await settle(h)
+    assert h.core.calls == 1
+
+
+async def test_an_ageing_entry_starts_one_refresh_when_a_call_ends() -> None:
+    h, agent = setup()
+    await get(h, agent)
+    h.clock.now += 1.1
+    after_call(h, agent)
+    after_call(h, agent)                # a second call ending at once does not start another
+    assert len(h.gateway.contexts._refreshing) == 1
+    await settle(h)
+    assert h.core.calls == 2
+
+
+async def test_an_expired_entry_is_refreshed_when_a_call_ends() -> None:
+    h, agent = setup()
+    await get(h, agent)
+    h.clock.now += 5.0
+    after_call(h, agent)
+    await settle(h)
+    assert h.core.calls == 2
+
+
+async def test_with_no_entry_nothing_is_started_when_a_call_ends() -> None:
+    h, agent = setup()
+    after_call(h, agent)                # no lookup was ever made for this key (a call denied before the passport lookup)
+    assert h.gateway.contexts._refreshing == {} and h.core.calls == 0
+
+
+async def test_with_no_cache_lifetime_nothing_is_started_when_a_call_ends() -> None:
+    h = Harness(ttl=0.0)
+    agent = h.add_agent(INVOICES_READ)
+    await get(h, agent)
+    h.clock.now += 5.0
+    after_call(h, agent)
+    assert h.gateway.contexts._refreshing == {} and h.core.calls == 1
+
+
+async def test_the_number_of_refreshes_started_when_calls_end_is_bounded() -> None:
+    h, _ = setup()
+    agents = [h.add_agent(INVOICES_READ) for _ in range(MAX_BACKGROUND_REFRESHES + 20)]
+    for a in agents:
+        await get(h, a)
+    h.clock.now += 3.0
+    for a in agents:
+        after_call(h, a)
+    assert len(h.gateway.contexts._refreshing) <= MAX_BACKGROUND_REFRESHES
+    await settle(h)
+
+
+async def test_a_freeze_is_still_seen_within_the_lifetime_when_refreshes_start_at_the_end_of_calls() -> None:
+    h, agent = setup()
+    fetched_at = h.clock.now
+    assert (await get(h, agent)).status == "active"
+    h.core.agents[str(agent)]["status"] = "frozen"
+    seen_frozen_at = None
+    for step in range(1, 40):
+        h.clock.now = fetched_at + step * 0.1
+        after_call(h, agent)
+        await settle(h)
+        context = await get(h, agent)
+        if context.status == "frozen" and seen_frozen_at is None:
+            seen_frozen_at = h.clock.now - fetched_at
+        if h.clock.now - fetched_at >= TTL:
+            assert context.status == "frozen", "an entry older than the TTL was served"
+    assert seen_frozen_at is not None and seen_frozen_at < TTL
+
+
+@pytest.mark.parametrize("mode", ["down", "error", "malformed"])
+async def test_a_failed_refresh_at_the_end_of_a_call_never_extends_the_old_entry(mode: str) -> None:
+    h, agent = setup()
+    await get(h, agent)
+    h.clock.now += 1.2
+    h.core.mode = mode
+    after_call(h, agent)
+    await settle(h)
+    h.clock.now += 1.0                  # past the original lifetime
+    with pytest.raises(ContextUnavailableError):
+        await get(h, agent)             # denied, never served stale
+
+
+async def test_invalidate_discards_a_refresh_started_at_the_end_of_a_call() -> None:
+    h, agent = setup()
+    await get(h, agent)
+    h.clock.now += 1.2
+    after_call(h, agent)
+    h.gateway.contexts.invalidate()
+    await settle(h)
+    assert h.gateway.contexts._cache == {}
+
+
+async def test_a_refresh_started_at_the_end_of_a_call_is_stamped_with_when_it_was_requested() -> None:
+    h, agent = setup()
+    await get(h, agent)
+    requested_at = h.clock.now + 2.5
+    h.clock.now = requested_at
+    real = h.core.handler
+
+    def slow(request: httpx.Request) -> httpx.Response:
+        h.clock.now += 0.8
+        return real(request)
+
+    h.gateway.contexts._http = httpx.AsyncClient(transport=httpx.MockTransport(slow))
+    after_call(h, agent)
+    await settle(h)
+    key = (str(agent), str(ORG), "xero")
+    assert h.gateway.contexts._cache[key][0] == requested_at
+
+
+async def test_the_next_call_during_an_end_of_call_refresh_waits_for_it_and_does_not_look_up_again() -> None:
+    h, agent = setup()
+    await get(h, agent)
+    h.clock.now += 2.5
+    after_call(h, agent)                # refresh started, not yet run
+    h.clock.now += 0.05
+    served = await get(h, agent)        # arrives while it runs
+    assert served.status == "active" and h.core.calls == 2
+    assert 'stage="context_wait_refresh"' in h.metrics.render()
+
+
 async def test_the_wait_for_a_stuck_refresh_is_limited_and_the_call_then_looks_up_for_itself(monkeypatch: pytest.MonkeyPatch) -> None:
     from agentwall.src.gateway import context as context_module
 

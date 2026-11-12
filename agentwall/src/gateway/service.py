@@ -305,6 +305,10 @@ class McpGateway:
             if request_id is None:
                 return GatewayResponse(502, None)
             return GatewayResponse(502, _error(request_id, JSONRPC_UPSTREAM_UNAVAILABLE, str(exc)))
+        finally:
+            # However the forward ended, start a passport refresh if the entry has aged while the call was open upstream, so a slow
+            # tool does not leave the agent's next call waiting for core. Synchronous, no I/O, never raises.
+            self.contexts.refresh_if_ageing(identity.agent_id, identity.organization_id, server)
 
         body = result.message
         findings: list[str] = []
