@@ -32,6 +32,7 @@ from .budget import BudgetMeter
 from .metrics import GatewayMetrics
 from .capture import build_excerpt
 from .honeytokens import scan as scan_honeytokens
+from .loops import LoopDecision, LoopMeter
 from .pins import PinCoordinator
 from .radar_scan import RadarScanner, kinds_for
 from .recorder import EventRecorder, GatewayEvent
@@ -95,6 +96,8 @@ class McpGateway:
         trips: TripDispatcher,
         pins: PinCoordinator,
         radar: RadarScanner,
+        loops: LoopMeter | None = None,
+        loop_detection_enabled: bool = True,
     ) -> None:
         self.verifier = verifier
         self.contexts = contexts
@@ -110,6 +113,11 @@ class McpGateway:
         contexts.attach_metrics(metrics)
         verifier.attach_metrics(metrics)
         self._budget_refusal_logged: dict[UUID, float] = {}
+        # Loop detection (Phase 4 M6). `loop_detection_enabled` is the operator's kill switch: False skips the meter whatever core says.
+        self.loops = loops if loops is not None else LoopMeter()
+        self.loop_detection_enabled = loop_detection_enabled
+        self._loop_refusal_logged: dict[UUID, float] = {}
+        self._loop_evictions_seen = 0
 
     def _record_budget_refusal(
         self, identity: AgentIdentity, context: GatewayContext, method: str | None, message: Any,
@@ -122,13 +130,50 @@ class McpGateway:
         `self.recorder`, uncoalesced): the ledger's once-a-minute throttle is only about keeping the
         gateway's own forensic log short, not about the durable record owners see on the dashboard.
         """
+        self._record_repeat_refusal(
+            self._budget_refusal_logged, identity, context, method, message, reasons, tool_name, arguments, started,
+        )
+
+    def _record_repeat_refusal(
+        self, logged: dict[UUID, float], identity: AgentIdentity, context: GatewayContext, method: str | None, message: Any,
+        reasons: list[str], tool_name: str, arguments: dict[str, Any], started: float,
+    ) -> None:
+        """The once-a-minute ledger limit shared by every refusal an agent can repeat (budget, loop). `logged` is that refusal's own
+        table, so one kind of refusal cannot silence the ledger record of another."""
         now = time.monotonic()
-        last = self._budget_refusal_logged.get(identity.agent_id)
+        last = logged.get(identity.agent_id)
         if last is None or now - last >= BUDGET_REFUSAL_LOG_INTERVAL_SECONDS:
-            self._budget_refusal_logged[identity.agent_id] = now
+            logged[identity.agent_id] = now
             self._record(identity, context, method, message, "BLOCK", reasons, 403, tool_name, arguments, started)
         else:
             self.recorder.record(self._event(identity, context, method, "BLOCK", reasons, 403, tool_name, started))
+
+    def _loop_check(
+        self, identity: AgentIdentity, context: GatewayContext, tool_name: str, arguments: dict[str, Any], throttle: bool,
+    ) -> LoopDecision | None:
+        """
+        Counts this call. Returns the decision, or None when the meter raised (counted and logged without values). Never raises:
+        the caller decides what an error means (observe: carry on; throttle: deny).
+        """
+        try:
+            decision = self.loops.check(
+                identity.agent_id, tool_name, arguments, limit=context.loop_limit, window_seconds=float(context.loop_window_seconds),
+                throttle=throttle,
+            )
+        except Exception as exc:  # noqa: BLE001  the caller decides what an error means
+            logger.error("Loop check failed", error_type=type(exc).__name__)
+            self.metrics.record_loop("error")
+            return None
+        evicted = self.loops.evictions - self._loop_evictions_seen
+        if evicted:
+            self._loop_evictions_seen = self.loops.evictions
+            self.metrics.record_loop("evicted", evicted)
+        self.metrics.record_loop(decision.outcome)
+        if decision.flagged:
+            self.radar.report_loop(
+                organization_id=identity.organization_id, agent_id=identity.agent_id, server=context.server_slug, tool=tool_name,
+            )
+        return decision
 
     async def handle(
         self,
@@ -259,6 +304,33 @@ class McpGateway:
                 self._record(identity, context, method, message, "BLOCK", violations, 403, tool_name, arguments, started)
                 return deny(200, JSONRPC_POLICY_VIOLATION, f"PolicyViolation: tool '{tool_name}' blocked by guardrails.",
                             "guardrail", {"tool_name": tool_name, "violations": violations})
+
+            # 4a'. Loop detection (Phase 4 M6): the same agent, tool and arguments again and again. Only calls that would be forwarded
+            # are counted, and a refused repeat is refused before it can use budget. Off for the whole gateway with the kill switch, off
+            # for an organization in its settings, and skipped for an agent with a live suppression of the loop rule.
+            if self.loop_detection_enabled and context.loop_mode != "off" and not context.loop_exempt:
+                throttle = context.loop_mode == "throttle"
+                loop_timer = time.perf_counter()
+                loop = self._loop_check(identity, context, tool_name, arguments, throttle)
+                self.metrics.record_stage("loop_check", (time.perf_counter() - loop_timer) * 1000)
+                if loop is None and throttle:  # enforcement path: a meter error denies
+                    self._record(identity, context, method, message, "BLOCK", ["loop check failed"], 403, tool_name, arguments, started)
+                    return deny(200, JSONRPC_POLICY_VIOLATION, "PolicyViolation: request could not be checked.", "loop_check_error")
+                if loop is not None and loop.flagged and throttle:
+                    self.metrics.record_loop("throttled")
+                    reasons = [
+                        f"This exact call was repeated {loop.count} times within {context.loop_window_seconds} seconds "
+                        f"(limit {context.loop_limit}); further repeats are paused for now."
+                    ]
+                    self._record_repeat_refusal(
+                        self._loop_refusal_logged, identity, context, method, message, reasons, tool_name, arguments, started,
+                    )
+                    return deny(
+                        200, JSONRPC_POLICY_VIOLATION,
+                        f"PolicyViolation: this exact call was repeated too often (limit {context.loop_limit} in {context.loop_window_seconds} seconds) and is paused for now.",
+                        "loop_throttled",
+                        {"tool_name": tool_name, "loop_limit": context.loop_limit, "loop_window_seconds": context.loop_window_seconds},
+                    )
 
             # 4b. Budget Guard: a call that is otherwise allowed consumes one unit of the agent's daily
             # limit, or is refused. Refused calls above never reach this point, so they never consume.

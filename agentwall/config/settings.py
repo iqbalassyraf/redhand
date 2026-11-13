@@ -101,6 +101,10 @@ class Settings(BaseSettings):
         default=500, ge=1, le=500,
         description="Most events sent to core in one report call. Must not exceed core's own per-batch limit.",
     )
+    LOOP_DETECTION_ENABLED: bool = Field(
+        default=True,
+        description="Kill switch for loop detection (Phase 4 M6). False skips the meter entirely, whatever the organization's mode says.",
+    )
     RADAR_MODEL_ENABLED: bool = Field(
         default=False,
         description="Also run the second-stage injection model in the Radar's background scan (about 8 ms more CPU per large result, never inline).",
