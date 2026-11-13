@@ -41,7 +41,7 @@ _RUN_END = re.compile(r"[\s\"'<>`^|{}(),;]")
 _EMAIL = re.compile(r"(?<![\w.%+\-])[\w.%+\-]{1,64}@((?:[\w\-]+\.)+[^\W\d_][\w\-]*|\[[0-9A-Fa-f:.]{2,45}\])")
 _LABEL = re.compile(r"^[a-z0-9_](?:[a-z0-9_-]{0,61}[a-z0-9_])?$")
 _NUMERIC_LABEL = re.compile(r"^(?:[0-9]+|0[xX][0-9a-fA-F]*)$")
-_DOTS = str.maketrans({"。": ".", "．": ".", "｡": "."})  # the label separators the IDNA codec also accepts
+_DOTS = str.maketrans({"\u3002": ".", "\uff0e": ".", "\uff61": "."})  # the label separators the IDNA codec also accepts
 
 
 @dataclass(frozen=True, slots=True)
