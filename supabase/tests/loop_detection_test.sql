@@ -81,7 +81,7 @@ BEGIN
         pg_temp.loop_item('x', '{"kind": "injection"}'), pg_temp.loop_item('x', '{"kind": "output"}'),
         pg_temp.loop_item('x', '{"place": "text"}'), pg_temp.inj_item('{"place": "call"}'),
         pg_temp.inj_item('{"rule_id": "RAD-LOOP-001"}'), pg_temp.loop_item('x', '{"rule_id": "RAD-INJ-001"}'),
-        pg_temp.loop_item('x', '{"rule_id": "RAD-LOP-001"}'), pg_temp.loop_item('x', '{"kind": "destination"}')));
+        pg_temp.loop_item('x', '{"rule_id": "RAD-LOP-001"}'), pg_temp.loop_item('x', '{"kind": "telepathy"}')));
     PERFORM pg_temp.check((r->>'skipped')::int = 8 AND (r->>'new')::int = 0, 'eight inconsistent or unknown items are skipped');
     PERFORM pg_temp.check((SELECT count(*) = 0 FROM public.security_findings WHERE tool_name = 'x'), 'none of them reached the table');
 
@@ -156,7 +156,7 @@ BEGIN
     PERFORM pg_temp.expect_error($q$INSERT INTO public.security_findings (organization_id, agent_id, rule_id, family, kind, severity, confidence, place, window_start)
         VALUES ('00000000-0000-0000-0000-000010000001', '00000000-0000-0000-0000-00001000000a', 'RAD-LOOP-1', 'loop', 'loop', 'low', 'low', 'call', now())$q$, '23514', 'a loop rule id must have three digits');
     PERFORM pg_temp.expect_error($q$INSERT INTO public.security_findings (organization_id, agent_id, rule_id, family, kind, severity, confidence, place, window_start)
-        VALUES ('00000000-0000-0000-0000-000010000001', '00000000-0000-0000-0000-00001000000a', 'RAD-LOOP-001', 'loop', 'destination', 'low', 'low', 'call', now())$q$, '23514', 'an unknown kind cannot be stored');
+        VALUES ('00000000-0000-0000-0000-000010000001', '00000000-0000-0000-0000-00001000000a', 'RAD-LOOP-001', 'loop', 'telepathy', 'low', 'low', 'call', now())$q$, '23514', 'an unknown kind cannot be stored');
 END $$;
 
 -- the audit list accepts the new action and still refuses an unknown one
