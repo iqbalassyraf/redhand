@@ -102,7 +102,7 @@ def test_inconsistent_loop_items_are_skipped_not_stored(env: Env, over: dict[str
     assert env.findings().json()["findings"] == []
 
 
-@pytest.mark.parametrize("over", [{"rule_id": "RAD-LOOP-1"}, {"rule_id": "RAD-LOP-001"}, {"kind": "destination"}, {"place": "elsewhere"}])
+@pytest.mark.parametrize("over", [{"rule_id": "RAD-LOOP-1"}, {"rule_id": "RAD-LOP-001"}, {"kind": "telepathy"}, {"place": "elsewhere"}])
 def test_malformed_loop_items_are_refused_at_the_boundary(env: Env, over: dict[str, Any]) -> None:
     assert env.report([loop_item(**over)]).status_code == 422
 
