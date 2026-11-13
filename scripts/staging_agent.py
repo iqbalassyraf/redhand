@@ -7,6 +7,8 @@ then talks MCP (initialize, tools/list, tools/call) to a server THROUGH the RedH
 
   run    Checks the passport in action: allowed call works, out-of-scope call is refused,
          unknown server is refused. Prints PASS/FAIL per check.
+  repeat Sends the same tool call N times (--tool, --args, --times, --delay) and prints one line per call and a summary of the outcomes. For the
+         loop-detection and destination checks. Never prints the key, the token or the arguments. --vary FIELD makes each call different.
   watch  Calls the allowed tool in a loop and prints the moment calls stop (after you freeze
          or revoke the agent in the dashboard) and when they resume (after an unfreeze).
          Use --agents 2 (or more) to watch several agents at once, e.g. for "freeze all".
@@ -173,6 +175,35 @@ def run_checks(agent: Agent, args: argparse.Namespace) -> int:
     return 0 if failures == 0 else 1
 
 
+# -- repeat mode --------------------------------------------------------------------------
+def repeat(agent: Agent, args: argparse.Namespace) -> int:
+    """The same call `--times` times. One line per call (the outcome, never the arguments), then a summary and where the first refusal happened."""
+    status, body = agent.initialize()
+    if status != 200:
+        say(f"could not start: {describe(status, body)}")
+        return 1
+    base = json.loads(args.args)
+    counts: dict[str, int] = {}
+    first_refused: int | None = None
+    for i in range(1, args.times + 1):
+        arguments = dict(base)
+        if args.vary:
+            arguments[args.vary] = f"call-{i}"
+        status, body = agent.call_tool(args.tool, arguments)
+        outcome = "allowed" if status == 200 and isinstance(body, dict) and "result" in body else describe(status, body)
+        counts[outcome] = counts.get(outcome, 0) + 1
+        if outcome != "allowed" and first_refused is None:
+            first_refused = i
+        say(f"{i:>4}  {now()}  {outcome[:170]}")
+        if i < args.times:
+            time.sleep(args.delay)
+    say(f"\nsummary: {args.times} calls")
+    for outcome, number in sorted(counts.items(), key=lambda item: -item[1]):
+        say(f"  {number:>4} x {outcome[:170]}")
+    say(f"first refusal at call: {first_refused if first_refused is not None else 'none'}")
+    return 0
+
+
 # -- watch mode ---------------------------------------------------------------------------
 def watch_agent(agent: Agent, args: argparse.Namespace, stop: threading.Event) -> None:
     last_ok: str | None = None
@@ -225,9 +256,9 @@ def read_keys(count: int) -> list[str]:
     return keys
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("mode", choices=["run", "watch"])
+    parser.add_argument("mode", choices=["run", "watch", "repeat"])
     parser.add_argument("--core", default=os.environ.get("RH_CORE_URL", DEFAULT_CORE))
     parser.add_argument("--gateway", default=os.environ.get("RH_GATEWAY_URL", DEFAULT_GATEWAY))
     parser.add_argument("--server", default="deepwiki", help="MCP server slug registered in the dashboard")
@@ -237,14 +268,23 @@ def main() -> int:
     parser.add_argument("--denied-args", default='{"repoName": "facebook/react", "question": "What is React?"}')
     parser.add_argument("--agents", type=int, default=1, help="watch mode: how many agents to watch")
     parser.add_argument("--interval", type=float, default=1.0, help="watch mode: seconds between calls")
-    args = parser.parse_args()
+    parser.add_argument("--tool", default="read_wiki_structure", help="repeat mode: the tool to call")
+    parser.add_argument("--args", default='{"repoName": "facebook/react"}', help="repeat mode: the tool's arguments (JSON)")
+    parser.add_argument("--times", type=int, default=25, help="repeat mode: how many calls")
+    parser.add_argument("--delay", type=float, default=0.4, help="repeat mode: seconds between calls")
+    parser.add_argument("--vary", default="", help="repeat mode: an argument name to change on every call (so no two calls are identical)")
+    args = parser.parse_args(argv)
     for url_name in ("core", "gateway"):
         setattr(args, url_name, getattr(args, url_name).rstrip("/"))
 
     count = args.agents if args.mode == "watch" else 1
     agents = [Agent(f"agent {i + 1}", args.core, args.gateway, args.server, key) for i, key in enumerate(read_keys(count))]
     say(f"core: {args.core}\ngateway: {args.gateway}\nserver: {args.server}\n")
-    return run_checks(agents[0], args) if args.mode == "run" else watch(agents, args)
+    if args.mode == "run":
+        return run_checks(agents[0], args)
+    if args.mode == "repeat":
+        return repeat(agents[0], args)
+    return watch(agents, args)
 
 
 if __name__ == "__main__":
