@@ -211,6 +211,14 @@ def test_more_than_the_limit_of_distinct_destinations_is_untracked() -> None:
     assert scan_arguments(" ".join(f"https://h{i}.example.com/" for i in range(MAX_DESTINATIONS))).untracked is False
 
 
+def test_more_matches_than_the_budget_is_untracked_even_when_they_are_all_the_same_address() -> None:
+    flood = " ".join(["alice@good.com"] * 300)
+    scan = scan_arguments(flood)
+    assert scan.untracked is True and len(scan.destinations) == 1
+    assert scan_arguments(" ".join(["alice@good.com"] * 50)).untracked is False
+    assert scan_arguments(" ".join(["https://good.com/a"] * 300)).untracked is True
+
+
 def test_text_beyond_the_character_budget_is_untracked() -> None:
     scan = scan_arguments("x " * (MAX_SCAN_CHARS // 2 + 10))
     assert scan.untracked is True
@@ -256,6 +264,8 @@ def test_near_matches_and_a_mebibyte_are_scanned_inside_a_time_limit() -> None:
         ("http://good.com\\" * 4000),
         "%" * 60_000,
         "0x" * 30_000,
+        "a.b@c.de " * 7000,  # thousands of real addresses: normalizing each one used to cost ~30 ms
+        "http://a " * 7000,
     ]
     started = time.perf_counter()
     for text in worst:

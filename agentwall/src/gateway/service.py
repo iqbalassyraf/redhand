@@ -31,6 +31,7 @@ from .identity import AgentAuthError, AgentIdentity, AgentTokenVerifier, KeyUnav
 from .budget import BudgetMeter
 from .metrics import GatewayMetrics
 from .capture import build_excerpt
+from ..firewall.destinations import disallowed, scan_arguments
 from .honeytokens import scan as scan_honeytokens
 from .loops import LoopDecision, LoopMeter
 from .pins import PinCoordinator
@@ -98,6 +99,7 @@ class McpGateway:
         radar: RadarScanner,
         loops: LoopMeter | None = None,
         loop_detection_enabled: bool = True,
+        destination_check_enabled: bool = True,
     ) -> None:
         self.verifier = verifier
         self.contexts = contexts
@@ -118,6 +120,9 @@ class McpGateway:
         self.loop_detection_enabled = loop_detection_enabled
         self._loop_refusal_logged: dict[UUID, float] = {}
         self._loop_evictions_seen = 0
+        # Destination allowlist (Phase 4 M7). `destination_check_enabled` is the operator's kill switch: False skips the check whatever core says.
+        self.destination_check_enabled = destination_check_enabled
+        self._destination_refusal_logged: dict[UUID, float] = {}
 
     def _record_budget_refusal(
         self, identity: AgentIdentity, context: GatewayContext, method: str | None, message: Any,
@@ -147,6 +152,34 @@ class McpGateway:
             self._record(identity, context, method, message, "BLOCK", reasons, 403, tool_name, arguments, started)
         else:
             self.recorder.record(self._event(identity, context, method, "BLOCK", reasons, 403, tool_name, started))
+
+    def _destination_check(
+        self, identity: AgentIdentity, context: GatewayContext, tool_name: str, arguments: dict[str, Any],
+    ) -> tuple[tuple[str, ...], bool] | None:
+        """
+        The addresses in this call's arguments that are not on the agent's list (as coarse names) and whether part of the call was past the
+        scan budget. None when the check itself failed (counted and logged without values): the caller decides what that means. Never raises.
+        Raises no DNS or other I/O: it only reads what the agent wrote.
+        """
+        try:
+            scan = scan_arguments(arguments)
+            offending = disallowed(scan, context.allowed_destinations)
+        except Exception as exc:  # noqa: BLE001  the caller decides what an error means
+            logger.error("Destination check failed", error_type=type(exc).__name__)
+            self.metrics.record_destination("error")
+            return None
+        if offending:
+            self.metrics.record_destination("flagged")
+            self.radar.report_finding(
+                organization_id=identity.organization_id, agent_id=identity.agent_id, server=context.server_slug, tool=tool_name,
+                rule_id="RAD-DST-001", kind="destination", family="destination", severity="high", detail=offending[0],
+                on_throttled=lambda: self.metrics.record_destination("report_throttled"),
+            )
+        elif scan.untracked:
+            self.metrics.record_destination("untracked")
+        else:
+            self.metrics.record_destination("ok")
+        return offending, scan.untracked
 
     def _loop_check(
         self, identity: AgentIdentity, context: GatewayContext, tool_name: str, arguments: dict[str, Any], throttle: bool,
@@ -304,6 +337,32 @@ class McpGateway:
                 self._record(identity, context, method, message, "BLOCK", violations, 403, tool_name, arguments, started)
                 return deny(200, JSONRPC_POLICY_VIOLATION, f"PolicyViolation: tool '{tool_name}' blocked by guardrails.",
                             "guardrail", {"tool_name": tool_name, "violations": violations})
+
+            # 4a. Destination allowlist (Phase 4 M7): the web and email addresses the agent wrote into this call, against its list. Observe records
+            # a finding and carries on; enforce also refuses the call, and refuses what it could not check (arguments past the scan budget), so a
+            # call is never allowed on the strength of text that was not read. A check error denies in enforce and changes nothing in observe. Off
+            # for everyone with the kill switch, and for an agent whose mode is off. Refused before the loop check and Budget Guard, so it uses neither.
+            if self.destination_check_enabled and context.destination_mode != "off":
+                enforce = context.destination_mode == "enforce"
+                dest_timer = time.perf_counter()
+                verdict = self._destination_check(identity, context, tool_name, arguments)
+                self.metrics.record_stage("destination_check", (time.perf_counter() - dest_timer) * 1000)
+                if verdict is None and enforce:  # enforcement path: a check error denies
+                    self._record(identity, context, method, message, "BLOCK", ["destination check failed"], 403, tool_name, arguments, started)
+                    return deny(200, JSONRPC_POLICY_VIOLATION, "PolicyViolation: request could not be checked.", "destination_check_error")
+                if verdict is not None and enforce and (verdict[0] or verdict[1]):
+                    offending, untracked = verdict
+                    self.metrics.record_destination("refused")
+                    if offending:
+                        reasons = [f"An address in this call is not on this agent's allowed list: {', '.join(offending)}."]
+                        text, why = "PolicyViolation: this call contains an address that is not on this agent's allowed list.", "destination_not_allowed"
+                    else:
+                        reasons = ["Part of this call was too large to check against this agent's allowed list, so it was refused."]
+                        text, why = "PolicyViolation: this call is too large to check against this agent's allowed list.", "destination_untracked"
+                    self._record_repeat_refusal(
+                        self._destination_refusal_logged, identity, context, method, message, reasons, tool_name, arguments, started,
+                    )
+                    return deny(200, JSONRPC_POLICY_VIOLATION, text, why, {"tool_name": tool_name})
 
             # 4a'. Loop detection (Phase 4 M6): the same agent, tool and arguments again and again. Only calls that would be forwarded
             # are counted, and a refused repeat is refused before it can use budget. Off for the whole gateway with the kill switch, off

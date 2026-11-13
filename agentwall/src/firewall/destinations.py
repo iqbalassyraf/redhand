@@ -27,7 +27,7 @@ MAX_SCAN_CHARS = 64 * 1024  # the same budget as the honeytoken scan (gateway/ho
 MAX_NODES = 1000
 MAX_DEPTH = 16
 MAX_DESTINATIONS = 50  # distinct destinations per call; more is "untracked"
-MAX_URL_STARTS = 200  # scheme matches examined per call, so near-matches cost a bounded amount of work
+MAX_MATCHES = 200  # URL and email matches examined per call, so near-matches and floods of addresses cost a bounded amount of work
 MAX_RUN_CHARS = 2048  # an authority is never longer than a host (253) plus user info; longer is cut
 MAX_OFFENDING = 5  # names reported for one call
 MAX_COARSE_CHARS = 64
@@ -188,30 +188,37 @@ def _text_destinations(text: str, starts_left: int) -> tuple[list[Destination], 
     """The destinations in one string, how many scheme matches are still allowed, and whether the match budget ran out."""
     found: list[Destination] = []
     out_of_budget = False
-    for match in _SCHEME.finditer(text):
-        if starts_left <= 0:
-            out_of_budget = True
-            break
-        starts_left -= 1
-        destination = _url_destination(text, match.end(), match.group(0)[-2:])
-        if destination is not None:
-            found.append(destination)
-    for email in _EMAIL.finditer(text):
-        found.append(Destination((normalize_host(email.group(1)),)))
+    # Cheap checks first: ordinary text has neither a `:/` (or `:\`) nor an `@`, and the patterns are much slower than a substring test.
+    if ":/" in text or ":\\" in text:
+        for match in _SCHEME.finditer(text):
+            if starts_left <= 0:
+                out_of_budget = True
+                break
+            starts_left -= 1
+            destination = _url_destination(text, match.end(), match.group(0)[-2:])
+            if destination is not None:
+                found.append(destination)
+    if "@" in text:
+        for email in _EMAIL.finditer(text):
+            if starts_left <= 0:
+                out_of_budget = True
+                break
+            starts_left -= 1
+            found.append(Destination((normalize_host(email.group(1)),)))
     return found, starts_left, out_of_budget
 
 
 def scan_arguments(value: Any) -> ScanResult:
     """
     Every destination written in `value` (a tool call's arguments): string values and object keys, at any depth. Bounded work: at most
-    MAX_SCAN_CHARS of text, MAX_NODES values, depth MAX_DEPTH, MAX_URL_STARTS scheme matches and MAX_DESTINATIONS distinct destinations;
+    MAX_SCAN_CHARS of text, MAX_NODES values, depth MAX_DEPTH, MAX_MATCHES URL and email matches and MAX_DESTINATIONS distinct destinations;
     whatever lies past a bound is not scanned and `untracked` is True. Never raises.
     """
     seen: dict[tuple[str | None, ...], Destination] = {}
     untracked = False
     chars_left = MAX_SCAN_CHARS
     nodes_left = MAX_NODES
-    starts_left = MAX_URL_STARTS
+    starts_left = MAX_MATCHES
     stack: list[tuple[Any, int]] = [(value, 0)]
     while stack and not (untracked and len(seen) >= MAX_DESTINATIONS):
         node, depth = stack.pop()
