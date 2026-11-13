@@ -76,6 +76,7 @@ files = [
     "services/redhand-core/src/redhand_core/radar",
     "services/redhand-core/src/redhand_core/destinations",
     "services/redhand-core/src/redhand_core/routers/radar.py",
+    "services/redhand-core/src/redhand_core/routers/destinations.py",
     "services/redhand-core/src/redhand_core/telegram",
     "services/redhand-core/src/redhand_core/services/local_store.py",
     "services/redhand-core/src/redhand_core/services/local_rpc.py",

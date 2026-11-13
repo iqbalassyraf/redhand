@@ -1060,7 +1060,9 @@ def _telegram_claim_update(store: LocalSupabaseAdapter, p: dict[str, Any]) -> bo
 # --- Prompt Injection Radar (Phase 4 M4.2): emulation of supabase/migrations/20261117000000_radar_findings.sql -------------
 
 _RULE_ID = re.compile(r"^RAD-(INJ|OUT)-[0-9]{3}$")  # scan counts and readiness only know the injection and output rules
-_FINDING_RULE = re.compile(r"^RAD-(INJ|OUT|LOOP)-[0-9]{3}$")  # every rule a finding or a suppression may name
+_FINDING_RULE = re.compile(r"^RAD-(INJ|OUT|LOOP|DST)-[0-9]{3}$")
+_DETAIL = re.compile(r"^[a-z0-9_.:-]{1,64}$")
+_HOST = re.compile(r"^[a-z0-9_.:-]{1,253}$")  # every rule a finding or a suppression may name
 _LOOP_MODES = ("off", "observe", "throttle")
 _FAMILY = re.compile(r"^[a-z][a-z-]{1,23}$")
 _LEVELS = ("low", "medium", "high")
@@ -1105,6 +1107,7 @@ def _record_security_findings(store: LocalSupabaseAdapter, p: dict[str, Any]) ->
     counts = {"new": 0, "coalesced": 0, "suppressed": 0, "capped": 0, "skipped": 0, "disabled": 0}
     rules: list[str] = []
     new_loop, loop_tool = 0, None
+    new_dst, dst_tool, dst_detail = 0, None, None
     for item in items:
         if not isinstance(item, dict):
             counts["skipped"] += 1
@@ -1112,24 +1115,29 @@ def _record_security_findings(store: LocalSupabaseAdapter, p: dict[str, Any]) ->
         rule, kind, family = item.get("rule_id"), item.get("kind"), item.get("family")
         sev, conf, place = item.get("severity"), item.get("confidence"), item.get("place")
         expected_kind = "injection" if isinstance(rule, str) and rule.startswith("RAD-INJ-") else (
-            "output" if isinstance(rule, str) and rule.startswith("RAD-OUT-") else "loop"
+            "output" if isinstance(rule, str) and rule.startswith("RAD-OUT-") else (
+                "loop" if isinstance(rule, str) and rule.startswith("RAD-LOOP-") else "destination"
+            )
         )
         if (
-            not isinstance(rule, str) or not _FINDING_RULE.match(rule) or kind not in ("injection", "output", "loop")
+            not isinstance(rule, str) or not _FINDING_RULE.match(rule) or kind not in ("injection", "output", "loop", "destination")
             or kind != expected_kind or not isinstance(family, str) or not _FAMILY.match(family)
-            or sev not in _LEVELS or conf not in _LEVELS or place not in _PLACES or (kind == "loop") != (place == "call")
+            or sev not in _LEVELS or conf not in _LEVELS or place not in _PLACES or (kind in ("loop", "destination")) != (place == "call")
         ):
             counts["skipped"] += 1
             continue
         tool, server = str(item.get("tool_name") or "")[:128], str(item.get("server") or "")[:63]
         would = item.get("would_block") is True
         occurrences = _clamped_occurrences(item.get("occurrences", ""))
+        raw_detail = item.get("detail")
+        detail = raw_detail if kind == "destination" and isinstance(raw_detail, str) and _DETAIL.match(raw_detail) else None
         raw_evasion = item.get("evasion")
         evasion = sorted({e for e in (raw_evasion if isinstance(raw_evasion, list) else []) if e in _EVASION})
         if (
             (kind == "injection" and org_row.get("radar_mode", "observe") == "off")
             or (kind == "output" and org_row.get("output_check_mode", "observe") == "off")
             or (kind == "loop" and org_row.get("loop_mode", "observe") == "off")
+            or (kind == "destination" and agent.get("destination_mode", "off") == "off")
         ):
             counts["disabled"] += 1
             continue
@@ -1151,18 +1159,23 @@ def _record_security_findings(store: LocalSupabaseAdapter, p: dict[str, Any]) ->
             rows.append({
                 "id": str(uuid4()), "organization_id": org, "agent_id": agent_id, "rule_id": rule, "family": family, "kind": kind,
                 "severity": sev, "confidence": conf, "place": place, "evasion": evasion, "tool_name": tool, "server_slug": server,
-                "would_block": would, "occurrences": occurrences, "window_start": window, "first_seen_at": now.isoformat(),
+                "would_block": would, "occurrences": occurrences, "window_start": window, "detail": detail, "first_seen_at": now.isoformat(),
                 "last_seen_at": now.isoformat(), "review_status": "open", "reviewed_by": None, "reviewed_at": None, "review_note": None,
             })
             counts["new"] += 1
             if kind == "loop":
                 new_loop += 1
                 loop_tool = loop_tool if loop_tool is not None else tool
+            elif kind == "destination":
+                new_dst += 1
+                dst_tool = dst_tool if dst_tool is not None else tool
+                dst_detail = dst_detail if dst_detail is not None else detail
             elif len(rules) < 5 and rule not in rules:
                 rules.append(rule)
         else:
             existing["occurrences"] = min(existing["occurrences"] + occurrences, 1_000_000)
             existing["last_seen_at"] = now.isoformat()
+            existing["detail"] = existing.get("detail") if existing.get("detail") is not None else detail
             existing["would_block"] = existing["would_block"] or would
             if _LEVELS.index(sev) > _LEVELS.index(existing["severity"]):
                 existing["severity"] = sev
@@ -1170,19 +1183,113 @@ def _record_security_findings(store: LocalSupabaseAdapter, p: dict[str, Any]) ->
                 existing["confidence"] = conf
             counts["coalesced"] += 1
     # Each kind has its own 10-minute alert cooldown, so a loop alert cannot hide an injection alert (or the other way round).
-    alert = loop_alert = False
+    alert = loop_alert = dst_alert = False
     last = agent.get("radar_last_alert_at")
-    if counts["new"] - new_loop > 0 and (last is None or now - _parse_ts(last) > timedelta(minutes=10)):
+    if counts["new"] - new_loop - new_dst > 0 and (last is None or now - _parse_ts(last) > timedelta(minutes=10)):
         agent["radar_last_alert_at"] = now.isoformat()
         alert = True
     last_loop = agent.get("loop_last_alert_at")
     if new_loop > 0 and (last_loop is None or now - _parse_ts(last_loop) > timedelta(minutes=10)):
         agent["loop_last_alert_at"] = now.isoformat()
         loop_alert = True
+    last_dst = agent.get("destination_last_alert_at")
+    if new_dst > 0 and (last_dst is None or now - _parse_ts(last_dst) > timedelta(minutes=10)):
+        agent["destination_last_alert_at"] = now.isoformat()
+        dst_alert = True
     return {
         **counts, "alert": alert, "agent": agent.get("name"), "rules": rules,
         "loop_new": new_loop, "loop_alert": loop_alert, "loop_tool": loop_tool,
+        "destination_new": new_dst, "destination_alert": dst_alert, "destination_tool": dst_tool,
+        "destination_detail": dst_detail, "destination_mode": agent.get("destination_mode", "off"),
     }
+
+
+def _destination_settings(store: LocalSupabaseAdapter, p: dict[str, Any]) -> dict[str, Any]:
+    org, agent_id = str(p["p_org"]), str(p["p_agent"])
+    agent = _agent_of(store, org, agent_id)
+    if agent is None:
+        raise _error("P0002", "agent not found")
+    entries = sorted(
+        (e for e in store.tables.get("agent_destinations", []) if str(e["organization_id"]) == org and str(e["agent_id"]) == agent_id),
+        key=lambda e: e["host"],
+    )
+    since = datetime.now(timezone.utc) - timedelta(days=7)
+    mine = [
+        f for f in store.tables.get("security_findings", [])
+        if str(f["organization_id"]) == org and str(f["agent_id"]) == agent_id and f["kind"] == "destination"
+        and _parse_ts(f["last_seen_at"]) > since
+    ]
+    return {
+        "destination_mode": agent.get("destination_mode", "off"), "destination_mode_changed_at": agent.get("destination_mode_changed_at"),
+        "entries": [{"id": e["id"], "host": e["host"], "created_at": e["created_at"]} for e in entries],
+        "last_7_days": {"findings": len(mine), "occurrences": sum(f["occurrences"] for f in mine),
+                        "open": sum(1 for f in mine if f["review_status"] == "open")},
+    }
+
+
+def _control_destination_add(store: LocalSupabaseAdapter, p: dict[str, Any]) -> dict[str, Any]:
+    org, actor, agent_id, host, reason = str(p["p_org"]), str(p["p_actor"]), str(p["p_agent"]), p["p_host"], p.get("p_reason")
+    if not isinstance(host, str) or not _HOST.match(host) or (reason is not None and len(reason) > 300):
+        raise _error("22023", "a normalized host of 1 to 253 characters is required")
+    if _agent_of(store, org, agent_id) is None:
+        raise _error("P0002", "agent not found")
+    rows = store.tables.setdefault("agent_destinations", [])
+    mine = [e for e in rows if str(e["agent_id"]) == agent_id]
+    existing = next((e for e in mine if e["host"] == host), None)
+    if existing is not None:
+        return {"added": False, "id": existing["id"]}
+    if len(mine) >= 100:
+        return {"added": False, "limit": True}
+    entry_id = str(uuid4())
+    rows.append({"id": entry_id, "organization_id": org, "agent_id": agent_id, "host": host, "created_by": actor, "created_at": _now()})
+    _append_audit(
+        store, org=org, actor=actor, action="passport.destination_added", target_type="agent", target_id=agent_id, reason=reason,
+        details={"host": host, "entry": entry_id},
+    )
+    return {"added": True, "id": entry_id}
+
+
+def _control_destination_remove(store: LocalSupabaseAdapter, p: dict[str, Any]) -> dict[str, Any]:
+    org, actor, agent_id, entry_id, reason = str(p["p_org"]), str(p["p_actor"]), str(p["p_agent"]), str(p["p_entry"]), p.get("p_reason")
+    if reason is not None and len(reason) > 300:
+        raise _error("22023", "the reason is at most 300 characters")
+    agent = _agent_of(store, org, agent_id)
+    if agent is None:
+        raise _error("P0002", "agent not found")
+    rows = store.tables.setdefault("agent_destinations", [])
+    entry = next((e for e in rows if str(e["id"]) == entry_id and str(e["agent_id"]) == agent_id and str(e["organization_id"]) == org), None)
+    if entry is None:
+        raise _error("P0002", "entry not found")
+    if agent.get("destination_mode", "off") == "enforce" and sum(1 for e in rows if str(e["agent_id"]) == agent_id) <= 1:
+        return {"removed": False, "last_entry_in_enforce": True}
+    rows.remove(entry)
+    _append_audit(
+        store, org=org, actor=actor, action="passport.destination_removed", target_type="agent", target_id=agent_id, reason=reason,
+        details={"host": entry["host"], "entry": entry_id},
+    )
+    return {"removed": True}
+
+
+def _control_destination_mode(store: LocalSupabaseAdapter, p: dict[str, Any]) -> dict[str, Any]:
+    org, actor, agent_id, mode, reason = str(p["p_org"]), str(p["p_actor"]), str(p["p_agent"]), p["p_mode"], p.get("p_reason")
+    if mode not in ("off", "observe", "enforce") or (reason is not None and len(reason) > 300):
+        raise _error("22023", "mode must be off, observe or enforce")
+    agent = _agent_of(store, org, agent_id)
+    if agent is None:
+        raise _error("P0002", "agent not found")
+    current = agent.get("destination_mode", "off")
+    if current != p.get("p_expected_mode"):
+        return {"conflict": True, "destination_mode": current}
+    if current == mode:
+        return {"conflict": False, "changed": False, "destination_mode": mode}
+    if mode == "enforce" and not any(str(e["agent_id"]) == agent_id for e in store.tables.get("agent_destinations", [])):
+        return {"conflict": False, "changed": False, "empty_list": True, "destination_mode": current}
+    agent["destination_mode"], agent["destination_mode_changed_at"] = mode, _now()
+    _append_audit(
+        store, org=org, actor=actor, action="passport.destination_mode_changed", target_type="agent", target_id=agent_id, reason=reason,
+        details={"old_mode": current, "new_mode": mode},
+    )
+    return {"conflict": False, "changed": True, "destination_mode": mode}
 
 
 def _control_loop_settings(store: LocalSupabaseAdapter, p: dict[str, Any]) -> dict[str, Any]:
@@ -1515,6 +1622,10 @@ HANDLERS: dict[str, RpcHandler] = {
     "control_radar_suppression_revoke": _control_radar_suppression_revoke,
     "radar_summary": _radar_summary,
     "control_loop_settings": _control_loop_settings,
+    "destination_settings": _destination_settings,
+    "control_destination_add": _control_destination_add,
+    "control_destination_remove": _control_destination_remove,
+    "control_destination_mode": _control_destination_mode,
     "loop_settings": _loop_settings,
     "record_radar_scan_counts": _record_radar_scan_counts,
     "radar_readiness_inputs": _radar_readiness_inputs,
