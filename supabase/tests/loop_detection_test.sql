@@ -3,6 +3,10 @@
 \set ON_ERROR_STOP on
 \set QUIET on
 
+-- The SQL tests share one database, and older tests count audit rows and findings globally. This file writes both, so it runs inside a
+-- transaction that is rolled back at the end and leaves nothing behind for them to count.
+BEGIN;
+
 CREATE FUNCTION pg_temp.check(p_ok boolean, p_msg text) RETURNS void LANGUAGE plpgsql AS $$
 BEGIN
     IF p_ok IS DISTINCT FROM TRUE THEN RAISE EXCEPTION 'CHECK FAILED: %', p_msg; END IF;
@@ -177,3 +181,5 @@ SELECT pg_temp.check(NOT has_function_privilege('authenticated', 'public.record_
     AND NOT has_function_privilege('authenticated', 'public.radar_summary(uuid)', 'EXECUTE'), 'the replaced functions are still service_role only');
 
 \echo ALL SQL TESTS PASSED
+
+ROLLBACK;
