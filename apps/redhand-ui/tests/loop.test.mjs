@@ -1,4 +1,4 @@
-// Run with: node --test tests/   (Node 22.18+ runs the TypeScript helpers directly)
+// Run with: node --test tests/*.test.mjs   (or: npm test once PR 61 is merged; Node 22.18+ runs the TypeScript helpers directly)
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
