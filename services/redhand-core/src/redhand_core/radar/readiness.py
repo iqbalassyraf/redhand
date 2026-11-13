@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import math
 
-from redhand_core.radar.models import FindingKind, KindInputs, ReadinessCheck, ReadinessCondition, ReadinessInputs, ReadinessResponse
+from redhand_core.radar.models import KindInputs, RadarKind, ReadinessCheck, ReadinessCondition, ReadinessInputs, ReadinessResponse
 
 WINDOW_DAYS = 7
 MIN_SCANNED = 200
@@ -87,7 +87,7 @@ def _counts_complete(inputs: KindInputs) -> tuple[bool, str]:
     return True, "Almost every result was scanned and the counts agree with the stored findings."
 
 
-def judge_kind(kind: FindingKind, inputs: KindInputs, mode_unchanged_in_window: bool) -> ReadinessCheck:
+def judge_kind(kind: RadarKind, inputs: KindInputs, mode_unchanged_in_window: bool) -> ReadinessCheck:
     fa = false_alarms_worst_case(inputs)
     upper = wilson_upper(fa, inputs.scanned) if inputs.scanned else None
     fingerprints = inputs.fingerprints
@@ -135,7 +135,7 @@ def judge_kind(kind: FindingKind, inputs: KindInputs, mode_unchanged_in_window: 
     )
 
 
-KINDS: tuple[FindingKind, ...] = ("injection", "output")
+KINDS: tuple[RadarKind, ...] = ("injection", "output")
 
 
 def judge(inputs: ReadinessInputs) -> ReadinessResponse:
