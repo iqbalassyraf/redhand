@@ -44,7 +44,7 @@ from redhand_core.radar.models import (
     SuppressionView,
 )
 from redhand_core.services.metrics import get_metrics
-from redhand_core.telegram.bot import notify_organization
+from redhand_core.telegram.bot import AlertBatch, send_alert
 from redhand_core.telegram.client import TelegramClient
 
 logger = logging.getLogger("redhand.core.radar")
@@ -231,7 +231,9 @@ async def revoke_suppression(
     return SuppressionRevokeResponse(revoked=bool(data["revoked"]))
 
 
-async def record_findings(supabase: Any, telegram: TelegramClient | None, report: FindingReport) -> FindingReportResponse:
+async def record_findings(
+    supabase: Any, telegram: TelegramClient | None, report: FindingReport, alerts: AlertBatch | None = None
+) -> FindingReportResponse:
     """Stores the gateway's findings (coalesced) and alerts the organization, at most once per agent per ten minutes, with rule ids
     and counts only. The organization claimed is checked against the agent's real owner in SQL."""
     items = [i.model_dump(mode="json") for i in report.items]
@@ -257,16 +259,16 @@ async def record_findings(supabase: Any, telegram: TelegramClient | None, report
             metrics.increment_counter("redhand_radar_findings_not_stored_total", float(data[key]), labels={"reason": key})
     if data.get("alert"):
         rules = ", ".join(str(r) for r in data.get("rules") or [])
-        await notify_organization(
-            supabase, telegram, report.organization_id,
+        await send_alert(
+            alerts, supabase, telegram, report.organization_id, agent_id=report.agent_id, text=
             f"Radar: agent '{data.get('agent')}' has {int(data['new'])} new finding(s) in tool results ({rules}). "
             "Open the dashboard, MCP Scanner, Runtime findings. These are known-pattern checks: a clean result is not a guarantee.",
         )
     if data.get("loop_alert"):
         # The tool name came from the agent's own call: keep only plain characters and a short length before it reaches a chat.
         tool = _SAFE_TOOL_NAME.sub("", str(data.get("loop_tool") or ""))[:64] or "a tool"
-        await notify_organization(
-            supabase, telegram, report.organization_id,
+        await send_alert(
+            alerts, supabase, telegram, report.organization_id, agent_id=report.agent_id, text=
             f"Loop: agent '{data.get('agent')}' sent the same call to {tool} more often than the loop limit allows. "
             "Open the dashboard, Radar, Repeated calls. If throttling is on, the extra repeats were refused. Counts only: no call details are sent.",
         )
@@ -274,8 +276,8 @@ async def record_findings(supabase: Any, telegram: TelegramClient | None, report
         tool = _SAFE_TOOL_NAME.sub("", str(data.get("destination_tool") or ""))[:64] or "a tool"
         host = _SAFE_HOST.sub("", str(data.get("destination_detail") or ""))[:64] or "an address"
         outcome = "The call was refused." if data.get("destination_mode") == "enforce" else "Recorded only: nothing was refused."
-        await notify_organization(
-            supabase, telegram, report.organization_id,
+        await send_alert(
+            alerts, supabase, telegram, report.organization_id, agent_id=report.agent_id, text=
             f"Destination: agent '{data.get('agent')}' put an address outside its allowed list ({host}) in a call to {tool}. {outcome} "
             "Open the dashboard, Passports, Allowed destinations. Only the last two parts of the address are shown: no call details are sent.",
         )

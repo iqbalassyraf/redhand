@@ -35,7 +35,7 @@ from redhand_core.routers.telegram import OptionalClientDep
 from redhand_core.routers.telemetry import get_supabase_service_client
 from redhand_core.risk import service as risk_service
 from redhand_core.services.metrics import get_metrics
-from redhand_core.telegram.bot import notify_organization
+from redhand_core.telegram.bot import AlertBatch, send_alert
 from redhand_core.telegram.client import TelegramClient
 
 logger = logging.getLogger("redhand.core.usage")
@@ -102,7 +102,7 @@ def _event_text(event: dict[str, Any]) -> str:
     return text
 
 
-async def _handle_event(supabase: Any, telegram: TelegramClient | None, event: dict[str, Any]) -> None:
+async def _handle_event(supabase: Any, telegram: TelegramClient | None, event: dict[str, Any], alerts: AlertBatch | None = None) -> None:
     """Alerts the organization once and carries out the optional auto-freeze. Never raises."""
     try:
         org_id = UUID(str(event["organization_id"]))
@@ -121,7 +121,7 @@ async def _handle_event(supabase: Any, telegram: TelegramClient | None, event: d
         get_metrics().increment_counter(
             "redhand_budget_events_total", labels={"kind": str(event["kind"]), "frozen": str(frozen).lower()}
         )
-        await notify_organization(supabase, telegram, org_id, _event_text(event))
+        await send_alert(alerts, supabase, telegram, org_id, _event_text(event), agent_id)
     except Exception as exc:  # noqa: BLE001  one bad event must not lose the others or fail the report
         logger.error("Budget event handling failed: %s", type(exc).__name__)
 
@@ -141,12 +141,13 @@ async def report_usage(report: UsageReport, supabase: SupabaseDep, telegram: Opt
         raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "Usage could not be recorded.") from None
     data = response.data
     events = list(data.get("events") or [])
+    alerts = AlertBatch()  # one Telegram message per organization for this report
     if events:
         # Concurrently and bounded: one slow Telegram call must not hold the whole report (and the
         # gateway waiting on it) for minutes. _handle_event never raises.
         try:
             await asyncio.wait_for(
-                asyncio.gather(*(_handle_event(supabase, telegram, e) for e in events)), EVENTS_TIMEOUT_SECONDS
+                asyncio.gather(*(_handle_event(supabase, telegram, e, alerts) for e in events)), EVENTS_TIMEOUT_SECONDS
             )
         except asyncio.TimeoutError:
             logger.warning("Budget event handling timed out for %d events", len(events))
@@ -156,7 +157,8 @@ async def report_usage(report: UsageReport, supabase: SupabaseDep, telegram: Opt
             if event.get("kind") == "limit":
                 limits.setdefault(UUID(str(event["organization_id"])), []).append(UUID(str(event["agent_id"])))
         for org_id, agent_ids in limits.items():
-            await risk_service.evaluate_agents(supabase, telegram, org_id, agent_ids, utcnow())
+            await risk_service.evaluate_agents(supabase, telegram, org_id, agent_ids, utcnow(), alerts)
+        await alerts.flush(supabase, telegram)
     return UsageReportResponse(accepted=int(data["accepted"]), rejected=int(data["rejected"]))
 
 

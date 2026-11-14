@@ -82,8 +82,12 @@ class Env(TelegramEnv):
     def agent_row(self) -> dict[str, Any]:
         return next(a for a in self.store.tables["agents"] if str(a["id"]) == self.agent)
 
+    def messages(self) -> list[str]:
+        return [t for t in self.fake.to(OWNER_CHAT) if not t.startswith("Linked.")]
+
     def risk_alerts(self) -> list[str]:
-        return [t for t in self.fake.to(OWNER_CHAT) if t.startswith("Risk:")]
+        """The Risk Engine's paragraphs. A report's own alert and the engine's leave as ONE message (paragraphs), so look inside."""
+        return [p for t in self.messages() for p in t.split("\n\n") if p.startswith("Risk:")]
 
     def audit(self, action: str) -> list[dict[str, Any]]:
         return [r for r in self.store.tables.get("control_audit_log", []) if r["action"] == action]
@@ -272,6 +276,10 @@ def test_opted_in_freeze_freezes_through_the_audited_path_with_the_reason(env: E
     assert len(frozen) == 1 and frozen[0]["actor_user_id"] == str(SYSTEM_ACTOR_ID)
     assert frozen[0]["reason"].startswith("Risk Engine: score 100 (critical): ")
     assert any("frozen it" in a for a in env.risk_alerts())
+    # The gateway reads the status per call: the next call is refused within the revocation SLO.
+    context = env.client.get("/internal/v1/gateway-context", params={"agent_id": env.agent, "organization_id": DEFAULT_ORG_ID, "server": "xero"},
+                             headers=GATEWAY)
+    assert context.status_code == 200 and context.json()["agent"]["status"] == "frozen"
     assert counter("risk_actions_total", action="freeze") >= 1
 
 
@@ -314,8 +322,9 @@ def test_the_engine_never_touches_a_frozen_or_revoked_agent(env: Env) -> None:
 def test_the_ladder_shows_how_many_agents_reach_each_rung(env: Env) -> None:
     env.trip(env.honeytoken())
     env.trip(env.honeytoken())
-    reaching = env.client.get("/v1/risk/ladder", headers=env.h("operator")).json()["reaching"]
-    assert reaching == {"alert": 1, "safe_mode": 0, "freeze": 0}
+    ladder = env.client.get("/v1/risk/ladder", headers=env.h("operator")).json()
+    assert ladder["reaching"] == {"alert": 1, "safe_mode": 0, "freeze": 0}
+    assert ladder["reaching_agents"] == {"alert": ["Risky bot"], "safe_mode": [], "freeze": []}  # names, so an admin sees who
 
 
 # --- failure modes --------------------------------------------------------------------------------------------------------------
@@ -413,3 +422,34 @@ def test_when_both_rungs_are_reached_the_stronger_one_acts(env: Env) -> None:
     env.trip(env.honeytoken())
     row = env.agent_row()
     assert row["status"] == "frozen" and not row.get("safe_mode")
+
+
+
+def test_a_trip_and_the_risk_it_raises_reach_the_phone_as_one_message(env: Env) -> None:
+    env.trip(env.honeytoken())
+    before = len(env.messages())
+    env.trip(env.honeytoken())  # this trip alerts AND crosses the alert rung: still one notification
+    new = env.messages()[before:]
+    assert len(new) == 1
+    paragraphs = new[0].split("\n\n")
+    assert paragraphs[0].startswith("Honeytoken used") and paragraphs[1].startswith("Risk:")
+
+
+def test_the_preview_names_at_most_ten_agents_per_rung_highest_first(env: Env) -> None:
+    now = datetime.now(timezone.utc).isoformat()
+    for i in range(12):
+        agent = env.register(f"Bot {i:02d}")["id"]
+        for _ in range(i % 3 + 1):  # 1 to 3 recent refusals: 2 to 6 points
+            env.store.tables["agent_events"].append({"organization_id": DEFAULT_ORG_ID, "agent_id": agent, "seq": 7000 + len(env.store.tables["agent_events"]),
+                                                     "occurred_at": now, "decision": "BLOCK",
+                                                     "reasons": ["Tool 'x' on server 's' is not in this agent's passport scopes."]})
+    env.ladder_put(alert_at=2)
+    ladder = env.client.get("/v1/risk/ladder", headers=env.h("operator")).json()
+    assert ladder["reaching"]["alert"] == 12 and len(ladder["reaching_agents"]["alert"]) == 10
+    assert ladder["reaching_agents"]["alert"][:4] == ["Bot 02", "Bot 05", "Bot 08", "Bot 11"]  # 6 points each, then by name
+
+
+def test_each_evaluation_counts_the_level_it_found(env: Env) -> None:
+    before = counter("risk_evaluations_by_level_total", level="elevated")
+    env.trip(env.honeytoken())
+    assert counter("risk_evaluations_by_level_total", level="elevated") == before + 1

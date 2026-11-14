@@ -47,7 +47,7 @@ from redhand_core.risk.scoring import (
     assess,
 )
 from redhand_core.services.metrics import get_metrics
-from redhand_core.telegram.bot import notify_organization
+from redhand_core.telegram.bot import AlertBatch, send_alert
 from redhand_core.telegram.client import TelegramClient
 
 logger = logging.getLogger("redhand.core.risk")
@@ -57,6 +57,7 @@ EVALUATION_TIMEOUT_SECONDS = 5.0
 ACTIVE = "active"
 SIGNAL_BY_KEY = {s.value: s for s in Signal}
 AGENT_COLUMNS = "id,name,status,safe_mode,risk_released_at"
+PREVIEW_NAMES = 10
 
 
 # --- reading ----------------------------------------------------------------------------------------------------------------------
@@ -125,14 +126,18 @@ def _summary(row: dict[str, Any], shown: Assessment, action: Assessment) -> Agen
     )
 
 
-def _ladder_view(ladder: Ladder, action_scores: list[int], operator: OperatorContext) -> LadderView:
+def _ladder_view(ladder: Ladder, action_scores: list[tuple[str, int]], operator: OperatorContext) -> LadderView:
+    """Who the ladder would act on right now, so an admin sees the names before turning a rung on."""
     reaching = {"alert": 0, "safe_mode": 0, "freeze": 0}
-    for score in action_scores:
+    names: dict[str, list[str]] = {"alert": [], "safe_mode": [], "freeze": []}
+    for name, score in sorted(action_scores, key=lambda item: (-item[1], item[0])):
         for action in actions_for(score, ladder):
             reaching[action.value] += 1
+            if len(names[action.value]) < PREVIEW_NAMES:
+                names[action.value].append(name)
     return LadderView(
         alert_at=ladder.alert_at, safe_mode_at=ladder.safe_mode_at, freeze_at=ladder.freeze_at, reaching=reaching,
-        capabilities=LadderCapabilities(can_change=operator.role >= Role.ADMIN),
+        reaching_agents=names, capabilities=LadderCapabilities(can_change=operator.role >= Role.ADMIN),
     )
 
 
@@ -140,13 +145,13 @@ async def list_agent_risk(supabase: Any, operator: OperatorContext, now: datetim
     rows = await _agents(supabase, operator.organization_id)
     counts = await load_counts(supabase, operator.organization_id, None, now)
     summaries: list[AgentRiskSummary] = []
-    action_scores: list[int] = []
+    action_scores: list[tuple[str, int]] = []
     for row in rows:
         shown_counts, action_counts = counts.get(str(row["id"]), ({}, {}))
         shown, action = assess(shown_counts), assess(action_counts)
         summaries.append(_summary(row, shown, action))
         if row.get("status") == ACTIVE:
-            action_scores.append(action.score)
+            action_scores.append((str(row.get("name") or ""), action.score))
     summaries.sort(key=lambda s: (-s.score, s.name))
     ladder = await load_ladder(supabase, operator.organization_id)
     return RiskListResponse(model=RISK_MODEL, agents=summaries, ladder=_ladder_view(ladder, action_scores, operator))
@@ -207,8 +212,9 @@ def _alert_text(name: str, shown: Assessment, action: Assessment, done: str | No
 
 
 async def _act_on(supabase: Any, telegram: TelegramClient | None, org: UUID, row: dict[str, Any], counts: tuple[
-        dict[Signal, Counts], dict[Signal, Counts]], ladder: Ladder, now: datetime) -> None:
+        dict[Signal, Counts], dict[Signal, Counts]], ladder: Ladder, now: datetime, alerts: AlertBatch | None) -> None:
     shown, action = assess(counts[0]), assess(counts[1])
+    get_metrics().increment_counter("risk_evaluations_by_level_total", labels={"level": action.level.value})
     reached = actions_for(action.score, ladder)
     if not reached or row.get("status") != ACTIVE:
         return  # nothing to do, or a frozen, revoked or expired agent: the engine never changes those
@@ -236,11 +242,13 @@ async def _act_on(supabase: Any, telegram: TelegramClient | None, org: UUID, row
             "risk_mark_alerted", {"p_org": str(org), "p_agent": str(agent_id), "p_cooldown_seconds": ALERT_COOLDOWN_SECONDS}
         ).execute()
         if done or marked.data is True:
-            await notify_organization(supabase, telegram, org, _alert_text(str(row.get("name") or "an agent"), shown, action, done))
+            await send_alert(alerts, supabase, telegram, org, agent_id=agent_id, text=_alert_text(str(row.get("name") or "an agent"), shown, action, done))
             metrics.increment_counter("risk_actions_total", labels={"action": "alert"})
 
 
-async def _evaluate(supabase: Any, telegram: TelegramClient | None, org: UUID, agent_ids: list[UUID], now: datetime) -> None:
+async def _evaluate(
+    supabase: Any, telegram: TelegramClient | None, org: UUID, agent_ids: list[UUID], now: datetime, alerts: AlertBatch | None
+) -> None:
     rows = await _agents(supabase, org, agent_ids)  # an agent of another organization is simply not found
     if not rows:
         return
@@ -249,18 +257,21 @@ async def _evaluate(supabase: Any, telegram: TelegramClient | None, org: UUID, a
         return
     for row in rows:
         counts = await load_counts(supabase, org, UUID(str(row["id"])), now)
-        await _act_on(supabase, telegram, org, row, counts.get(str(row["id"]), ({}, {})), ladder, now)
+        await _act_on(supabase, telegram, org, row, counts.get(str(row["id"]), ({}, {})), ladder, now, alerts)
 
 
-async def evaluate_agents(supabase: Any, telegram: TelegramClient | None, org: UUID, agent_ids: list[UUID], now: datetime) -> None:
+async def evaluate_agents(
+    supabase: Any, telegram: TelegramClient | None, org: UUID, agent_ids: list[UUID], now: datetime, alerts: AlertBatch | None = None
+) -> None:
     """Re-scores these agents and applies the ladder. Never raises and is bounded in time: the report that triggered it is already
-    recorded, and a failure here must cost only this evaluation (the next report evaluates again)."""
+    recorded, and a failure here must cost only this evaluation (the next report evaluates again). With `alerts`, the engine's message
+    joins the report's own alert in one Telegram message instead of a second one."""
     unique = list(dict.fromkeys(agent_ids))
     if not unique:
         return
     metrics = get_metrics()
     try:
-        await asyncio.wait_for(_evaluate(supabase, telegram, org, unique, now), EVALUATION_TIMEOUT_SECONDS)
+        await asyncio.wait_for(_evaluate(supabase, telegram, org, unique, now, alerts), EVALUATION_TIMEOUT_SECONDS)
         metrics.increment_counter("risk_evaluations_total", labels={"outcome": "ok"})
     except asyncio.TimeoutError:
         logger.error("Risk Engine evaluation timed out for %d agent(s)", len(unique))

@@ -40,6 +40,7 @@ def test_no_signals_is_a_zero_score_with_no_reasons() -> None:
         ({Signal.CONFIRMED_FINDING: Counts(recent=2)}, 50, Level.HIGH),
         ({Signal.RADAR_OPEN: Counts(recent=10)}, 16, Level.LOW),  # open Radar findings alone never reach "elevated"
         ({Signal.LOOP_OPEN: Counts(older=1)}, 2, Level.LOW),  # 1.5 rounds half up to 2, not to even
+        ({Signal.LOOP_OPEN: Counts(older=3)}, 5, Level.LOW),  # 4.5 rounds half up to 5 (round-half-even would give 4)
         ({Signal.REFUSAL: Counts(recent=3, older=4)}, 10, Level.LOW),
         ({Signal.BUDGET_LIMIT: Counts(recent=1)}, 10, Level.LOW),
         ({Signal.TRIP: Counts(recent=2), Signal.CONFIRMED_FINDING: Counts(recent=2)}, 100, Level.CRITICAL),  # total capped at 100
@@ -128,3 +129,9 @@ def test_a_ladder_out_of_range_or_out_of_order_is_refused(values: tuple[int | No
 
 def test_equal_thresholds_are_allowed() -> None:
     assert actions_for(80, Ladder(alert_at=80, safe_mode_at=80, freeze_at=80)) == (Action.ALERT, Action.SAFE_MODE, Action.FREEZE)
+
+
+def test_contributions_are_ordered_by_points_not_by_the_table() -> None:
+    # In the weights table "Radar finding" comes before "call refused"; here the refusals add more points, so they come first.
+    result = assess({Signal.RADAR_OPEN: Counts(recent=1), Signal.REFUSAL: Counts(recent=5)})
+    assert [c.signal for c in result.contributions] == [Signal.REFUSAL, Signal.RADAR_OPEN]

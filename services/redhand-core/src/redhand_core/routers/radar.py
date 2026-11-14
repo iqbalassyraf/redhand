@@ -59,6 +59,7 @@ from redhand_core.routers.telegram import OptionalClientDep
 from redhand_core.routers.telemetry import get_supabase_service_client
 from redhand_core.passports.models import utcnow
 from redhand_core.risk import service as risk_service
+from redhand_core.telegram.bot import AlertBatch
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["Prompt Injection Radar"])
@@ -222,8 +223,10 @@ async def delete_suppression(
     include_in_schema=False,
 )
 async def report_findings(report: FindingReport, supabase: SupabaseDep, telegram: OptionalClientDep) -> FindingReportResponse:
-    result = await service.record_findings(supabase, telegram, report)
-    await risk_service.evaluate_agents(supabase, telegram, report.organization_id, [report.agent_id], utcnow())  # never raises
+    alerts = AlertBatch()  # the findings alert and any risk alert leave as one Telegram message
+    result = await service.record_findings(supabase, telegram, report, alerts)
+    await risk_service.evaluate_agents(supabase, telegram, report.organization_id, [report.agent_id], utcnow(), alerts)  # never raises
+    await alerts.flush(supabase, telegram)
     return result
 
 

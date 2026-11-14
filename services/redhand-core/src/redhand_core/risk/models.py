@@ -62,6 +62,7 @@ class LadderView(BaseModel):
     safe_mode_at: Threshold
     freeze_at: Threshold
     reaching: dict[str, int]  # how many agents' action score reaches each rung right now (shown before an admin turns a rung on)
+    reaching_agents: dict[str, list[str]]  # their names, highest score first, at most PREVIEW_NAMES per rung
     capabilities: LadderCapabilities
 
 

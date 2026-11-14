@@ -267,8 +267,9 @@ def test_repeated_trips_within_five_minutes_are_recorded_but_alert_once(env: Env
     token = env.create_ok(action_on_use="alert")
     for _ in range(3):
         env.trip(agent, token["id"])
-    # Counts the honeytoken's own alerts. Since the Risk Engine (Phase 4.5 B1) the same trips can also raise one separate "Risk:" alert
-    # (three trips cross the default alert rung of 50); that one is the engine's, rate-limited per agent, and tested in test_risk_engine.py.
+    # Counts the honeytoken's own alerts. Since the Risk Engine (Phase 4.5 B1) the repeated trips also raise the agent's risk score past the
+    # default alert rung (50); the trip alert is rate-limited by then, so the engine's "Risk:" alert is its own message. It is tested in
+    # test_risk_engine.py; here only the honeytoken's once-per-five-minutes rule is checked, as before.
     honeytoken_alerts = [a for a in env.alerts() if not a.startswith("Risk:")]
     assert len(honeytoken_alerts) == 1 and env.store.tables["honeytokens"][0]["trip_count"] == 3
 

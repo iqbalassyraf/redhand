@@ -2419,6 +2419,16 @@
             "title": "Reaching",
             "type": "object"
           },
+          "reaching_agents": {
+            "additionalProperties": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "title": "Reaching Agents",
+            "type": "object"
+          },
           "safe_mode_at": {
             "anyOf": [
               {
@@ -2436,6 +2446,7 @@
           "safe_mode_at",
           "freeze_at",
           "reaching",
+          "reaching_agents",
           "capabilities"
         ],
         "title": "LadderView",
