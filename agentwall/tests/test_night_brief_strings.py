@@ -53,6 +53,8 @@ PROMISES = [
     # body limits (Part K)
     ("Request body too large.", "services/redhand-core/src/redhand_core/middleware/body_limit.py"),
     ("Request body too large.", "agentwall/src/main.py"),
+    # token exchange limit (Part L)
+    ("Too many token requests from this address.", "services/redhand-core/src/redhand_core/routers/agent_auth.py"),
     # loop card
     ("Repeated-call settings saved. They reach the gateway within a few seconds.", RADAR_PAGE),
     ("Tick the box to confirm this change.", RADAR_PAGE),

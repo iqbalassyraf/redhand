@@ -51,6 +51,40 @@ and why, so a reviewer can follow the intent across the four PRs.
 - **Kept in step.** Core and the gateway have separate copies of the URL rules (separate processes, no shared package); one vector file
   (`agentwall/tests/data/outbound_url_vectors.json`, 31 static and 9 resolved cases) is run through both.
 
+## H3: browser headers, rate limits that match the deployment, supply chain
+- **Dashboard policy.** Every page response carries a nonce-based Content-Security-Policy set by middleware (`src/middleware.ts`, builder in
+  `src/lib/csp.ts`): scripts only with the per-response nonce plus `'strict-dynamic'` (no `'unsafe-inline'`, no eval in production), no framing,
+  `connect-src` limited to this site, core, the gateway and Supabase, styles keep `'unsafe-inline'` (React inline styles and the flow-diagram
+  library need it; a style cannot run code). Pages are rendered per request so Next.js can stamp the nonce. Plus `nosniff`, referrer policy,
+  HSTS, permissions policy and `X-Frame-Options` (`security-headers.mjs`, plain JavaScript because `next.config.mjs` loads before TypeScript).
+  Proven in a real browser over every page, three roles and two widths (172 checks, 0 failures), including that an injected inline handler and a
+  request to a foreign origin are blocked; removing the per-request rendering makes it fail.
+- **API answer headers.** Core and the gateway add `nosniff`, HSTS and `Cache-Control: no-store` (unless the route chose its own) from a pure ASGI
+  middleware outside the body limit, so a 413 carries them too.
+- **Bounded limiter.** The two limiters grew a dict entry per distinct key and never shrank, so a caller sending a new well-formed agent key each
+  time grew core's memory. One class per service now sweeps expired keys and drops the least recently used when full (10,000 keys). Per instance
+  while `--max-instances 1` (stated in the module).
+- **Token exchange per source.** Limited per source address (300 a minute by default) before any hashing or database read, as well as per key.
+  **Deviation from the plan:** no global limit. A global cap on exchanges would let one caller use up everyone's budget (an availability lever)
+  and protect nothing the per-source limit does not.
+- **Source address from the right, not uvicorn's `*`.** The plan said to set `FORWARDED_ALLOW_IPS`. uvicorn with `*` takes the **leftmost**
+  `X-Forwarded-For` entry, which the caller wrote. Core and the gateway instead read the header themselves, counted from the right by
+  `TRUSTED_PROXY_HOPS` (0 ignores it; Cloud Run: 1, set by `deploy.sh`). Fewer or unreadable entries fall back to the socket peer (one shared
+  bucket: over-limits, never evades). A test fails if the deploy script ever uses `forwarded-allow-ips`.
+- **Other limit placement.** Telegram's per-chat limit is checked before the update claim write; the live scan is limited per organization (core
+  sends `X-RedHand-Organization`, a header so an old gateway ignores it during the deploy window; missing or malformed shares one fixed bucket);
+  the vet endpoint per real caller instead of per Google front end. Not changed: the Black Box ingest has no limiter (service token only; the
+  gateway batches).
+- **HS256 operator secret outside development is refused.** A shared secret both verifies and mints operator tokens. **This supersedes the
+  "legacy Supabase secret" mode in ADR 0007.** A deployment still on a legacy HS256 project must enable asymmetric signing keys and use
+  `OPERATOR_JWKS_URL`. Staging already does. Not done: requiring an issuer for development HS256 tokens (a random per-process secret, test churn,
+  no security value).
+- **Supply chain.** `pip-audit` (pinned, locked versions) and `npm audit --audit-level=high` fail CI; weekly grouped Dependabot for uv, npm and
+  workflows. The first audit found a real high finding: Next 15 pins postcss 8.4.31 (four advisories). The offered fix is Next 16 (a breaking
+  major); an npm override points Next at the dashboard's own patched postcss instead (build, type-check, tests and the browser pass confirmed).
+  **Not done:** pinning actions by commit SHA: the SHAs could not be resolved from this session (the repository scope blocks reading other
+  repositories). Dependabot keeps the tags current; the SHA pin is an owner follow-up.
+
 ## Alternatives considered
 - **Cache DNS answers at the gateway** to save a lookup: rejected, it would widen the DNS-rebinding window.
 - **Drop the in-memory audit chain** entirely and rely on the Black Box: rejected, the gateway's chain is a second, independent record.
@@ -65,3 +99,5 @@ and why, so a reviewer can follow the intent across the four PRs.
   private address) is now refused. Pinning means the gateway's call goes to an IP: an upstream that cannot be reached by its first checked
   addresses fails as "unreachable" (kill switch: `AGENTWALL_UPSTREAM_PIN_ENABLED=false`).
 - H2: a request body over 1 MiB (16 MiB on the two ingest routes) is refused with 413 on core.
+- H3: a deployment on the HS256 shared operator secret outside development no longer starts. The dashboard needs per-request rendering (no static
+  pages). Token exchange has a per-address limit (300 a minute by default); many agents behind one egress address share it.
