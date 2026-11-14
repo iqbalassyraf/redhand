@@ -50,6 +50,9 @@ PROMISES = [
         "Open the dashboard, Passports, Allowed destinations. Only the last two parts of the address are shown: no call details are sent.",
         CORE_ALERTS,
     ),
+    # body limits (Part K)
+    ("Request body too large.", "services/redhand-core/src/redhand_core/middleware/body_limit.py"),
+    ("Request body too large.", "agentwall/src/main.py"),
     # loop card
     ("Repeated-call settings saved. They reach the gateway within a few seconds.", RADAR_PAGE),
     ("Tick the box to confirm this change.", RADAR_PAGE),
