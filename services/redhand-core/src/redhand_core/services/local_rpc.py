@@ -1059,10 +1059,12 @@ def _telegram_claim_update(store: LocalSupabaseAdapter, p: dict[str, Any]) -> bo
 
 # --- Prompt Injection Radar (Phase 4 M4.2): emulation of supabase/migrations/20261117000000_radar_findings.sql -------------
 
-_RULE_ID = re.compile(r"^RAD-(INJ|OUT)-[0-9]{3}$")
+_RULE_ID = re.compile(r"^RAD-(INJ|OUT)-[0-9]{3}$")  # scan counts and readiness only know the injection and output rules
+_FINDING_RULE = re.compile(r"^RAD-(INJ|OUT|LOOP)-[0-9]{3}$")  # every rule a finding or a suppression may name
+_LOOP_MODES = ("off", "observe", "throttle")
 _FAMILY = re.compile(r"^[a-z][a-z-]{1,23}$")
 _LEVELS = ("low", "medium", "high")
-_PLACES = ("text", "hidden", "decoded")
+_PLACES = ("text", "hidden", "decoded", "call")
 _EVASION = ("invisible", "lookalike", "leet", "encoded", "hidden")
 _MODES_SETTABLE = ("off", "observe")
 
@@ -1102,16 +1104,20 @@ def _record_security_findings(store: LocalSupabaseAdapter, p: dict[str, Any]) ->
     suppressions = store.tables.get("radar_suppressions", [])
     counts = {"new": 0, "coalesced": 0, "suppressed": 0, "capped": 0, "skipped": 0, "disabled": 0}
     rules: list[str] = []
+    new_loop, loop_tool = 0, None
     for item in items:
         if not isinstance(item, dict):
             counts["skipped"] += 1
             continue
         rule, kind, family = item.get("rule_id"), item.get("kind"), item.get("family")
         sev, conf, place = item.get("severity"), item.get("confidence"), item.get("place")
+        expected_kind = "injection" if isinstance(rule, str) and rule.startswith("RAD-INJ-") else (
+            "output" if isinstance(rule, str) and rule.startswith("RAD-OUT-") else "loop"
+        )
         if (
-            not isinstance(rule, str) or not _RULE_ID.match(rule) or kind not in ("injection", "output")
-            or (kind == "injection") != rule.startswith("RAD-INJ-") or not isinstance(family, str) or not _FAMILY.match(family)
-            or sev not in _LEVELS or conf not in _LEVELS or place not in _PLACES
+            not isinstance(rule, str) or not _FINDING_RULE.match(rule) or kind not in ("injection", "output", "loop")
+            or kind != expected_kind or not isinstance(family, str) or not _FAMILY.match(family)
+            or sev not in _LEVELS or conf not in _LEVELS or place not in _PLACES or (kind == "loop") != (place == "call")
         ):
             counts["skipped"] += 1
             continue
@@ -1120,8 +1126,10 @@ def _record_security_findings(store: LocalSupabaseAdapter, p: dict[str, Any]) ->
         occurrences = _clamped_occurrences(item.get("occurrences", ""))
         raw_evasion = item.get("evasion")
         evasion = sorted({e for e in (raw_evasion if isinstance(raw_evasion, list) else []) if e in _EVASION})
-        if (kind == "injection" and org_row.get("radar_mode", "observe") == "off") or (
-            kind == "output" and org_row.get("output_check_mode", "observe") == "off"
+        if (
+            (kind == "injection" and org_row.get("radar_mode", "observe") == "off")
+            or (kind == "output" and org_row.get("output_check_mode", "observe") == "off")
+            or (kind == "loop" and org_row.get("loop_mode", "observe") == "off")
         ):
             counts["disabled"] += 1
             continue
@@ -1147,7 +1155,10 @@ def _record_security_findings(store: LocalSupabaseAdapter, p: dict[str, Any]) ->
                 "last_seen_at": now.isoformat(), "review_status": "open", "reviewed_by": None, "reviewed_at": None, "review_note": None,
             })
             counts["new"] += 1
-            if len(rules) < 5 and rule not in rules:
+            if kind == "loop":
+                new_loop += 1
+                loop_tool = loop_tool if loop_tool is not None else tool
+            elif len(rules) < 5 and rule not in rules:
                 rules.append(rule)
         else:
             existing["occurrences"] = min(existing["occurrences"] + occurrences, 1_000_000)
@@ -1158,12 +1169,62 @@ def _record_security_findings(store: LocalSupabaseAdapter, p: dict[str, Any]) ->
             if _LEVELS.index(conf) > _LEVELS.index(existing["confidence"]):
                 existing["confidence"] = conf
             counts["coalesced"] += 1
-    alert = False
+    # Each kind has its own 10-minute alert cooldown, so a loop alert cannot hide an injection alert (or the other way round).
+    alert = loop_alert = False
     last = agent.get("radar_last_alert_at")
-    if counts["new"] > 0 and (last is None or now - _parse_ts(last) > timedelta(minutes=10)):
+    if counts["new"] - new_loop > 0 and (last is None or now - _parse_ts(last) > timedelta(minutes=10)):
         agent["radar_last_alert_at"] = now.isoformat()
         alert = True
-    return {**counts, "alert": alert, "agent": agent.get("name"), "rules": rules}
+    last_loop = agent.get("loop_last_alert_at")
+    if new_loop > 0 and (last_loop is None or now - _parse_ts(last_loop) > timedelta(minutes=10)):
+        agent["loop_last_alert_at"] = now.isoformat()
+        loop_alert = True
+    return {
+        **counts, "alert": alert, "agent": agent.get("name"), "rules": rules,
+        "loop_new": new_loop, "loop_alert": loop_alert, "loop_tool": loop_tool,
+    }
+
+
+def _control_loop_settings(store: LocalSupabaseAdapter, p: dict[str, Any]) -> dict[str, Any]:
+    org, actor = str(p["p_org"]), str(p["p_actor"])
+    mode, limit, window, reason = p["p_mode"], p["p_limit"], p["p_window"], p.get("p_reason")
+    if (
+        mode not in _LOOP_MODES or not isinstance(limit, int) or isinstance(limit, bool) or not 3 <= limit <= 1000
+        or not isinstance(window, int) or isinstance(window, bool) or not 10 <= window <= 600 or (reason is not None and len(reason) > 300)
+    ):
+        raise _error("22023", "mode must be off, observe or throttle, the limit 3 to 1000, the window 10 to 600 seconds")
+    row = _org_row(store, org)
+    cur = (row.get("loop_mode", "observe"), row.get("loop_limit", 20), row.get("loop_window_seconds", 60))
+    if cur != (p.get("p_expected_mode"), p.get("p_expected_limit"), p.get("p_expected_window")):
+        return {"conflict": True, "loop_mode": cur[0], "loop_limit": cur[1], "loop_window_seconds": cur[2]}
+    if cur == (mode, limit, window):
+        return {"conflict": False, "changed": False, "loop_mode": mode, "loop_limit": limit, "loop_window_seconds": window}
+    if cur[0] != mode:
+        row["loop_mode_changed_at"] = _now()
+    row["loop_mode"], row["loop_limit"], row["loop_window_seconds"] = mode, limit, window
+    _append_audit(
+        store, org=org, actor=actor, action="organization.loop_settings_changed", target_type="organization", target_id=org, reason=reason,
+        details={"old_mode": cur[0], "new_mode": mode, "old_limit": cur[1], "new_limit": limit,
+                 "old_window_seconds": cur[2], "new_window_seconds": window},
+    )
+    return {"conflict": False, "changed": True, "loop_mode": mode, "loop_limit": limit, "loop_window_seconds": window}
+
+
+def _loop_settings(store: LocalSupabaseAdapter, p: dict[str, Any]) -> dict[str, Any]:
+    org = str(p["p_org"])
+    row = _org_row(store, org)
+    since = datetime.now(timezone.utc) - timedelta(days=7)
+    mine = [
+        f for f in store.tables.get("security_findings", [])
+        if str(f["organization_id"]) == org and f["kind"] == "loop" and _parse_ts(f["last_seen_at"]) > since
+    ]
+    last7: dict[str, Any] = {"findings": len(mine), "occurrences": sum(f["occurrences"] for f in mine),
+                             "open": sum(1 for f in mine if f["review_status"] == "open")}
+    return {
+        "loop_mode": row.get("loop_mode", "observe"), "loop_limit": row.get("loop_limit", 20),
+        "loop_window_seconds": row.get("loop_window_seconds", 60), "loop_mode_changed_at": row.get("loop_mode_changed_at"),
+        "last_7_days": last7,
+    }
 
 
 def _control_radar_settings(store: LocalSupabaseAdapter, p: dict[str, Any]) -> dict[str, Any]:
@@ -1217,7 +1278,7 @@ def _control_radar_suppression_create(store: LocalSupabaseAdapter, p: dict[str, 
     org, actor, agent_id = str(p["p_org"]), str(p["p_actor"]), str(p["p_agent"])
     rule, days, reason = p["p_rule"], p["p_days"], p["p_reason"]
     if (
-        not isinstance(rule, str) or not _RULE_ID.match(rule) or not isinstance(days, int) or isinstance(days, bool) or not 1 <= days <= 90
+        not isinstance(rule, str) or not _FINDING_RULE.match(rule) or not isinstance(days, int) or isinstance(days, bool) or not 1 <= days <= 90
         or not isinstance(reason, str) or not 3 <= len(reason.strip()) <= 300
     ):
         raise _error("22023", "a rule id, 1 to 90 days and a reason of 3 to 300 characters are required")
@@ -1264,7 +1325,10 @@ def _radar_summary(store: LocalSupabaseAdapter, p: dict[str, Any]) -> dict[str, 
     org = str(p["p_org"])
     row = _org_row(store, org)
     since = datetime.now(timezone.utc) - timedelta(days=7)
-    mine = [f for f in store.tables.get("security_findings", []) if str(f["organization_id"]) == org and _parse_ts(f["last_seen_at"]) > since]
+    mine = [
+        f for f in store.tables.get("security_findings", [])
+        if str(f["organization_id"]) == org and f["kind"] in ("injection", "output") and _parse_ts(f["last_seen_at"]) > since
+    ]
     last7: dict[str, Any] = {}
     if mine:
         last7 = {
@@ -1450,6 +1514,8 @@ HANDLERS: dict[str, RpcHandler] = {
     "control_radar_suppression_create": _control_radar_suppression_create,
     "control_radar_suppression_revoke": _control_radar_suppression_revoke,
     "radar_summary": _radar_summary,
+    "control_loop_settings": _control_loop_settings,
+    "loop_settings": _loop_settings,
     "record_radar_scan_counts": _record_radar_scan_counts,
     "radar_readiness_inputs": _radar_readiness_inputs,
     "record_usage": _record_usage,

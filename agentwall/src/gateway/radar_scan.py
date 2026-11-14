@@ -45,6 +45,7 @@ MAX_ITEMS = 20
 COUNTS_FLUSH_SECONDS = 60.0
 COUNTS_ITEMS_PER_REPORT = 50  # core accepts at most 50 items per report
 MAX_COUNT_PER_REPORT = 1_000_000  # core refuses a whole report with a larger number, so a larger count is sent in pieces
+LOOP_RULE_ID = "RAD-LOOP-001"
 MAX_COUNTED_ORGANIZATIONS = 5_000  # beyond this, a new organization is not counted (and so can never look ready); counted in metrics
 
 __all__ = [
@@ -295,6 +296,37 @@ class RadarScanner:
         if self._counters is not None and (self._flusher is None or self._flusher.done()):
             self._flusher = loop.create_task(self._flush_loop())
         return self._queue
+
+    def report_loop(self, *, organization_id: UUID, agent_id: UUID, server: str, tool: str) -> bool:
+        """
+        Reports that an agent repeated one call more often than its organization's loop limit (Phase 4 M6). Uses the same reporter, retry
+        and bounded backlog as the Radar's findings, and the same repeat limit: one report per agent, tool and server every
+        THROTTLE_SECONDS (core also coalesces), so the count in a finding is "at least". Synchronous, no I/O, never raises or waits;
+        a loop finding changes no decision. Returns False when nothing was queued.
+        """
+        try:
+            now = self._clock()
+            key = (agent_id, LOOP_RULE_ID, tool, "call", server)
+            last = self._throttle.get(key)
+            if last is not None and now - last < THROTTLE_SECONDS:
+                if self._metrics is not None:
+                    self._metrics.record_loop("report_throttled")
+                return False
+            self._throttle[key] = now
+            self._throttle.move_to_end(key)
+            while len(self._throttle) > MAX_THROTTLE_KEYS:
+                self._throttle.popitem(last=False)
+            item = {
+                "rule_id": LOOP_RULE_ID, "kind": "loop", "family": "loop", "severity": "medium", "confidence": "high", "place": "call",
+                "evasion": [], "tool_name": tool[:128], "server": server[:63], "would_block": False, "occurrences": 1,
+            }
+            sent = self._dispatcher.submit(FindingsReport(organization_id, agent_id, (item,)))
+            if not sent:
+                self._throttle.pop(key, None)  # not queued: the next occurrence is reported
+            return sent
+        except Exception as exc:  # noqa: BLE001  a loop finding is a side effect and must never affect a call
+            logger.warning("Loop finding could not be queued", error_type=type(exc).__name__)
+            return False
 
     # -- the worker -----------------------------------------------------------------------------------------
     async def _run(self, queue: asyncio.Queue[_Job]) -> None:

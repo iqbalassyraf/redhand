@@ -1097,7 +1097,8 @@
           "kind": {
             "enum": [
               "injection",
-              "output"
+              "output",
+              "loop"
             ],
             "title": "Kind",
             "type": "string"
@@ -1115,7 +1116,8 @@
             "enum": [
               "text",
               "hidden",
-              "decoded"
+              "decoded",
+              "call"
             ],
             "title": "Place",
             "type": "string"
@@ -1963,6 +1965,126 @@
           "deep_link"
         ],
         "title": "LinkCodeResponse",
+        "type": "object"
+      },
+      "LoopSettingsRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "confirm": {
+            "default": false,
+            "description": "Required to turn throttling on (it refuses calls) or to turn detection off.",
+            "title": "Confirm",
+            "type": "boolean"
+          },
+          "expected_mode": {
+            "anyOf": [
+              {
+                "enum": [
+                  "off",
+                  "observe",
+                  "throttle"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The mode the caller saw; a different current mode is a conflict.",
+            "title": "Expected Mode"
+          },
+          "loop_limit": {
+            "description": "Identical calls in one window that count as a loop (the limit-th call is flagged).",
+            "maximum": 1000.0,
+            "minimum": 3.0,
+            "title": "Loop Limit",
+            "type": "integer"
+          },
+          "loop_mode": {
+            "enum": [
+              "off",
+              "observe",
+              "throttle"
+            ],
+            "title": "Loop Mode",
+            "type": "string"
+          },
+          "loop_window_seconds": {
+            "maximum": 600.0,
+            "minimum": 10.0,
+            "title": "Loop Window Seconds",
+            "type": "integer"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          }
+        },
+        "required": [
+          "loop_mode",
+          "loop_limit",
+          "loop_window_seconds"
+        ],
+        "title": "LoopSettingsRequest",
+        "type": "object"
+      },
+      "LoopSettingsResponse": {
+        "description": "Loop detection (Phase 4 M6): how many identical calls in how many seconds count as a loop, and what happens then.",
+        "properties": {
+          "capabilities": {
+            "$ref": "#/components/schemas/RadarCapabilities"
+          },
+          "last_7_days": {
+            "additionalProperties": true,
+            "title": "Last 7 Days",
+            "type": "object"
+          },
+          "loop_limit": {
+            "title": "Loop Limit",
+            "type": "integer"
+          },
+          "loop_mode": {
+            "enum": [
+              "off",
+              "observe",
+              "throttle"
+            ],
+            "title": "Loop Mode",
+            "type": "string"
+          },
+          "loop_mode_changed_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Loop Mode Changed At"
+          },
+          "loop_window_seconds": {
+            "title": "Loop Window Seconds",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "loop_mode",
+          "loop_limit",
+          "loop_window_seconds",
+          "last_7_days",
+          "capabilities"
+        ],
+        "title": "LoopSettingsResponse",
         "type": "object"
       },
       "McpServerCreateRequest": {
@@ -3541,7 +3663,7 @@
             "type": "string"
           },
           "rule_id": {
-            "pattern": "^RAD-(INJ|OUT)-[0-9]{3}$",
+            "pattern": "^RAD-(INJ|OUT|LOOP)-[0-9]{3}$",
             "title": "Rule Id",
             "type": "string"
           }
@@ -5705,7 +5827,7 @@
             "schema": {
               "anyOf": [
                 {
-                  "pattern": "^(injection|output)$",
+                  "pattern": "^(injection|output|loop)$",
                   "type": "string"
                 },
                 {
@@ -5722,7 +5844,7 @@
             "schema": {
               "anyOf": [
                 {
-                  "pattern": "^RAD-(INJ|OUT)-[0-9]{3}$",
+                  "pattern": "^RAD-(INJ|OUT|LOOP)-[0-9]{3}$",
                   "type": "string"
                 },
                 {
@@ -8433,6 +8555,145 @@
         "summary": "Unfreeze Agent",
         "tags": [
           "Agent Passports & Control Actions"
+        ]
+      }
+    },
+    "/v1/radar/loop-settings": {
+      "get": {
+        "operationId": "get_loop_settings_v1_radar_loop_settings_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-RedHand-Org",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Redhand-Org"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoopSettingsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Loop Settings",
+        "tags": [
+          "Prompt Injection Radar"
+        ]
+      },
+      "put": {
+        "description": "observe (default): a call repeated `loop_limit` times inside `loop_window_seconds` is recorded and alerted; nothing is refused.\nthrottle: the repeat is also refused until the window moves on (needs confirm: true). off: nothing is counted (needs confirm: true).\nA live suppression of RAD-LOOP-001 for an agent exempts that agent.",
+        "operationId": "put_loop_settings_v1_radar_loop_settings_put",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-RedHand-Org",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Redhand-Org"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoopSettingsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoopSettingsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Put Loop Settings",
+        "tags": [
+          "Prompt Injection Radar"
         ]
       }
     },

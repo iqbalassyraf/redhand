@@ -27,6 +27,7 @@ class GatewayMetrics:
         self._honeytoken_scans_truncated = 0
         self._pin_reports: Counter[str] = Counter()
         self._pin_events: Counter[str] = Counter()
+        self._loops: Counter[str] = Counter()
         self._stage_buckets: dict[str, Counter[float]] = {}
         self._stage_sum: dict[str, float] = {}
         self._stage_count: Counter[str] = Counter()
@@ -101,6 +102,11 @@ class GatewayMetrics:
     def record_pin_event(self, event: str, count: int = 1) -> None:
         with self._lock:
             self._pin_events[event] += count
+
+    def record_loop(self, outcome: str, count: int = 1) -> None:
+        """Loop detection outcomes (ok, flagged, throttled, untracked, error, evicted, report_throttled). Fixed names, no agent or tool."""
+        with self._lock:
+            self._loops[outcome] += count
 
     def record_honeytoken_scan_truncated(self) -> None:
         with self._lock:
@@ -185,6 +191,12 @@ class GatewayMetrics:
             ]
             for event, count in sorted(self._pin_events.items()):
                 lines.append(f'redhand_gateway_pin_events_total{{event="{event}"}} {count}')
+            lines += [
+                "# HELP redhand_gateway_loops_total Loop detection by outcome (ok, flagged, throttled, untracked, error, evicted, report_throttled).",
+                "# TYPE redhand_gateway_loops_total counter",
+            ]
+            for outcome, count in sorted(self._loops.items()):
+                lines.append(f'redhand_gateway_loops_total{{outcome="{outcome}"}} {count}')
             lines += [
                 "# HELP redhand_gateway_radar_scans_total Background Radar scans by outcome (ok, error, dropped, throttled, truncated).",
                 "# TYPE redhand_gateway_radar_scans_total counter",

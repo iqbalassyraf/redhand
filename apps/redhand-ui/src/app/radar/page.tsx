@@ -14,17 +14,32 @@ import { Hand, LogOut, RefreshCw } from "lucide-react";
 import {
   ApiError,
   type FindingReviewStatus,
+  type LoopSettings,
   type RadarFinding,
   type RadarSettings,
   type RadarSuppression,
   type ReadinessResult,
   type SelfTestResult,
+  loopApi,
   radarApi,
   selfTestApi,
 } from "@/lib/api";
 import { useAuth, useRequiredSession } from "@/lib/auth";
 import { type BlockGate, isCoverageData } from "@/lib/coverage";
-import { EVASION_LABEL, describeRule } from "@/lib/radarRules";
+import { EVASION_LABEL, LOOP_RULE_ID, describeRule } from "@/lib/radarRules";
+import {
+  LOOP_LIMITS_TEXT,
+  LOOP_LIMIT_MAX,
+  LOOP_LIMIT_MIN,
+  LOOP_MODE_LABEL,
+  LOOP_WINDOW_MAX,
+  LOOP_WINDOW_MIN,
+  type LoopModeChoice,
+  clampLoopNumber,
+  loopConfirmText,
+  loopNeedsConfirmation,
+  validateLoopSettings,
+} from "@/lib/loopForm";
 import { evidenceFor, falseAlarmText as readinessFalseAlarmText, headline, isReadinessResult, trafficText } from "@/lib/readiness";
 import { CHECK_LABEL, falseAlarmText, foundText, selfTestProblem } from "@/lib/selfTest";
 import {
@@ -44,7 +59,7 @@ const STATUS_LABEL: Record<FindingReviewStatus, string> = {
   false_alarm: "False alarm",
 };
 
-const PLACE_LABEL = { text: "in the text", hidden: "in hidden text", decoded: "in decoded text" } as const;
+const PLACE_LABEL = { text: "in the text", hidden: "in hidden text", decoded: "in decoded text", call: "in the call" } as const;
 
 function when(iso: string | null): string {
   if (!iso) return "never";
@@ -86,6 +101,13 @@ export default function RadarPage() {
   const [draftRadar, setDraftRadar] = useState<"off" | "observe">("observe");
   const [draftOutput, setDraftOutput] = useState<"off" | "observe">("observe");
   const [confirmOff, setConfirmOff] = useState(false);
+
+  const [loop, setLoop] = useState<LoopSettings | null>(null);
+  const [loopUnavailable, setLoopUnavailable] = useState(false);
+  const [draftLoopMode, setDraftLoopMode] = useState<LoopModeChoice>("observe");
+  const [draftLoopLimit, setDraftLoopLimit] = useState(20);
+  const [draftLoopWindow, setDraftLoopWindow] = useState(60);
+  const [confirmLoop, setConfirmLoop] = useState(false);
 
   const [readiness, setReadiness] = useState<ReadinessResult | null>(null);
   const [readinessFailed, setReadinessFailed] = useState(false);
@@ -138,6 +160,18 @@ export default function RadarPage() {
       setDraftRadar(s.radar_mode === "off" ? "off" : "observe");
       setDraftOutput(s.output_check_mode === "off" ? "off" : "observe");
       setConfirmOff(false);
+      try {
+        const l = await loopApi.settings(token);
+        setLoop(l);
+        setLoopUnavailable(false);
+        setDraftLoopMode(l.loop_mode);
+        setDraftLoopLimit(l.loop_limit);
+        setDraftLoopWindow(l.loop_window_seconds);
+        setConfirmLoop(false);
+      } catch {
+        setLoop(null);
+        setLoopUnavailable(true); // an older core has no loop settings: the card says so and the rest of the page works
+      }
       try {
         const r: unknown = await radarApi.readiness(token);
         if (isReadinessResult(r)) {
@@ -211,6 +245,36 @@ export default function RadarPage() {
     run(async () => {
       await radarApi.saveSettings(token, { radar_mode: draftRadar, output_check_mode: draftOutput, confirm: needsConfirm && confirmOff });
       setNotice("Settings saved. They reach the gateway within a few seconds.");
+    });
+  };
+
+  const loopNeedsConfirm = loop ? loopNeedsConfirmation(loop.loop_mode, draftLoopMode) : false;
+  const loopUnchanged = loop
+    ? draftLoopMode === loop.loop_mode && draftLoopLimit === loop.loop_limit && draftLoopWindow === loop.loop_window_seconds
+    : true;
+
+  const saveLoop = () => {
+    if (!loop) return;
+    const problem = validateLoopSettings(draftLoopLimit, draftLoopWindow);
+    if (problem) {
+      setNotice(null);
+      setError(problem);
+      return;
+    }
+    if (loopNeedsConfirm && !confirmLoop) {
+      setNotice(null);
+      setError("Tick the box to confirm this change.");
+      return;
+    }
+    run(async () => {
+      await loopApi.save(token, {
+        loop_mode: draftLoopMode,
+        loop_limit: draftLoopLimit,
+        loop_window_seconds: draftLoopWindow,
+        expected_mode: loop.loop_mode,
+        confirm: loopNeedsConfirm && confirmLoop,
+      });
+      setNotice("Repeated-call settings saved. They reach the gateway within a few seconds.");
     });
   };
 
@@ -398,6 +462,69 @@ export default function RadarPage() {
               </div>
             </section>
 
+            <section className="mb-6 rounded-[10px] border border-[#E5E5E5] bg-[#FFFFFF] p-4 text-[12px]" aria-label="Repeated calls">
+              <h2 className="mb-3 text-[14px] font-semibold">Repeated calls</h2>
+              {loopUnavailable || !loop ? (
+                <p className="text-[#606060]">Repeated-call detection is not available from this server yet.</p>
+              ) : (
+                <>
+                  <div className="mb-3 flex flex-wrap items-end gap-4">
+                    <label className="flex flex-col gap-1">
+                      <span className="text-[#606060]">When the same call is repeated</span>
+                      <select
+                        value={draftLoopMode}
+                        disabled={!loop.capabilities.can_change_modes}
+                        onChange={(e) => { setNotice(null); setError(null); setDraftLoopMode(e.target.value as LoopModeChoice); }}
+                        className={field}
+                      >
+                        {(["observe", "throttle", "off"] as const).map((mode) => (
+                          <option key={mode} value={mode}>{LOOP_MODE_LABEL[mode]}</option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="flex flex-col gap-1">
+                      <span className="text-[#606060]">Calls that count as a loop ({LOOP_LIMIT_MIN} to {LOOP_LIMIT_MAX})</span>
+                      <input
+                        type="number" min={LOOP_LIMIT_MIN} max={LOOP_LIMIT_MAX} value={draftLoopLimit}
+                        disabled={!loop.capabilities.can_change_modes}
+                        onChange={(e) => { setNotice(null); setError(null); setDraftLoopLimit(clampLoopNumber(e.target.valueAsNumber, LOOP_LIMIT_MIN, LOOP_LIMIT_MAX, loop.loop_limit)); }}
+                        className={`${field} w-28`}
+                      />
+                    </label>
+                    <label className="flex flex-col gap-1">
+                      <span className="text-[#606060]">Within seconds ({LOOP_WINDOW_MIN} to {LOOP_WINDOW_MAX})</span>
+                      <input
+                        type="number" min={LOOP_WINDOW_MIN} max={LOOP_WINDOW_MAX} value={draftLoopWindow}
+                        disabled={!loop.capabilities.can_change_modes}
+                        onChange={(e) => { setNotice(null); setError(null); setDraftLoopWindow(clampLoopNumber(e.target.valueAsNumber, LOOP_WINDOW_MIN, LOOP_WINDOW_MAX, loop.loop_window_seconds)); }}
+                        className={`${field} w-28`}
+                      />
+                    </label>
+                    {loop.capabilities.can_change_modes ? (
+                      <>
+                        <button onClick={saveLoop} disabled={busy || loopUnchanged} className={button}>Save</button>
+                        {loopUnchanged ? null : <span className="font-semibold text-[#8A5A00]">Not saved yet: press Save to apply this change.</span>}
+                      </>
+                    ) : (
+                      <span className="text-[#606060]">Only an admin can change these.</span>
+                    )}
+                  </div>
+                  {loopNeedsConfirm && loop.capabilities.can_change_modes ? (
+                    <label className="mb-2 flex items-center gap-2">
+                      <input type="checkbox" checked={confirmLoop} onChange={(e) => setConfirmLoop(e.target.checked)} />
+                      <span>{loopConfirmText(draftLoopMode)}</span>
+                    </label>
+                  ) : null}
+                  <p className="text-[#606060]">{LOOP_LIMITS_TEXT}</p>
+                  <div className="mt-3 flex flex-wrap gap-4 text-[#606060]">
+                    <span>Last 7 days:</span>
+                    <span><b className="text-[#0F0F0F]">{loop.last_7_days.findings ?? 0}</b> repeated-call findings</span>
+                    <span><b className="text-[#0F0F0F]">{loop.last_7_days.open ?? 0}</b> not reviewed</span>
+                  </div>
+                </>
+              )}
+            </section>
+
             <section className="mb-6 rounded-[10px] border border-[#E5E5E5] bg-[#FFFFFF] p-4 text-[12px]">
               <h2 className="mb-1 text-[14px] font-semibold">Could blocking ever be switched on?</h2>
               <p className="mb-3 text-[#606060]">
@@ -521,6 +648,7 @@ export default function RadarPage() {
                     <option value="">Any kind</option>
                     <option value="injection">Hidden instructions</option>
                     <option value="output">Risky output</option>
+                    <option value="loop">Repeated calls</option>
                   </select>
                 </div>
               </div>
@@ -572,7 +700,7 @@ export default function RadarPage() {
                           ) : null}
                           {caps?.can_suppress ? (
                             <button onClick={() => { setSilenceFor(silenceFor?.id === f.id ? null : f); setError(null); }} className={button}>
-                              Silence this rule for this agent
+                              {f.rule_id === LOOP_RULE_ID ? "Exempt this agent from repeat checks" : "Silence this rule for this agent"}
                             </button>
                           ) : null}
                         </div>
@@ -594,6 +722,7 @@ export default function RadarPage() {
                           <p className="mb-2">
                             Stops the Radar recording <b>{f.rule_id}</b> for <b>{f.agent_name ?? "this agent"}</b>. Other rules and other
                             agents are not affected. It ends by itself.
+                            {f.rule_id === LOOP_RULE_ID ? " For repeated calls it also stops throttling this agent: use it for a tool that is meant to be called again and again, such as a status check." : ""}
                           </p>
                           <div className="mb-2 flex flex-wrap items-end gap-3">
                             <label className="flex flex-col gap-1">
