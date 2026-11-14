@@ -33,6 +33,7 @@ from redhand_core.passports.models import (
 from redhand_core.routers.agent_auth import require_internal_service
 from redhand_core.routers.telegram import OptionalClientDep
 from redhand_core.routers.telemetry import get_supabase_service_client
+from redhand_core.risk import service as risk_service
 from redhand_core.services.metrics import get_metrics
 from redhand_core.telegram.bot import notify_organization
 from redhand_core.telegram.client import TelegramClient
@@ -149,6 +150,13 @@ async def report_usage(report: UsageReport, supabase: SupabaseDep, telegram: Opt
             )
         except asyncio.TimeoutError:
             logger.warning("Budget event handling timed out for %d events", len(events))
+        # Reaching the daily limit is a risk signal: evaluate those agents, per organization. evaluate_agents never raises.
+        limits: dict[UUID, list[UUID]] = {}
+        for event in events:
+            if event.get("kind") == "limit":
+                limits.setdefault(UUID(str(event["organization_id"])), []).append(UUID(str(event["agent_id"])))
+        for org_id, agent_ids in limits.items():
+            await risk_service.evaluate_agents(supabase, telegram, org_id, agent_ids, utcnow())
     return UsageReportResponse(accepted=int(data["accepted"]), rejected=int(data["rejected"]))
 
 

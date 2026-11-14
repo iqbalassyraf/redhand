@@ -169,6 +169,164 @@
         "title": "AgentBudgetResponse",
         "type": "object"
       },
+      "AgentRiskDetail": {
+        "properties": {
+          "action_score": {
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Action Score",
+            "type": "integer"
+          },
+          "action_signals": {
+            "items": {
+              "$ref": "#/components/schemas/RiskSignalView"
+            },
+            "title": "Action Signals",
+            "type": "array"
+          },
+          "agent_id": {
+            "format": "uuid",
+            "title": "Agent Id",
+            "type": "string"
+          },
+          "level": {
+            "enum": [
+              "low",
+              "elevated",
+              "high",
+              "critical"
+            ],
+            "title": "Level",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "released_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Released At"
+          },
+          "safe_mode": {
+            "title": "Safe Mode",
+            "type": "boolean"
+          },
+          "score": {
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Score",
+            "type": "integer"
+          },
+          "signals": {
+            "items": {
+              "$ref": "#/components/schemas/RiskSignalView"
+            },
+            "title": "Signals",
+            "type": "array"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "agent_id",
+          "name",
+          "status",
+          "safe_mode",
+          "score",
+          "level",
+          "action_score",
+          "reason",
+          "signals",
+          "action_signals"
+        ],
+        "title": "AgentRiskDetail",
+        "type": "object"
+      },
+      "AgentRiskSummary": {
+        "properties": {
+          "action_score": {
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Action Score",
+            "type": "integer"
+          },
+          "agent_id": {
+            "format": "uuid",
+            "title": "Agent Id",
+            "type": "string"
+          },
+          "level": {
+            "enum": [
+              "low",
+              "elevated",
+              "high",
+              "critical"
+            ],
+            "title": "Level",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "released_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Released At"
+          },
+          "safe_mode": {
+            "title": "Safe Mode",
+            "type": "boolean"
+          },
+          "score": {
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Score",
+            "type": "integer"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "agent_id",
+          "name",
+          "status",
+          "safe_mode",
+          "score",
+          "level",
+          "action_score",
+          "reason"
+        ],
+        "title": "AgentRiskSummary",
+        "type": "object"
+      },
       "AgentSafeModeResponse": {
         "properties": {
           "changed": {
@@ -2150,6 +2308,139 @@
         "title": "KeyRotationResponse",
         "type": "object"
       },
+      "LadderCapabilities": {
+        "properties": {
+          "can_change": {
+            "title": "Can Change",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "can_change"
+        ],
+        "title": "LadderCapabilities",
+        "type": "object"
+      },
+      "LadderRequest": {
+        "additionalProperties": false,
+        "description": "A full ladder: send all three rungs. null turns a rung off. Turning Safe Mode or freeze on, or lowering its threshold, makes the\nengine act on agents without a person, so it needs confirm: true.",
+        "properties": {
+          "alert_at": {
+            "anyOf": [
+              {
+                "maximum": 100.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Alert At"
+          },
+          "confirm": {
+            "default": false,
+            "title": "Confirm",
+            "type": "boolean"
+          },
+          "freeze_at": {
+            "anyOf": [
+              {
+                "maximum": 100.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Freeze At"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "safe_mode_at": {
+            "anyOf": [
+              {
+                "maximum": 100.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Safe Mode At"
+          }
+        },
+        "title": "LadderRequest",
+        "type": "object"
+      },
+      "LadderView": {
+        "properties": {
+          "alert_at": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Alert At"
+          },
+          "capabilities": {
+            "$ref": "#/components/schemas/LadderCapabilities"
+          },
+          "freeze_at": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Freeze At"
+          },
+          "reaching": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Reaching",
+            "type": "object"
+          },
+          "safe_mode_at": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Safe Mode At"
+          }
+        },
+        "required": [
+          "alert_at",
+          "safe_mode_at",
+          "freeze_at",
+          "reaching",
+          "capabilities"
+        ],
+        "title": "LadderView",
+        "type": "object"
+      },
       "LinkCodeResponse": {
         "properties": {
           "bot_username": {
@@ -3215,6 +3506,99 @@
         "title": "RetireResponse",
         "type": "object"
       },
+      "RiskDetailResponse": {
+        "properties": {
+          "agent": {
+            "$ref": "#/components/schemas/AgentRiskDetail"
+          },
+          "model": {
+            "title": "Model",
+            "type": "string"
+          },
+          "weights": {
+            "items": {
+              "$ref": "#/components/schemas/RiskWeightView"
+            },
+            "title": "Weights",
+            "type": "array"
+          },
+          "window_days": {
+            "default": 7,
+            "title": "Window Days",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "model",
+          "agent",
+          "weights"
+        ],
+        "title": "RiskDetailResponse",
+        "type": "object"
+      },
+      "RiskListResponse": {
+        "properties": {
+          "agents": {
+            "items": {
+              "$ref": "#/components/schemas/AgentRiskSummary"
+            },
+            "title": "Agents",
+            "type": "array"
+          },
+          "ladder": {
+            "$ref": "#/components/schemas/LadderView"
+          },
+          "model": {
+            "title": "Model",
+            "type": "string"
+          }
+        },
+        "required": [
+          "model",
+          "agents",
+          "ladder"
+        ],
+        "title": "RiskListResponse",
+        "type": "object"
+      },
+      "RiskSignalView": {
+        "properties": {
+          "capped": {
+            "title": "Capped",
+            "type": "boolean"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "older": {
+            "title": "Older",
+            "type": "integer"
+          },
+          "points": {
+            "title": "Points",
+            "type": "integer"
+          },
+          "recent": {
+            "title": "Recent",
+            "type": "integer"
+          },
+          "signal": {
+            "title": "Signal",
+            "type": "string"
+          }
+        },
+        "required": [
+          "signal",
+          "label",
+          "recent",
+          "older",
+          "points",
+          "capped"
+        ],
+        "title": "RiskSignalView",
+        "type": "object"
+      },
       "RiskTier": {
         "enum": [
           "read_only",
@@ -3224,6 +3608,35 @@
         ],
         "title": "RiskTier",
         "type": "string"
+      },
+      "RiskWeightView": {
+        "description": "The published weights, so a person can check the arithmetic on the page.",
+        "properties": {
+          "cap": {
+            "title": "Cap",
+            "type": "integer"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "points": {
+            "title": "Points",
+            "type": "integer"
+          },
+          "signal": {
+            "title": "Signal",
+            "type": "string"
+          }
+        },
+        "required": [
+          "signal",
+          "label",
+          "points",
+          "cap"
+        ],
+        "title": "RiskWeightView",
+        "type": "object"
       },
       "SCIMEmail": {
         "properties": {
@@ -9769,6 +10182,285 @@
         "summary": "Delete Suppression",
         "tags": [
           "Prompt Injection Radar"
+        ]
+      }
+    },
+    "/v1/risk/agents": {
+      "get": {
+        "operationId": "list_agent_risk_v1_risk_agents_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-RedHand-Org",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Redhand-Org"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RiskListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Agent Risk",
+        "tags": [
+          "Risk Engine"
+        ]
+      }
+    },
+    "/v1/risk/agents/{agent_id}": {
+      "get": {
+        "operationId": "get_agent_risk_v1_risk_agents__agent_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "agent_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Agent Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-RedHand-Org",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Redhand-Org"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RiskDetailResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Agent Risk",
+        "tags": [
+          "Risk Engine"
+        ]
+      }
+    },
+    "/v1/risk/ladder": {
+      "get": {
+        "operationId": "get_ladder_v1_risk_ladder_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-RedHand-Org",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Redhand-Org"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LadderView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Ladder",
+        "tags": [
+          "Risk Engine"
+        ]
+      },
+      "put": {
+        "description": "Send all three rungs; null turns one off. The ladder acts on the next signal, not on what is already recorded.",
+        "operationId": "put_ladder_v1_risk_ladder_put",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-RedHand-Org",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Redhand-Org"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LadderRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LadderView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Put Ladder",
+        "tags": [
+          "Risk Engine"
         ]
       }
     },

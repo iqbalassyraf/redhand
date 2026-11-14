@@ -280,7 +280,9 @@ def _control_agent_safe_mode(store: LocalSupabaseAdapter, p: dict[str, Any]) -> 
         raise _error("P0002", "agent not found")
     if bool(agent.get("safe_mode")) == enabled:
         return {"changed": False, "agent_id": agent_id, "enabled": enabled}
+    before = dict(agent)
     agent["safe_mode"] = enabled
+    _apply_update_triggers("agents", before, agent)  # Safe Mode off stamps the risk release, as the SQL trigger does
     _append_audit(
         store, org=org, actor=actor,
         action="passport.safe_mode_enabled" if enabled else "passport.safe_mode_disabled",
@@ -1594,6 +1596,90 @@ def _radar_readiness_inputs(store: LocalSupabaseAdapter, p: dict[str, Any]) -> d
     return {"now": now.isoformat(), "window_start": window_start.isoformat(), "kinds": kinds}
 
 
+# --- Risk Engine (Phase 4.5 B1): emulation of supabase/migrations/20261122000000_risk_engine.sql ------------------------------------
+
+_SCOPE_REFUSAL = "is not in this agent's passport scopes."
+_PIN_REFUSAL = "is not approved: its current version has not been reviewed."
+
+
+def _agent_risk_signals(store: LocalSupabaseAdapter, p: dict[str, Any]) -> list[dict[str, Any]]:
+    org = str(p["p_org"])
+    only = str(p["p_agent"]) if p.get("p_agent") else None
+    now = _parse_ts(p["p_now"])
+    week, day = now - timedelta(days=7), now - timedelta(hours=24)
+    agents = {
+        str(a["id"]): (_parse_ts(a["risk_released_at"]) if a.get("risk_released_at") else None)
+        for a in store.tables.get("agents", []) if str(a.get("organization_id")) == org and (only is None or str(a["id"]) == only)
+    }
+    live = {
+        (str(s["agent_id"]), s["rule_id"]) for s in store.tables.get("radar_suppressions", [])
+        if s.get("revoked_at") is None and _parse_ts(s["expires_at"]) > now
+    }
+    events: list[tuple[str, str, datetime]] = []
+    for t in store.tables.get("honeytrips", []):
+        at = _parse_ts(t["occurred_at"])
+        if str(t["organization_id"]) == org and str(t["agent_id"]) in agents and week < at <= now:
+            events.append((str(t["agent_id"]), "trip", at))
+    for f in store.tables.get("security_findings", []):
+        at = _parse_ts(f["last_seen_at"])
+        agent = str(f["agent_id"])
+        if str(f["organization_id"]) != org or agent not in agents or not week < at <= now:
+            continue
+        if f["review_status"] == "confirmed":
+            events.append((agent, "confirmed_finding", at))
+        elif f["review_status"] == "open" and f["confidence"] != "low" and (agent, f["rule_id"]) not in live:
+            signal = {"destination": "destination_open", "loop": "loop_open"}.get(f["kind"], "radar_open")
+            events.append((agent, signal, at))
+    for e in store.tables.get("agent_events", []):
+        at = _parse_ts(e["occurred_at"])
+        if (str(e["organization_id"]) == org and str(e["agent_id"]) in agents and e["decision"] == "BLOCK" and week < at <= now
+                and any(str(r).endswith((_SCOPE_REFUSAL, _PIN_REFUSAL)) for r in e.get("reasons") or [])):
+            events.append((str(e["agent_id"]), "refusal", at))
+    for b in store.tables.get("agent_budget_state", []):
+        if str(b["agent_id"]) in agents and b.get("limit_reached_at"):
+            at = _parse_ts(b["limit_reached_at"])
+            if day < at <= now:
+                events.append((str(b["agent_id"]), "budget_limit", at))
+    rows: dict[tuple[str, str], dict[str, Any]] = {}
+    for agent, signal, at in events:
+        row = rows.setdefault((agent, signal), {"agent_id": agent, "signal": signal, "recent_all": 0, "older_all": 0,
+                                                "recent_action": 0, "older_action": 0})
+        bucket = "recent" if at > day else "older"
+        row[f"{bucket}_all"] += 1
+        released = agents[agent]
+        if released is None or at > released:
+            row[f"{bucket}_action"] += 1
+    return list(rows.values())
+
+
+def _control_risk_ladder(store: LocalSupabaseAdapter, p: dict[str, Any]) -> dict[str, Any]:
+    org, actor = str(p["p_org"]), str(p["p_actor"])
+    row = _org_row(store, org)
+    new = {"alert": p.get("p_alert"), "safe_mode": p.get("p_safe_mode"), "freeze": p.get("p_freeze")}
+    values = [v for v in new.values() if v is not None]
+    if any(not 1 <= int(v) <= 100 for v in values) or values != sorted(values):
+        raise _error("23514", "new row for relation organizations violates check constraint organizations_risk_ladder_order")
+    old = {"alert": row.get("risk_alert_threshold"), "safe_mode": row.get("risk_safe_mode_threshold"), "freeze": row.get("risk_freeze_threshold")}
+    if old == new:
+        return {"changed": False, "ladder": new}
+    row["risk_alert_threshold"], row["risk_safe_mode_threshold"], row["risk_freeze_threshold"] = new["alert"], new["safe_mode"], new["freeze"]
+    _append_audit(store, org=org, actor=actor, action="organization.risk_ladder_changed", target_type="organization", target_id=org,
+                  reason=p.get("p_reason"), details={"old": old, "new": new})
+    return {"changed": True, "ladder": new}
+
+
+def _risk_mark_alerted(store: LocalSupabaseAdapter, p: dict[str, Any]) -> bool:
+    agent = _find(store, "agents", str(p["p_org"]), str(p["p_agent"]))
+    if agent is None:
+        return False
+    now = datetime.now(timezone.utc)
+    last = agent.get("risk_last_alert_at")
+    if last is not None and _parse_ts(last) > now - timedelta(seconds=int(p["p_cooldown_seconds"])):
+        return False
+    agent["risk_last_alert_at"] = now.isoformat()
+    return True
+
+
 HANDLERS: dict[str, RpcHandler] = {
     "control_agent_change": _control_agent_change,
     "control_freeze_all": _control_freeze_all,
@@ -1640,6 +1726,9 @@ HANDLERS: dict[str, RpcHandler] = {
     "telegram_claim_update": _telegram_claim_update,
     "record_events": _record_events,
     "verify_events": _verify_events,
+    "agent_risk_signals": _agent_risk_signals,
+    "control_risk_ladder": _control_risk_ladder,
+    "risk_mark_alerted": _risk_mark_alerted,
 }
 
 

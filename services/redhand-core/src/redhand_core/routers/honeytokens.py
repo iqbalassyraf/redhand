@@ -32,6 +32,8 @@ from redhand_core.honeytokens.models import (
 from redhand_core.routers.agent_auth import require_internal_service
 from redhand_core.routers.telegram import OptionalClientDep
 from redhand_core.routers.telemetry import get_supabase_service_client
+from redhand_core.passports.models import utcnow
+from redhand_core.risk import service as risk_service
 
 router = APIRouter(tags=["Honeytokens"])
 
@@ -83,4 +85,7 @@ async def retire_honey_tool(honey_tool_id: UUID, operator: AdminDep, supabase: S
     include_in_schema=False,
 )
 async def report_trip(report: TripReport, supabase: SupabaseDep, telegram: OptionalClientDep) -> TripResponse:
-    return TripResponse(recorded=await service.handle_trip(supabase, telegram, report))
+    recorded = await service.handle_trip(supabase, telegram, report)
+    if recorded:
+        await risk_service.evaluate_agents(supabase, telegram, report.organization_id, [report.agent_id], utcnow())  # never raises
+    return TripResponse(recorded=recorded)
