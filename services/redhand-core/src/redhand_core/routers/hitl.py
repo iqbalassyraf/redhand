@@ -21,6 +21,8 @@ from uuid import UUID
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Path, Request, status
 import httpx
+
+from redhand_core.services.safe_log import safe_error, safe_host
 from pydantic import BaseModel, ConfigDict, Field
 from supabase import AsyncClient
 
@@ -148,14 +150,14 @@ async def trigger_agent_resume_webhook(
             logger.info(
                 "Successfully woke suspended agent for intervention %s via %s",
                 intervention_id,
-                resume_webhook_url,
+                safe_host(resume_webhook_url),
             )
         except httpx.HTTPError as exc:
             logger.error(
-                "Failed to invoke resume_webhook_url '%s' for intervention %s: %s",
-                resume_webhook_url,
+                "Failed to invoke the resume webhook on %s for intervention %s: %s",
+                safe_host(resume_webhook_url),
                 intervention_id,
-                exc,
+                safe_error(exc),
             )
             await (
                 supabase.table("hitl_interventions")
