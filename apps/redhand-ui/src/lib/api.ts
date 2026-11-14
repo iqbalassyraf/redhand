@@ -637,7 +637,7 @@ export const radarApi = {
     t: string,
     body: { radar_mode: "off" | "observe"; output_check_mode: "off" | "observe"; confirm: boolean }
   ) => apiFetch<RadarSettings>("/v1/radar/settings", t, { method: "PUT", body }),
-  findings: (t: string, params: { review_status?: string; kind?: string; before?: string; limit?: number }) => {
+  findings: (t: string, params: { agent_id?: string; review_status?: string; kind?: string; before?: string; limit?: number }) => {
     const query = new URLSearchParams();
     for (const [key, value] of Object.entries(params)) if (value !== undefined && value !== "") query.set(key, String(value));
     const suffix = query.toString();
@@ -731,4 +731,62 @@ export interface SelfTestResult {
 
 export const selfTestApi = {
   run: (t: string) => apiFetch<SelfTestResult>("/v1/radar/self-test", t, { method: "POST" }),
+};
+
+// --- Risk Engine (Phase 4.5 B1) -------------------------------------------------------------------------------------------------
+
+export type RiskLevel = "low" | "elevated" | "high" | "critical";
+
+export interface RiskSignal {
+  signal: string;
+  label: string;
+  recent: number;
+  older: number;
+  points: number;
+  capped: boolean;
+}
+
+export interface AgentRiskSummary {
+  agent_id: string;
+  name: string;
+  status: string;
+  safe_mode: boolean;
+  score: number;
+  level: RiskLevel;
+  /** Signals after the last human release only: what the ladder acts on. */
+  action_score: number;
+  reason: string;
+  released_at: string | null;
+}
+
+export interface RiskLadder {
+  alert_at: number | null;
+  safe_mode_at: number | null;
+  freeze_at: number | null;
+  reaching: { alert: number; safe_mode: number; freeze: number };
+  reaching_agents: { alert: string[]; safe_mode: string[]; freeze: string[] };
+  capabilities: { can_change: boolean };
+}
+
+export interface RiskList {
+  model: string;
+  agents: AgentRiskSummary[];
+  ladder: RiskLadder;
+}
+
+export interface RiskDetail {
+  model: string;
+  agent: AgentRiskSummary & { signals: RiskSignal[]; action_signals: RiskSignal[] };
+  weights: { signal: string; label: string; points: number; cap: number }[];
+  window_days: number;
+}
+
+export const riskApi = {
+  list: (t: string) => apiFetch<RiskList>("/v1/risk/agents", t),
+  detail: (t: string, agentId: string) => apiFetch<RiskDetail>(`/v1/risk/agents/${agentId}`, t),
+  ladder: (t: string) => apiFetch<RiskLadder>("/v1/risk/ladder", t),
+  setLadder: (
+    t: string,
+    body: { alert_at: number | null; safe_mode_at: number | null; freeze_at: number | null; confirm: boolean; reason?: string }
+  ) => apiFetch<RiskLadder>("/v1/risk/ladder", t, { method: "PUT", body }),
 };

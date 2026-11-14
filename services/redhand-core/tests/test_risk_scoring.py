@@ -62,6 +62,11 @@ def test_the_contributions_explain_the_score_largest_first() -> None:
     assert result.reason(limit=1) == "honeytoken or canary trip (3)"
 
 
+def test_capped_means_the_signal_already_adds_its_maximum() -> None:
+    assert assess({Signal.TRIP: Counts(recent=2)}).contributions[0].capped is True  # exactly 80: one more trip adds nothing
+    assert assess({Signal.TRIP: Counts(recent=1)}).contributions[0].capped is False
+
+
 def test_a_signal_that_adds_nothing_is_not_listed() -> None:
     assert assess({Signal.TRIP: Counts(), Signal.LOOP_OPEN: Counts(recent=1)}).contributions[0].signal is Signal.LOOP_OPEN
     assert len(assess({Signal.TRIP: Counts()}).contributions) == 0

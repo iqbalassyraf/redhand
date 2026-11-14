@@ -129,7 +129,8 @@ def assess(counts: dict[Signal, Counts]) -> Assessment:
         raw = c.recent * weight.points + c.older * weight.points * OLDER_FACTOR
         points = min(weight.cap, _round(raw))
         if points > 0:
-            contributions.append(Contribution(signal, LABELS[signal], c.recent, c.older, points, capped=_round(raw) > weight.cap))
+            # capped: this signal already adds the most it can, so more of it would not raise the score
+            contributions.append(Contribution(signal, LABELS[signal], c.recent, c.older, points, capped=points >= weight.cap))
             total += points
     score = min(MAX_SCORE, total)
     contributions.sort(key=lambda item: (-item.points, item.signal.value))
