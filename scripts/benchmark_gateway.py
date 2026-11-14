@@ -62,6 +62,7 @@ def core_handler(request: httpx.Request) -> httpx.Response:
                 "payload_capture": False, "honeytokens": [], "honey_tools": [],
                 "radar_mode": "off", "output_check_mode": "off",
                 "loop_mode": "off", "loop_limit": 20, "loop_window_seconds": 60, "loop_exempt": False,
+                "destination_mode": "off", "allowed_destinations": [],
                 "budget": {
                     "daily_call_limit": None, "used_by_other_instances": 0, "day_key": "2026-11-04",
                     "resets_at": "2026-11-04T16:00:00+00:00", "action": "deny",
