@@ -62,6 +62,20 @@ the page).
 - There is no per-agent throttle rung: none exists to reuse (the loop throttle is organization-wide).
 - A honeytoken can also freeze an agent by itself (its own action); that is separate from the ladder.
 
+## Behaviour baseline (Phase 4.5 B2, watch only)
+The Risk panel also shows **Behaviour (watch only, not part of the score)**. It adds no points, sends no alert and does nothing by itself.
+- **Warming up:** for the first 7 days of an agent's history nothing is judged.
+- **Surge:** this hour's calls are at least 5 times the agent's usual hour (its last 7 days, quiet hours counted) and at least 30.
+- **New tool:** a tool it had not used in the 14 days before it first appeared in the last 24 hours.
+- **The back-test line** says how often these rules would have flagged this agent over the last 168 hours. Read it before trusting a warning:
+  an agent flagged often is noisy, not dangerous. `GET /v1/risk/behaviour/summary` adds these up for the organization.
+- **Limits:** a baseline only catches sudden change; an agent that changes slowly teaches it as it goes. A full recorder buffer can very
+  rarely drop events.
+- **Data:** hourly counts per agent and tool (`agent_tool_hourly`), kept 35 days, built from the Black Box by a database trigger. If
+  "Behaviour could not be read" appears, the score is unaffected; check the database.
+- **Deploy:** migration `20261123000000_behaviour_baseline.sql` (it backfills 30 days once), then core, then the dashboard. Rollback:
+  `supabase/rollbacks/20261123000000_behaviour_baseline.down.sql` (the roll-up only; the Black Box is untouched).
+
 ## Deploy and rollback
 - **Deploy order:** the migration `20261122000000_risk_engine.sql` first (additive), then core, then the dashboard. The gateway does not
   change.
