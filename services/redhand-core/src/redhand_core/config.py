@@ -224,6 +224,19 @@ class Settings(BaseSettings):
             self.OPERATOR_JWT_SECRET = SecretStr(secrets.token_urlsafe(32))
         return self
 
+    @model_validator(mode="after")
+    def _insecure_flags_are_development_only(self) -> Settings:
+        """The ALLOW_INSECURE_* switches turn off the checks that stop core calling an internal address. A shared environment that has one set
+        (forgotten, or copied from a dev file) refuses to start; it never runs with the check off."""
+        if self.ENVIRONMENT in ("development", "test"):
+            return self
+        on = [
+            name for name in ("ALLOW_INSECURE_MCP_URLS", "ALLOW_INSECURE_WEBHOOK_URLS") if getattr(self, name)
+        ]
+        if on:
+            raise ValueError(f"{', '.join(on)} may only be set when ENVIRONMENT is 'development' or 'test'.")
+        return self
+
     @field_validator("TELEGRAM_WEBHOOK_SECRET")
     @classmethod
     def _telegram_secret_shape(cls, v: SecretStr | None) -> SecretStr | None:

@@ -2,9 +2,15 @@
 Environment configuration for AgentWall Zero-Trust Proxy.
 """
 
+from __future__ import annotations
+
 from pathlib import Path
-from pydantic import Field, SecretStr
+from pydantic import Field, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+# Environment names where the development-only switches may be on. Anything else (a typo included) is treated as shared.
+LOCAL_ENVIRONMENTS = frozenset({"development", "dev", "test", "local"})
 
 
 class Settings(BaseSettings):
@@ -130,6 +136,16 @@ class Settings(BaseSettings):
     LOG_LEVEL: str = Field(default="INFO", description="Structured logging level")
     OTEL_SERVICE_NAME: str = Field(default="agentwall-proxy", description="OpenTelemetry service name")
     AUDIT_LOG_FILE: str | None = Field(default=None, description="Optional path to append WORM audit records")
+
+    @model_validator(mode="after")
+    def _insecure_upstreams_are_development_only(self) -> Settings:
+        """ALLOW_INSECURE_UPSTREAMS switches off the destination check. Only a name known to be local may use it; any other value, a typo
+        such as "prod" included, refuses to start (fail closed)."""
+        if self.ALLOW_INSECURE_UPSTREAMS and self.ENVIRONMENT.strip().lower() not in LOCAL_ENVIRONMENTS:
+            raise ValueError(
+                "ALLOW_INSECURE_UPSTREAMS may only be set when ENVIRONMENT is 'development', 'dev', 'test' or 'local'."
+            )
+        return self
 
 
 _settings_instance: Settings | None = None
