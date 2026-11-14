@@ -49,4 +49,4 @@ Checks it against the staging database and Cloud Run (audit rows for loop settin
 ## What this run does not cover
 - The attack side of the Radar on staging (DeepWiki returns only its own pages): the self-test and the local tests cover it.
 - Anything on production, and the Phase 3 items older than 2026-11-09 that the handoff lists as "not verified": they are not re-run here.
-- Real merge order: PRs 59, 61 and 62 need one small fix on `main` after they merge (the benchmark script's fake core must send the loop and destination fields). It is already fixed on `test/night-1` (commit "fix(scripts): benchmark fake core sends the loop and destination fields").
+- Real merge order: PR 61 is already merged. PRs 59 and 62 now carry the matching one-line fix in the benchmark script (loop and destination fields), so `main` stays green as they merge. Planned order: 57, 58, 60, 59, 62, 63, 66, 64, 65; Claude Code confirms it after the night report.
