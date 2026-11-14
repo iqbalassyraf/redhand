@@ -28,6 +28,7 @@
 | **C** | Destination allowlist (M7): host stored in canonical form, watch records, enforce refuses, six bypass attempts all refused, last-host guard, no address text anywhere, roles, cleanup | night-1 brief, Part C (19 steps) | Antigravity + owner (terminal, phone) |
 | **D** | Quieter Radar rules (M4.7b) on the deployed gateway: the self-test shows the exact numbers, three documentation pages that the old rules flagged raise no `RAD-INJ-003`, `RAD-INJ-005` or `RAD-OUT-007` finding, the Coverage page says every round needs a new one | night-1 brief, Part D | Antigravity + owner |
 | **F** | Regression: smoke run, freeze takes effect within 5 seconds, unfreeze, revoke, the Radar switches unchanged | night-1 brief, Part F | Antigravity + owner |
+| **H** | Risk Engine (Phase 4.5 B1), **only if its branch is deployed**: score from trips, one message per event, opt-in freeze acts on the next signal, a person's release is respected, roles | night-1 brief, Part H | Antigravity + owner (terminal, phone) |
 | **E** | Latency with everything on (four runs; budget p50 at most 10 ms, p99 at most 50 ms). It keeps both services warm, so it goes **last** | night-1 brief, Part E | owner runs, Antigravity pastes |
 | **Cleanup** | Every `night-*` and `pin-test` agent revoked, every host removed, every silence removed, loop card back to Watch 20 / 60, services back at minimum 0, no `AGENTWALL_LOOP_DETECTION_ENABLED` or `AGENTWALL_DESTINATION_CHECK_ENABLED` left set, `unset RH_AGENT_KEY RH_INTERNAL_TOKEN` | night-1 brief, Cleanup | everyone |
 

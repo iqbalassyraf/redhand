@@ -124,6 +124,22 @@ PROMISES = [
     ("Script and active markup", "apps/redhand-ui/src/lib/selfTest.ts"),
     ("Helper model: ", RADAR_PAGE),
     ("The rules changed after this round was scored. It needs a new round.", "agentwall/src/bench/gate.py"),
+    # Part H (Risk Engine)
+    ("Risk response saved. It applies from the next signal.", "apps/redhand-ui/src/app/passports/RiskLadderCard.tsx"),
+    ("I understand: RedHand will turn Safe Mode on or freeze agents by itself when their risk score reaches these numbers. A person can undo it.",
+     "apps/redhand-ui/src/lib/riskForm.ts"),
+    ("Freeze (every call refused)", "apps/redhand-ui/src/lib/riskForm.ts"),
+    ("Alert (Telegram message)", "apps/redhand-ui/src/lib/riskForm.ts"),
+    ("honeytoken or canary trip", "services/redhand-core/src/redhand_core/risk/scoring.py"),
+    (" in the last 24 hours", "apps/redhand-ui/src/lib/riskForm.ts"),
+    ("How the score is counted", "apps/redhand-ui/src/app/passports/RiskPanel.tsx"),
+    ("reached a risk score of", "services/redhand-core/src/redhand_core/risk/service.py"),
+    ("Nothing was changed automatically.", "services/redhand-core/src/redhand_core/risk/service.py"),
+    ("frozen it", "services/redhand-core/src/redhand_core/risk/service.py"),
+    ("RedHand Risk Engine", "apps/redhand-ui/src/lib/riskForm.ts"),
+    ("A person released this agent on", "apps/redhand-ui/src/app/passports/RiskPanel.tsx"),
+    ("Elevated", "apps/redhand-ui/src/lib/riskForm.ts"),
+    ("Critical", "apps/redhand-ui/src/lib/riskForm.ts"),
 ]
 
 
