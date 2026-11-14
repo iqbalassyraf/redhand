@@ -165,10 +165,13 @@ async def test_enforce_mode_refuses_a_call_to_an_unapproved_or_changed_tool_and_
 
 
 @pytest.mark.asyncio
-async def test_a_tool_never_listed_through_this_gateway_is_judged_by_name_alone() -> None:
+async def test_a_tool_never_listed_through_this_gateway_is_looked_up_before_it_is_judged() -> None:
+    """Was "judged by name alone" before H4.2: an approved name was enough on an instance that had never listed the tool. It is now looked up
+    first (see test_pin_first_use.py for the refusals); an unchanged tool still works."""
     good = mk("good")
-    h, token, _ = wired([good], "enforce", approved(good))
-    assert "result" in (await h.call(token, params=tool("good"))).body  # no listing yet: the approved name is enough
+    h, token, server = wired([good], "enforce", approved(good))
+    assert "result" in (await h.call(token, params=tool("good"))).body
+    assert [m["method"] for m in server.calls if "method" in m].count("tools/list") == 1
 
 
 @pytest.mark.asyncio

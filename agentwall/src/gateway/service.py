@@ -34,6 +34,7 @@ from .capture import build_excerpt
 from ..firewall.destinations import disallowed, scan_arguments
 from .honeytokens import scan as scan_honeytokens
 from .loops import LoopDecision, LoopMeter
+from .pin_check import FirstUseChecker
 from .pins import PinCoordinator
 from .radar_scan import RadarScanner, kinds_for
 from .recorder import EventRecorder, GatewayEvent
@@ -101,6 +102,8 @@ class McpGateway:
         loop_detection_enabled: bool = True,
         destination_check_enabled: bool = True,
         token_version_check_enabled: bool = True,
+        strict_pinning_enabled: bool = True,
+        redact_upstream_errors_enabled: bool = True,
     ) -> None:
         self.verifier = verifier
         self.contexts = contexts
@@ -126,6 +129,13 @@ class McpGateway:
         # Stale-token check (H4.1). `token_version_check_enabled` is the operator's kill switch: False accepts a token older than the passport
         # again (the pre-H4 behaviour); the passport's current status and scopes still decide every call.
         self.token_version_check_enabled = token_version_check_enabled
+        # Strict pinning (H4.2). `strict_pinning_enabled` is the operator's kill switch: False judges a tool this process never saw listed by
+        # name alone again (the pre-H4 behaviour). True fetches the server's tool list on first use (agentwall/src/gateway/pin_check.py).
+        self.strict_pinning_enabled = strict_pinning_enabled
+        self._first_use = FirstUseChecker(pins=pins, metrics=metrics)
+        # Upstream errors (H4.3). `redact_upstream_errors_enabled` is the operator's kill switch: False passes a JSON-RPC error from the server
+        # through untouched again (secrets and bait in it then reach the agent). True treats an error like a result.
+        self.redact_upstream_errors_enabled = redact_upstream_errors_enabled
         self._destination_refusal_logged: dict[UUID, float] = {}
 
     def _record_budget_refusal(
@@ -358,7 +368,7 @@ class McpGateway:
                 return deny(200, JSONRPC_POLICY_VIOLATION, f"PolicyViolation: tool '{tool_name}' is out of scope.",
                             "out_of_scope", {"tool_name": tool_name, "violations": reasons})
 
-            if context.pin_mode == "enforce" and not self._pin_allows(identity, context, tool_name):
+            if context.pin_mode == "enforce" and not await self._pin_allows(identity, context, tool_name, upstream_authorization):
                 reasons = [f"Tool '{tool_name}' on server '{server}' is not approved: its current version has not been reviewed."]
                 self.metrics.record_pin_event("refused")
                 self._record(identity, context, method, message, "BLOCK", reasons, 403, tool_name, arguments, started)
@@ -518,6 +528,30 @@ class McpGateway:
                 except (TypeError, ValueError):
                     result_size_bytes = None
 
+        if body is not None and "error" in body and self.redact_upstream_errors_enabled:
+            # An error from the server is untrusted text like a result: a credential or a stack trace in its message or data, or a planted bait
+            # value, must not reach the agent. Same checks as a result, same fail-closed rule when the scanner breaks.
+            upstream_error = body["error"]
+            if method == "tools/call":
+                try:
+                    error_bait = scan_honeytokens(upstream_error, context.honeytokens)
+                except Exception as exc:  # noqa: BLE001  the call already ran; a scanner error must not leak the error text
+                    logger.error("Honeytoken scan failed", error_type=type(exc).__name__)
+                    self._record(identity, context, method, message, "BLOCK", ["honeytoken scan failed"], 403, tool_name, arguments, started, capture=False)
+                    return deny(200, JSONRPC_POLICY_VIOLATION, "PolicyViolation: result could not be checked.", "honeytoken_scan_error")
+                if error_bait.truncated:
+                    self.metrics.record_honeytoken_scan_truncated()
+                if error_bait.matched:
+                    for honeytoken_id in error_bait.matched:
+                        self._trip(identity, context, "honeytoken", honeytoken_id, "result", tool_name)
+                    upstream_error = error_bait.value
+                    trip_reasons = ["honeytoken"]
+            redacted_error, error_findings = self.firewall.inspect_egress(upstream_error)
+            if error_findings:
+                logger.warning("Secrets redacted from upstream error", count=len(error_findings), method=method_label)
+            findings = [*findings, *error_findings]
+            body = {**body, "error": redacted_error}
+
         if method == "tools/call":
             self._record(
                 identity, context, method, message, "ALLOW", trip_reasons, result.status_code, tool_name, arguments, started,
@@ -579,13 +613,25 @@ class McpGateway:
             self.metrics.record_pin_event("error")
             return body if context.pin_mode != "enforce" else None
 
-    def _pin_allows(self, identity: AgentIdentity, context: GatewayContext, tool_name: str) -> bool:
-        """Enforce mode: a tool may be called if its name is approved and the version this gateway last saw for it (if it
-        has seen one) is the approved one. A tool never listed through this process is judged by name alone."""
+    async def _pin_allows(
+        self, identity: AgentIdentity, context: GatewayContext, tool_name: str, upstream_authorization: str | None
+    ) -> bool:
+        """Enforce mode: a tool may be called if its name is approved and the CURRENT version of it is the approved one. A tool this process
+        has never seen listed is looked up first (H4.2): when that cannot be done the call is refused, never judged by name alone."""
         if tool_name not in {name for name, _ in context.approved_tools}:
             return False
         last = self.pins.last_digest(identity.organization_id, context.server_slug, tool_name)
-        return last is None or (tool_name, last) in context.approved_tools
+        if last is None:
+            if not self.strict_pinning_enabled:
+                return True  # kill switch: the approved name is enough, as before H4
+            if context.server_url is None:
+                return False
+            last = await self._first_use.digest_for(
+                self.forwarder, identity.organization_id, context.server_slug, context.server_url, tool_name, upstream_authorization
+            )
+            if last is None:
+                return False
+        return (tool_name, last) in context.approved_tools
 
     @staticmethod
     def _add_honey_tools(body: dict[str, Any], context: GatewayContext) -> dict[str, Any]:

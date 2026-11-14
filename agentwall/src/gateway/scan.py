@@ -28,8 +28,11 @@ class ScanError(Exception):
     """The scan could not be completed. The message is safe to show: it never repeats server-supplied text."""
 
 
-async def list_tools(forwarder: UpstreamForwarder, url: str) -> tuple[list[dict[str, Any]], bool]:
-    """Returns (tools, truncated). `truncated` is True when the server had more than MAX_TOOLS tools or MAX_PAGES pages."""
+async def list_tools(
+    forwarder: UpstreamForwarder, url: str, upstream_authorization: str | None = None
+) -> tuple[list[dict[str, Any]], bool]:
+    """Returns (tools, truncated). `truncated` is True when the server had more than MAX_TOOLS tools or MAX_PAGES pages.
+    `upstream_authorization` is the credential an agent supplied for the server (tool pinning's first-use check); a registered-server scan has none."""
     headers: dict[str, str] = {}
     try:
         init = await forwarder.send(
@@ -37,7 +40,7 @@ async def list_tools(forwarder: UpstreamForwarder, url: str) -> tuple[list[dict[
             message={"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {
                 "protocolVersion": PROTOCOL_VERSION, "capabilities": {},
                 "clientInfo": {"name": "redhand-scanner", "version": "1.0"}}},
-            client_headers=headers, upstream_authorization=None,
+            client_headers=headers, upstream_authorization=upstream_authorization,
         )
         if init.message is None or "result" not in init.message:
             raise ScanError("The server did not accept an initialize request.")
@@ -45,7 +48,7 @@ async def list_tools(forwarder: UpstreamForwarder, url: str) -> tuple[list[dict[
             headers["mcp-session-id"] = init.headers["mcp-session-id"]
         await forwarder.send(
             url=url, message={"jsonrpc": "2.0", "method": "notifications/initialized"},
-            client_headers=headers, upstream_authorization=None,
+            client_headers=headers, upstream_authorization=upstream_authorization,
         )
         tools: list[dict[str, Any]] = []
         cursor: str | None = None
@@ -53,7 +56,7 @@ async def list_tools(forwarder: UpstreamForwarder, url: str) -> tuple[list[dict[
             params = {"cursor": cursor} if cursor else {}
             reply = await forwarder.send(
                 url=url, message={"jsonrpc": "2.0", "id": 2 + page, "method": "tools/list", "params": params},
-                client_headers=headers, upstream_authorization=None,
+                client_headers=headers, upstream_authorization=upstream_authorization,
             )
             result = reply.message.get("result") if reply.message else None
             if not isinstance(result, dict) or not isinstance(result.get("tools"), list):
