@@ -18,6 +18,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from supabase import acreate_client
 
 from redhand_core.config import Settings, get_settings
+from redhand_core.middleware.body_limit import BodySizeLimitMiddleware
 from redhand_core.routers.agent_auth import require_internal_service
 from redhand_core.routers.agent_auth import router as agent_auth_router
 from redhand_core.routers.dev import router as dev_router
@@ -123,6 +124,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     app.dependency_overrides[get_supabase_service_client] = _provide_supabase_service_client
 
+    # Added before CORS, so CORS wraps it and a refused body still carries the CORS headers the browser needs to read the 413.
+    app.add_middleware(
+        BodySizeLimitMiddleware,
+        default_limit=active_settings.MAX_REQUEST_BYTES,
+        path_limits={
+            "/internal/v1/events": active_settings.MAX_INGEST_REQUEST_BYTES,
+            "/v1/telemetry": active_settings.MAX_INGEST_REQUEST_BYTES,
+        },
+    )
     app.add_middleware(
         CORSMiddleware,
         allow_origins=active_settings.CORS_ALLOWED_ORIGINS,

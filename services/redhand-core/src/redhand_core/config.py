@@ -182,6 +182,15 @@ class Settings(BaseSettings):
     )
     TELEGRAM_COMMANDS_PER_MINUTE: int = Field(default=20, ge=1, le=120)
 
+    MAX_REQUEST_BYTES: int = Field(
+        default=1024 * 1024, ge=1024, le=16 * 1024 * 1024,
+        description="Largest request body core reads on any route, counted as the bytes arrive. Larger is answered 413.",
+    )
+    MAX_INGEST_REQUEST_BYTES: int = Field(
+        default=16 * 1024 * 1024, ge=1024 * 1024, le=64 * 1024 * 1024,
+        description="The larger cap for the batched ingest routes (gateway event reports, trace ingest): up to 500 events or 250 spans a call.",
+    )
+
     ALLOW_INSECURE_MCP_URLS: bool = Field(
         default=False,
         description="Development only: allow http:// and localhost MCP server URLs.",

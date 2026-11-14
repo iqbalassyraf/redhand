@@ -249,3 +249,20 @@ def test_real_tls_is_verified_against_the_original_name_while_connecting_to_the_
             asyncio.run(call("attacker.test"))
     finally:
         server.shutdown()
+
+
+def test_an_ipv4_mapped_address_is_judged_as_the_ipv4_address_on_every_supported_python() -> None:
+    """Python 3.13 already does this inside is_global; 3.11 and 3.12 do not. A stand-in that reports every address as global proves the
+    explicit unwrap, whatever interpreter runs the test."""
+    import ipaddress
+
+    from redhand_core.net.outbound import _is_public
+
+    class OldInterpreterAddress(ipaddress.IPv6Address):
+        @property
+        def is_global(self) -> bool:
+            return True
+
+    assert _is_public(OldInterpreterAddress("::ffff:10.0.0.1")) is False
+    assert _is_public(OldInterpreterAddress("::ffff:169.254.169.254")) is False
+    assert _is_public(OldInterpreterAddress("::ffff:93.184.216.34")) is True
