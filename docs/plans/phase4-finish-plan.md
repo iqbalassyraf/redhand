@@ -51,11 +51,11 @@ M0, M1 and the M4 sub-plan are built. Other open items:
 | M4.7b | Quieter rules, scan window, new blind round (**plan drafted 2026-11-12**: `docs/plans/phase4-m4-7b-quieter-rules.md`, awaiting approval) | 5, 6 | L | **yes** |
 | M5a | Canary (**built 2026-11-09**: `docs/plans/phase4-m5a-canary.md`; brief `docs/testing/briefs/2026-11-09-m5a-canary.md`; staging test pending) | 7 | S to M | **yes** |
 | M5b | Secrets in prompts and config files (**built 2026-11-12**: `docs/plans/phase4-m5b-secrets-in-files.md`, PR pending) | 8 | M | no (local) |
-| M6 | Loop detection | 9 | M | **yes** |
-| M7 | Per-agent destination allowlist (D10) | new 11 | L | **yes** |
+| M6 | Loop detection (**plan drafted 2026-11-13**: `docs/plans/phase4-m6-loop-detection.md`, awaiting approval) | 9 | M | **yes** |
+| M7 | Per-agent destination allowlist (D10) (**plan drafted 2026-11-13**: `docs/plans/phase4-m7-destination-allowlist.md`, stacked on M6, awaiting approval) | new 11 | L | **yes** |
 | F2 | Closeout: every done test re-run, latency, docs | all | S | **yes** |
 
-F1 needs no code, so it runs while M4.7 is built. M5a, M5b, M6 and M7 do not depend on each other.
+F1 needs no code, so it runs while M4.7 is built. M5a, M5b, M6 and M7 do not depend on each other. **Build-then-test batches (owner decision 2026-11-13):** M4.7b, M6 and M7 are built first and tested together on one night; see `docs/plans/phase4-batch-build.md`. M7 is built on the M6 branch because both change the same migration objects and gateway files.
 
 ### M4.7b Quieter rules
 - Take the text from a split decided **before** any tuning: the 120 repositories become 60 for tuning and 60 frozen, never opened.
