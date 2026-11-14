@@ -116,6 +116,14 @@ PROMISES = [
         "agentwall/config/settings.py",
     ),  # the AGENTWALL_ prefix is applied by the settings class (env_prefix)
     ("AGENTWALL_DESTINATION_CHECK_ENABLED", "docs/runbooks/destination-allowlist.md"),
+    # Part D (self-test and gate)
+    ("A self-test ran a moment ago. Wait about a minute and try again.", "apps/redhand-ui/src/lib/selfTest.ts"),
+    ("Hidden instructions in tool answers", "apps/redhand-ui/src/lib/selfTest.ts"),
+    ("Sensitive file paths", "apps/redhand-ui/src/lib/selfTest.ts"),
+    ("Internal and cloud-metadata addresses", "apps/redhand-ui/src/lib/selfTest.ts"),
+    ("Script and active markup", "apps/redhand-ui/src/lib/selfTest.ts"),
+    ("Helper model: ", RADAR_PAGE),
+    ("The rules changed after this round was scored. It needs a new round.", "agentwall/src/bench/gate.py"),
 ]
 
 
@@ -151,3 +159,14 @@ def test_the_commands_in_the_brief_use_options_the_staging_agent_really_has() ->
 def test_the_brief_never_asks_for_a_secret_to_be_pasted_into_chat() -> None:
     assert "Never paste a key, token or secret into chat" in BRIEF
     assert "NOT RUN is not PASS" in BRIEF and "Do **NOT** read shell history" in BRIEF
+
+
+def test_the_self_test_numbers_in_the_brief_are_what_the_real_self_test_gives() -> None:
+    """Part D D1 quotes numbers. They come from running the same function the gateway runs, so a rule change that moves them fails here."""
+    from agentwall.src.gateway.selftest import run_self_test
+
+    result = run_self_test(False)
+    assert f"sample set {result['corpus']}" in BRIEF and f"on {result['samples']} texts" in BRIEF
+    for row in result["categories"]:
+        assert f"{row['detected']} of {row['malicious']} (" in BRIEF, row["category"]
+        assert f"{row['false_alarms']} of {row['benign']} (at most " in BRIEF, row["category"]
