@@ -72,11 +72,50 @@ class RiskListResponse(BaseModel):
     ladder: LadderView
 
 
+class BehaviourBacktestView(BaseModel):
+    hours: int
+    flagged_hours: int
+    spike_hours: int
+    new_tool_starts: int
+
+
+class BehaviourView(BaseModel):
+    """Phase 4.5 B2, watch only: shown next to the score, never part of it. `status` is "unavailable" when the counts could not be read
+    (the score is still shown); every other field is then at its empty value."""
+
+    status: Literal["ok", "unavailable"]
+    model: str
+    warm: bool = False
+    history_days: int = 0
+    warmup_days: int
+    hour_calls: int = 0
+    usual_hourly: float = 0.0
+    spike_threshold: int = 0
+    spike: bool = False
+    new_tools: list[str] = Field(default_factory=list)
+    warning: bool = False
+    backtest: BehaviourBacktestView | None = None
+
+
 class RiskDetailResponse(BaseModel):
     model: str
     agent: AgentRiskDetail
     weights: list[RiskWeightView]
     window_days: int = 7
+    behaviour: BehaviourView | None = None
+
+
+class BehaviourSummaryResponse(BaseModel):
+    """How noisy the behaviour baseline would be for this organization: counts only, so it can be judged before it is given weight."""
+
+    model: str
+    agents: int
+    warm_agents: int
+    warnings_now: int
+    spikes_now: int
+    new_tools_now: int
+    backtest: BehaviourBacktestView
+    flagged_agents: list[str]  # names of agents with a warning now, at most 10
 
 
 class LadderRequest(BaseModel):

@@ -23,8 +23,12 @@ from redhand_core.auth.operator import OperatorContext, Role
 from redhand_core.passports import service as passport_service
 from redhand_core.passports.budget import SYSTEM_ACTOR_ID
 from redhand_core.passports.service import _require_confirmation, _rpc
+from redhand_core.risk.behaviour import BEHAVIOUR_MODEL, WARMUP_DAYS, Behaviour, HourCount, assess_behaviour, read_since
 from redhand_core.risk.models import (
     AgentRiskDetail,
+    BehaviourBacktestView,
+    BehaviourSummaryResponse,
+    BehaviourView,
     AgentRiskSummary,
     LadderCapabilities,
     LadderRequest,
@@ -168,6 +172,77 @@ async def get_agent_risk(supabase: Any, operator: OperatorContext, agent_id: UUI
         model=RISK_MODEL,
         agent=AgentRiskDetail(**summary.model_dump(), signals=_signals(shown), action_signals=_signals(action)),
         weights=[RiskWeightView(signal=s.value, label=LABELS[s], points=w.points, cap=w.cap) for s, w in WEIGHTS.items()],
+        behaviour=await _agent_behaviour(supabase, operator.organization_id, agent_id, now),
+    )
+
+
+# --- behaviour baseline (Phase 4.5 B2, watch only) ------------------------------------------------------------------------------
+
+async def load_behaviour_rows(supabase: Any, organization_id: UUID, agent_id: UUID | None, now: datetime) -> dict[str, list[HourCount]]:
+    """Hourly counts per agent id for the 21 days the rules need. Raises APIError: the callers decide what a failure means."""
+    res = await supabase.rpc(
+        "agent_behaviour_hours",
+        {"p_org": str(organization_id), "p_agent": str(agent_id) if agent_id else None, "p_since": read_since(now).isoformat(),
+         "p_until": now.isoformat()},
+    ).execute()
+    out: dict[str, list[HourCount]] = {}
+    for row in res.data or []:
+        out.setdefault(str(row["agent_id"]), []).append(
+            HourCount(hour=datetime.fromisoformat(str(row["hour"])), tool=str(row["tool_name"]), calls=int(row["calls"]))
+        )
+    return out
+
+
+def _backtest_view(b: Behaviour) -> BehaviourBacktestView:
+    return BehaviourBacktestView(hours=b.backtest.hours, flagged_hours=b.backtest.flagged_hours, spike_hours=b.backtest.spike_hours,
+                                 new_tool_starts=b.backtest.new_tool_starts)
+
+
+def behaviour_view(b: Behaviour) -> BehaviourView:
+    v = b.verdict
+    return BehaviourView(
+        status="ok", model=b.model, warm=v.warm, history_days=v.history_days, warmup_days=WARMUP_DAYS, hour_calls=v.hour_calls,
+        usual_hourly=v.usual_hourly, spike_threshold=v.spike_threshold, spike=v.spike, new_tools=list(v.new_tools), warning=b.warning,
+        backtest=_backtest_view(b),
+    )
+
+
+async def _agent_behaviour(supabase: Any, organization_id: UUID, agent_id: UUID, now: datetime) -> BehaviourView:
+    try:
+        rows = (await load_behaviour_rows(supabase, organization_id, agent_id, now)).get(str(agent_id), [])
+    except APIError as exc:
+        # Watch-only information: if it cannot be read, say so and still show the score.
+        logger.warning("Behaviour counts could not be read: sqlstate=%s", exc.code)
+        return BehaviourView(status="unavailable", model=BEHAVIOUR_MODEL, warmup_days=WARMUP_DAYS)
+    return behaviour_view(assess_behaviour(rows, now))
+
+
+async def behaviour_summary(supabase: Any, operator: OperatorContext, now: datetime) -> BehaviourSummaryResponse:
+    agents = [a for a in await _agents(supabase, operator.organization_id) if a.get("status") == ACTIVE]
+    try:
+        rows = await load_behaviour_rows(supabase, operator.organization_id, None, now)
+    except APIError as exc:
+        logger.error("Behaviour counts could not be read: sqlstate=%s", exc.code)
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "Behaviour counts could not be read. Try again shortly.") from None
+    warm = warnings = spikes = new_now = hours = flagged = spike_hours = starts = 0
+    flagged_names: list[str] = []
+    for agent in sorted(agents, key=lambda a: str(a.get("name") or "")):
+        b = assess_behaviour(rows.get(str(agent["id"]), []), now)
+        warm += int(b.verdict.warm)
+        spikes += int(b.verdict.spike)
+        new_now += len(b.verdict.new_tools)
+        if b.warning:
+            warnings += 1
+            if len(flagged_names) < 10:
+                flagged_names.append(str(agent.get("name") or ""))
+        hours += b.backtest.hours
+        flagged += b.backtest.flagged_hours
+        spike_hours += b.backtest.spike_hours
+        starts += b.backtest.new_tool_starts
+    return BehaviourSummaryResponse(
+        model=BEHAVIOUR_MODEL, agents=len(agents), warm_agents=warm, warnings_now=warnings, spikes_now=spikes, new_tools_now=new_now,
+        backtest=BehaviourBacktestView(hours=hours, flagged_hours=flagged, spike_hours=spike_hours, new_tool_starts=starts),
+        flagged_agents=flagged_names,
     )
 
 
