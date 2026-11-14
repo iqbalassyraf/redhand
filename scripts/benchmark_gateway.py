@@ -35,7 +35,11 @@ from agentwall.src.gateway.budget import BudgetMeter
 from agentwall.src.gateway.context import CoreContextClient
 from agentwall.src.gateway.identity import AgentTokenVerifier
 from agentwall.src.gateway.metrics import GatewayMetrics
+from agentwall.src.gateway.pins import PinCoordinator
+from agentwall.src.gateway.radar_scan import RadarScanner
+from agentwall.src.gateway.recorder import EventRecorder
 from agentwall.src.gateway.service import McpGateway
+from agentwall.src.gateway.trips import TripDispatcher
 from agentwall.src.gateway.upstream import UpstreamForwarder
 from agentwall.src.telemetry.audit_logger import TamperEvidentAuditLogger
 
@@ -53,12 +57,17 @@ def core_handler(request: httpx.Request) -> httpx.Response:
                 "scopes": [{"server": "xero", "tool": "list_invoices", "access": "read"}],
                 "expires_at": "2099-01-01T00:00:00+00:00",
                 "safe_mode": False,
+                # Every field the gateway REQUIRES from core: a core that omits one makes the lookup fail and the call is denied, so
+                # a benchmark without them measures nothing. Keep this list in step with `_AgentPayload` in gateway/context.py.
+                "payload_capture": False, "honeytokens": [], "honey_tools": [],
+                "radar_mode": "off", "output_check_mode": "off",
+                "loop_mode": "off", "loop_limit": 20, "loop_window_seconds": 60, "loop_exempt": False,
                 "budget": {
                     "daily_call_limit": None, "used_by_other_instances": 0, "day_key": "2026-11-04",
                     "resets_at": "2026-11-04T16:00:00+00:00", "action": "deny",
                 },
             },
-            "server": {"slug": "xero", "url": "https://mcp.example.com/x"},
+            "server": {"slug": "xero", "url": "https://mcp.example.com/x", "pin_mode": "off", "approved_tools": []},
         },
     )
 
@@ -75,6 +84,18 @@ class _NullReporter:
 
     async def send(self, instance_id: str, items: list[dict[str, Any]]) -> bool:
         return True
+
+
+class _NullEventReporter:
+    async def send(self, instance_id: str, batch_id: str, organization_id: Any, items: list[dict[str, Any]]) -> bool:
+        return True
+
+
+class _NullOutcomeReporter:
+    """For the trip, pin and finding reporters: they all take one item and answer "ok"."""
+
+    async def send(self, item: Any) -> str:
+        return "ok"
 
 
 def build(ttl: float) -> tuple[McpGateway, str]:
@@ -100,6 +121,10 @@ def build(ttl: float) -> tuple[McpGateway, str]:
         audit_logger=TamperEvidentAuditLogger(),
         metrics=GatewayMetrics(),
         budget=BudgetMeter(instance_id="benchmark-gateway-0001", reporter=_NullReporter()),
+        recorder=EventRecorder(instance_id="benchmark-gateway-0001", reporter=_NullEventReporter()),
+        trips=TripDispatcher(reporter=_NullOutcomeReporter(), retry_delays=()),
+        pins=PinCoordinator(reporter=_NullOutcomeReporter(), retry_delays=()),
+        radar=RadarScanner(reporter=_NullOutcomeReporter(), retry_delays=()),
     )
     return gateway, token
 
