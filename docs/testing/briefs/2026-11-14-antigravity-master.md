@@ -1,6 +1,6 @@
 # Master checklist for Antigravity: everything to test, in order
 
-- **Date:** 2026-11-14. **Written by:** Claude Code. **Run by:** Antigravity with the owner. **One branch:** `test/night-1` (a throwaway integration branch that merges PRs 57 to 66; nothing on `main` changes; the owner merges the real PRs one by one afterwards).
+- **Date:** 2026-11-14. **Written by:** Claude Code. **Run by:** Antigravity with the owner. **One branch:** `feat/h4-enforcement-tightening` (it contains `test/night-1` and PRs 57 to 72, so one deploy covers every part; nothing on `main` changes; the owner merges the real PRs one by one afterwards, in the order in the handoff).
 - **What this is:** the list of every test that is open, with the file that holds its steps. The steps themselves are **not** copied here: open the file and follow it exactly. Each part stands alone; a failure in one does not stop the others.
 
 ## Read first (the owner's rules, they apply to every part)
@@ -22,7 +22,7 @@
 ## The run, in this order
 | Part | What it proves | Steps are in | Who |
 |---|---|---|---|
-| **0** | Migrations applied, core then gateway then dashboard deployed, `smoke.sh` ends "ALL CHECKS PASSED" (13 checks). **If this fails, stop and report.** | `docs/testing/briefs/2026-11-13-night-1.md`, Part 0 | owner, Antigravity watches and records |
+| **0** | The four migrations applied (loop, destination, risk engine, behaviour baseline),  core then gateway then dashboard deployed, `smoke.sh` ends "ALL CHECKS PASSED" (13 checks). **If this fails, stop and report.** | `docs/testing/briefs/2026-11-13-night-1.md`, Part 0 | owner, Antigravity watches and records |
 | **A** | Tool pinning in enforce mode (Phase 4 done test 4): the unapproved tool is hidden and refused, the operator cannot approve, mode restored | `docs/testing/briefs/2026-11-12-f1b-tool-pin-enforce.md` (all steps, as written) | Antigravity + owner (terminal) |
 | **B** | Loop detection (M6): watch, Telegram alert (one per 10 minutes), finding `RAD-LOOP-001`, throttle refuses call 5 and later, refused calls use no budget, Black Box, recovery, exemption, roles, cleanup | night-1 brief, Part B (17 steps) | Antigravity + owner (terminal, phone) |
 | **C** | Destination allowlist (M7): host stored in canonical form, watch records, enforce refuses, six bypass attempts all refused, last-host guard, no address text anywhere, roles, cleanup | night-1 brief, Part C (19 steps) | Antigravity + owner (terminal, phone) |
@@ -56,3 +56,7 @@ Checks it against the staging database and Cloud Run (audit rows for loop settin
 - The attack side of the Radar on staging (DeepWiki returns only its own pages): the self-test and the local tests cover it.
 - Anything on production, and the Phase 3 items older than 2026-11-09 that the handoff lists as "not verified": they are not re-run here.
 - Real merge order: PR 61 is already merged. PRs 59 and 62 now carry the matching one-line fix in the benchmark script (loop and destination fields), so `main` stays green as they merge. Planned order: 57, 58, 60, 59, 62, 63, 66, 64, 65; Claude Code confirms it after the night report.
+
+## Run order (everything, in sequence)
+0, A, B, C, D, F, H, I, J, K, then L (L1 to L5 and L8), then start a **20-minute wait with no call to the gateway** (use it for the blind round 4 job), then M, then L6 and L7 (they block the owner's address for about a minute), then E (latency, last), then Cleanup and the report.
+**Dashboard:** test it on a Vercel preview of this branch (add the preview's origin to `DASHBOARD_ORIGIN` when deploying core and the gateway) so production does not change until the owner merges.
