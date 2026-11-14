@@ -15,7 +15,7 @@ from __future__ import annotations
 
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, BackgroundTasks, Depends
 
 from redhand_core.blackbox import service as blackbox_service
 from redhand_core.blackbox.models import EventIngestRequest, EventIngestResponse
@@ -36,12 +36,16 @@ SupabaseDep = Annotated[Any, Depends(get_supabase_service_client)]
     dependencies=[Depends(require_internal_service)],
     include_in_schema=False,
 )
-async def ingest_events(report: EventIngestRequest, supabase: SupabaseDep, telegram: OptionalClientDep) -> EventIngestResponse:
+async def ingest_events(
+    report: EventIngestRequest, supabase: SupabaseDep, telegram: OptionalClientDep, background: BackgroundTasks
+) -> EventIngestResponse:
     accepted, rejected = await blackbox_service.ingest_events(
         supabase, report.instance_id, report.batch_id, report.organization_id, report.items
     )
-    # A refused call is a risk signal; only agents with a BLOCK in this batch are evaluated (most batches have none). Never raises.
+    # A refused call is a risk signal; only agents with a BLOCK in this batch are evaluated (most batches have none). The evaluation runs AFTER
+    # the reply: the gateway's report timeout is 5 s, and scoring (bounded to 5 s itself) used to run inside the request, so a slow
+    # database could make the gateway time out and resend a batch that had already been stored. It never raises.
     blocked = [item.agent_id for item in report.items if item.decision == "BLOCK"]
     if accepted and blocked:
-        await risk_service.evaluate_agents(supabase, telegram, report.organization_id, blocked, utcnow())
+        background.add_task(risk_service.evaluate_agents, supabase, telegram, report.organization_id, blocked, utcnow())
     return EventIngestResponse(accepted=accepted, rejected=rejected)
