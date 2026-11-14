@@ -184,6 +184,31 @@ class McpGateway:
         client_headers: dict[str, str],
         upstream_authorization: str | None,
     ) -> GatewayResponse:
+        """
+        Decides one message and forwards it if allowed. On the enforcement path any unexpected error is a deny (CLAUDE.md 6.2): whatever
+        goes wrong inside, the caller gets a generic JSON-RPC error (no type, no text, no stack), never an unhandled exception and an
+        HTTP 500, and the failure is logged by type only and counted.
+        """
+        try:
+            return await self._handle(
+                server=server, message=message, bearer_token=bearer_token, client_headers=client_headers,
+                upstream_authorization=upstream_authorization,
+            )
+        except Exception as exc:  # noqa: BLE001  enforcement path: an unexpected error denies
+            logger.error("Gateway request failed unexpectedly", error_type=type(exc).__name__)
+            self.metrics.record(method="other", outcome="error", reason="internal_error", overhead_ms=0.0)
+            request_id = message.get("id") if isinstance(message, dict) else None
+            return GatewayResponse(503, _error(request_id, JSONRPC_GATEWAY_UNAVAILABLE, "The gateway could not process this request."))
+
+    async def _handle(
+        self,
+        *,
+        server: str,
+        message: Any,
+        bearer_token: str | None,
+        client_headers: dict[str, str],
+        upstream_authorization: str | None,
+    ) -> GatewayResponse:
         started = time.perf_counter()
         self.recorder.schedule_flush_if_due()  # synchronous, no I/O: starts a background flush at most
         request_id = message.get("id") if isinstance(message, dict) else None
