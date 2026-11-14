@@ -115,6 +115,11 @@ class Settings(BaseSettings):
         default=True,
         description="Kill switch for the destination allowlist (Phase 4 M7). False skips the check entirely, whatever an agent's mode says.",
     )
+    TOKEN_VERSION_CHECK_ENABLED: bool = Field(
+        default=True,
+        description="Kill switch for the stale-token check (H4.1). False accepts a token issued for an older passport version again "
+        "(a token from before an unfreeze, or before a scope or expiry change). Status and scopes still decide every call.",
+    )
     RADAR_MODEL_ENABLED: bool = Field(
         default=False,
         description="Also run the second-stage injection model in the Radar's background scan (about 8 ms more CPU per large result, never inline).",

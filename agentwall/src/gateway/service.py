@@ -100,6 +100,7 @@ class McpGateway:
         loops: LoopMeter | None = None,
         loop_detection_enabled: bool = True,
         destination_check_enabled: bool = True,
+        token_version_check_enabled: bool = True,
     ) -> None:
         self.verifier = verifier
         self.contexts = contexts
@@ -122,6 +123,9 @@ class McpGateway:
         self._loop_evictions_seen = 0
         # Destination allowlist (Phase 4 M7). `destination_check_enabled` is the operator's kill switch: False skips the check whatever core says.
         self.destination_check_enabled = destination_check_enabled
+        # Stale-token check (H4.1). `token_version_check_enabled` is the operator's kill switch: False accepts a token older than the passport
+        # again (the pre-H4 behaviour); the passport's current status and scopes still decide every call.
+        self.token_version_check_enabled = token_version_check_enabled
         self._destination_refusal_logged: dict[UUID, float] = {}
 
     def _record_budget_refusal(
@@ -286,6 +290,12 @@ class McpGateway:
                 403, JSONRPC_PASSPORT_INACTIVE, f"Agent passport is {context.status}.",
                 f"passport_{context.status}", {"passport_status": context.status},
             )
+        # A token issued for an older passport version is refused, so a token from before a freeze, an expiry change or a scope change cannot
+        # come back to life afterwards (an unfreeze makes the passport active again). Only an OLDER token is stale: a newer one means this
+        # gateway's cached context lags a change by at most its TTL, which already bounds every other decision.
+        if self.token_version_check_enabled and identity.passport_version < context.passport_version:
+            self._record(identity, context, method, message, "BLOCK", ["token_stale"], 401, started=started)
+            return deny(401, JSONRPC_UNAUTHORIZED, "Agent access token is out of date. Request a new one.", "token_stale")
         if context.server_url is None:
             return deny(404, JSONRPC_UNKNOWN_SERVER, f"Unknown MCP server '{server}'.", "unknown_server")
         if method not in ALLOWED_METHODS:
