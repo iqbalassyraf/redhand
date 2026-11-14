@@ -27,7 +27,7 @@ from pydantic import BaseModel, ValidationError
 from redhand_core.auth.operator import AdminDep
 from redhand_core.config import Settings, get_settings
 from redhand_core.passports.models import utcnow
-from redhand_core.routers.agent_auth import SlidingWindowLimiter
+from redhand_core.services.rate_limit import SlidingWindowLimiter
 from redhand_core.routers.telemetry import get_supabase_service_client
 from redhand_core.telegram.bot import (
     CODE_TTL_SECONDS,

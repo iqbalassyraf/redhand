@@ -35,7 +35,7 @@ from redhand_core.blackbox.models import (
     PayloadCaptureRequest,
     VerifyResponse,
 )
-from redhand_core.routers.agent_auth import SlidingWindowLimiter
+from redhand_core.services.rate_limit import SlidingWindowLimiter
 from redhand_core.routers.telemetry import get_supabase_service_client
 
 router = APIRouter(tags=["Black Box Recorder"])

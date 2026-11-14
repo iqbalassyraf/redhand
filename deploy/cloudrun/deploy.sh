@@ -204,7 +204,7 @@ deploy_core() {
   gcloud run deploy redhand-core --image "$IMAGE" --region "$REGION" --project "$PROJECT_ID" \
     --service-account "$(sa_email "$CORE_SA")" \
     --allow-unauthenticated --min-instances 0 --max-instances 1 --cpu 1 --memory 512Mi --timeout 300 \
-    --set-env-vars "^@^ENVIRONMENT=staging@LOG_LEVEL=INFO@SUPABASE_URL=${SUPABASE_URL}@OPERATOR_JWKS_URL=${SUPABASE_URL}/auth/v1/.well-known/jwks.json@OPERATOR_JWT_ISSUER=${SUPABASE_URL}/auth/v1@CORS_ALLOWED_ORIGINS=$(cors_json)$(telegram_env_args)$(gateway_env_args)" \
+    --set-env-vars "^@^ENVIRONMENT=staging@LOG_LEVEL=INFO@SUPABASE_URL=${SUPABASE_URL}@OPERATOR_JWKS_URL=${SUPABASE_URL}/auth/v1/.well-known/jwks.json@OPERATOR_JWT_ISSUER=${SUPABASE_URL}/auth/v1@TRUSTED_PROXY_HOPS=1@CORS_ALLOWED_ORIGINS=$(cors_json)$(telegram_env_args)$(gateway_env_args)" \
     --set-secrets "SUPABASE_SERVICE_ROLE_KEY=${SECRET_SUPABASE}:latest,INTERNAL_SERVICE_TOKEN=${SECRET_INTERNAL}:latest,AGENT_TOKEN_SIGNING_KEY=${SECRET_SIGNING}:latest$(telegram_secret_args)"
   say "redhand-core: $(service_url redhand-core)"
   if secret_exists "$SECRET_TG_TOKEN" && [ -z "$TELEGRAM_BOT_USERNAME" ]; then
@@ -220,7 +220,7 @@ deploy_gateway() {
   gcloud run deploy redhand-gateway --image "$IMAGE" --region "$REGION" --project "$PROJECT_ID" \
     --service-account "$(sa_email "$GATEWAY_SA")" \
     --allow-unauthenticated --min-instances 0 --max-instances 1 --cpu-throttling --cpu 1 --memory 512Mi --timeout 300 \
-    --set-env-vars "^@^AGENTWALL_ENVIRONMENT=staging@AGENTWALL_CORE_URL=${core_url}@AGENTWALL_CONTEXT_CACHE_TTL_SECONDS=2@AGENTWALL_CORS_ALLOWED_ORIGINS=$(cors_json)" \
+    --set-env-vars "^@^AGENTWALL_ENVIRONMENT=staging@AGENTWALL_CORE_URL=${core_url}@AGENTWALL_CONTEXT_CACHE_TTL_SECONDS=2@AGENTWALL_TRUSTED_PROXY_HOPS=1@AGENTWALL_CORS_ALLOWED_ORIGINS=$(cors_json)" \
     --set-secrets "AGENTWALL_CORE_SERVICE_TOKEN=${SECRET_INTERNAL}:latest"
   say "gateway: $(service_url redhand-gateway)"
 }

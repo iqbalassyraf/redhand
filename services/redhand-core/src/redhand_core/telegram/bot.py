@@ -34,7 +34,7 @@ from redhand_core.config import Settings
 from redhand_core.passports import budget as budget_rules
 from redhand_core.passports import service
 from redhand_core.passports.models import PassportView, utcnow
-from redhand_core.routers.agent_auth import SlidingWindowLimiter
+from redhand_core.services.rate_limit import SlidingWindowLimiter
 from redhand_core.services.metrics import get_metrics
 from redhand_core.telegram.client import TelegramClient
 from redhand_core.telegram.models import TelegramUpdate
@@ -332,12 +332,13 @@ async def handle_update(
     name = command.name if command.name in {"start", "help", "link", "status", "freeze_all", "freeze", "safemode", "usage"} else "other"
 
     try:
+        # The limit comes first: it costs no database write, so a flood from one chat is dropped before it becomes a flood of claims.
+        if not _command_limiter.allow(str(chat_id), settings.TELEGRAM_COMMANDS_PER_MINUTE, monotonic()):
+            _count(name, "rate_limited")
+            return
         claim = await supabase.rpc("telegram_claim_update", {"p_update_id": update.update_id}).execute()
         if claim.data is not True:
             _count(name, "duplicate")
-            return
-        if not _command_limiter.allow(str(chat_id), settings.TELEGRAM_COMMANDS_PER_MINUTE, monotonic()):
-            _count(name, "rate_limited")
             return
 
         reply, alert, operator = await _dispatch(supabase, chat_id, command, now(), monotonic())

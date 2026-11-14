@@ -23,7 +23,13 @@ def make_settings(**overrides: Any) -> Settings:
         "OPERATOR_JWT_SECRET": SecretStr(TEST_OPERATOR_SECRET),
     }
     base.update(overrides)
-    return Settings(**base)
+    environment = base.get("ENVIRONMENT", "test")
+    if environment in ("development", "test"):
+        return Settings(**base)
+    # A shared environment cannot be configured with the HS256 test secret (H3.4), but these tests exercise what differs outside development
+    # (signing key required, no dev login, no local store), not operator sign-in. Build the settings as "test", then switch the environment
+    # without re-running the startup rules; those rules have their own tests.
+    return Settings(**{**base, "ENVIRONMENT": "test"}).model_copy(update={"ENVIRONMENT": environment})
 
 
 def make_client(store: Any | None = None, **settings_overrides: Any) -> tuple[TestClient, Settings]:

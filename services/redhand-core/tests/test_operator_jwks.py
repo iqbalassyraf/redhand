@@ -321,9 +321,17 @@ def test_both_modes_together_are_refused_outside_development() -> None:
         )
 
 
-def test_hs256_mode_still_works_for_a_shared_secret_in_staging() -> None:
-    ok = Settings(ENVIRONMENT="staging", OPERATOR_JWT_SECRET=SecretStr("s" * 40))
-    assert ok.OPERATOR_JWKS_URL is None
+@pytest.mark.parametrize("environment", ["staging", "production"])
+def test_hs256_shared_secret_mode_is_refused_outside_development_and_test(environment: str) -> None:
+    """Changed in H3.4 (was: "still works in staging"). A shared secret both verifies and mints operator tokens, so anyone holding it can sign
+    in as any operator in any organization; shared environments use asymmetric keys (JWKS)."""
+    with pytest.raises(ValidationError, match="only allowed when ENVIRONMENT is 'development' or 'test'"):
+        Settings(ENVIRONMENT=environment, OPERATOR_JWT_SECRET=SecretStr("s" * 40))
+
+
+@pytest.mark.parametrize("environment", ["development", "test"])
+def test_hs256_shared_secret_mode_still_works_for_local_development_and_tests(environment: str) -> None:
+    assert Settings(ENVIRONMENT=environment, OPERATOR_JWT_SECRET=SecretStr("s" * 40)).OPERATOR_JWKS_URL is None
 
 
 # ---------------------------------------------------------------------------

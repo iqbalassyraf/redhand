@@ -112,7 +112,10 @@ async def scan_registered_server(
         response = await gateway.post(
             "/internal/v1/scan",
             json={"server_url": server["url"], "server_name": _plain(server["slug"], 128)},
-            headers={"Authorization": f"Bearer {settings.INTERNAL_SERVICE_TOKEN.get_secret_value()}"},
+            headers={
+                "Authorization": f"Bearer {settings.INTERNAL_SERVICE_TOKEN.get_secret_value()}",
+                "X-RedHand-Organization": str(operator.organization_id),  # picks the gateway's per-organization scan budget
+            },
         )
     except httpx.HTTPError as exc:
         logger.error("Gateway scan request failed: %s", type(exc).__name__)

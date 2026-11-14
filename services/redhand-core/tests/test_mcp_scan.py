@@ -98,6 +98,14 @@ def test_an_admin_scans_a_registered_server_and_the_gateway_is_called_with_the_d
     assert call.headers["authorization"] == f"Bearer {SERVICE_TOKEN}"
 
 
+def test_the_scan_names_the_operators_organization_so_the_gateway_limits_per_organization(env: Env) -> None:
+    from redhand_core.services.local_store import DEFAULT_ORG_ID
+
+    env.scan(env.register()["id"])
+    (call,) = env.gateway.calls
+    assert call.headers["x-redhand-organization"] == str(DEFAULT_ORG_ID)
+
+
 @pytest.mark.parametrize(("user", "expected"), [("viewer", 403), ("operator", 403), ("admin", 200), ("owner", 200)])
 def test_only_admins_and_owners_can_scan(env: Env, user: str, expected: int) -> None:
     server = env.register()

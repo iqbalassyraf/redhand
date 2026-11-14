@@ -17,7 +17,7 @@ import json
 import math
 import time
 from typing import Annotated, Any, AsyncGenerator
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Path, Query, Request, status
 from fastapi.middleware.cors import CORSMiddleware
@@ -32,7 +32,9 @@ from .gateway.scan import ScanError, list_tools
 from .gateway.budget import BudgetMeter, HttpUsageReporter
 from .gateway.loops import LoopMeter
 from .gateway.context import CoreContextClient
+from .gateway.rate_limit import SlidingWindowLimiter
 from .gateway.security_headers import SecurityHeadersMiddleware
+from .gateway.source import client_source
 from .gateway.identity import AgentTokenVerifier
 from .gateway.metrics import GatewayMetrics
 from .gateway.pins import HttpPinReporter, PinCoordinator
@@ -168,22 +170,8 @@ def require_service_token(
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Service credentials required.")
 
 
-class _IpRateLimiter:
-    def __init__(self) -> None:
-        self._hits: dict[str, list[float]] = {}
-
-    def allow(self, key: str, limit: int, now: float) -> bool:
-        recent = [t for t in self._hits.get(key, []) if now - t < 60.0]
-        if len(recent) >= limit:
-            self._hits[key] = recent
-            return False
-        recent.append(now)
-        self._hits[key] = recent
-        return True
-
-
-_vet_limiter = _IpRateLimiter()
-_scan_limiter = _IpRateLimiter()
+_vet_limiter = SlidingWindowLimiter()  # per real caller address
+_scan_limiter = SlidingWindowLimiter()  # per organization
 
 
 def _reject_constant(name: str) -> Any:
@@ -267,7 +255,7 @@ async def mcp_gateway_stream(server: str) -> Response:
 @app.post("/v1/mcp/vet", status_code=status.HTTP_200_OK, response_model=MCPVettingReport)
 async def vet_mcp_manifest(request: Request) -> MCPVettingReport:
     """Static vetting of an MCP manifest supplied in the body. Fetches nothing."""
-    client_ip = request.client.host if request.client else "unknown"
+    client_ip = client_source(request.scope, settings.TRUSTED_PROXY_HOPS)
     if not _vet_limiter.allow(client_ip, VET_REQUESTS_PER_MINUTE, time.monotonic()):
         raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail="Too many requests.")
     manifest = await _read_json_body(request, MAX_VET_BYTES)
@@ -292,13 +280,25 @@ class ScanResponse(BaseModel):
     truncated: bool
 
 
+def _organization_bucket(value: str | None) -> str:
+    try:
+        return str(UUID(value)) if value else "unknown"
+    except ValueError:
+        return "unknown"
+
+
 SCAN_REQUESTS_PER_MINUTE = 20
 
 
 @app.post("/internal/v1/scan", response_model=ScanResponse, dependencies=[Depends(require_service_token)], include_in_schema=False)
-async def scan_registered_server(payload: ScanRequest) -> ScanResponse:
-    """Lists a registered server's tools through the gateway's destination check and audits them. Service token only."""
-    if not _scan_limiter.allow("scan", SCAN_REQUESTS_PER_MINUTE, time.monotonic()):
+async def scan_registered_server(
+    payload: ScanRequest,
+    organization: Annotated[str | None, Header(alias="X-RedHand-Organization")] = None,
+) -> ScanResponse:
+    """Lists a registered server's tools through the gateway's destination check and audits them. Service token only. The organization header
+    comes from core (which authenticated the operator); it only chooses which budget is used, so one organization's scans cannot use up
+    another's. Anything missing or not a UUID shares one fixed bucket: a made-up value never opens a fresh one."""
+    if not _scan_limiter.allow(f"scan:{_organization_bucket(organization)}", SCAN_REQUESTS_PER_MINUTE, time.monotonic()):
         raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail="Too many scans; try again shortly.")
     try:
         tools, truncated = await list_tools(gateway.forwarder, payload.server_url)

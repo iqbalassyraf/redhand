@@ -438,6 +438,22 @@ def test_commands_are_rate_limited_per_chat() -> None:
     assert len(limited.fake.to(OWNER_CHAT)) == 3
 
 
+def test_a_rate_limited_chat_does_not_cost_a_database_write_per_message() -> None:
+    """The limit is checked before the update is claimed: a flood of messages from one chat must not become a flood of writes (H3.3)."""
+    limited = Env(TELEGRAM_COMMANDS_PER_MINUTE=3)
+    calls: list[str] = []
+    original = limited.store.rpc
+
+    def spy(name: str, params: Any = None) -> Any:
+        calls.append(name)
+        return original(name, params)
+
+    limited.store.rpc = spy  # type: ignore[method-assign]
+    for _ in range(10):
+        limited.send("/status")
+    assert calls.count("telegram_claim_update") == 3, calls
+
+
 def test_a_failure_is_reported_and_nothing_is_half_done(env: Env, monkeypatch: pytest.MonkeyPatch) -> None:
     env.register("Alpha")
     env.link()

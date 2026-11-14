@@ -106,10 +106,9 @@ class Settings(BaseSettings):
     OPERATOR_JWT_SECRET: SecretStr | None = Field(
         default=None,
         description=(
-            "HS256 mode: the shared secret that signs operator access tokens (a Supabase "
-            "project still on its legacy JWT secret, and local development). In "
-            "development/test a random per-process secret is generated when unset. "
-            "Mutually exclusive with OPERATOR_JWKS_URL."
+            "HS256 mode: the shared secret that signs operator access tokens. Local development and tests only: any other "
+            "ENVIRONMENT refuses to start with it set. In development/test a random per-process secret is generated when "
+            "unset. Mutually exclusive with OPERATOR_JWKS_URL."
         ),
     )
     OPERATOR_JWKS_URL: str | None = Field(
@@ -147,6 +146,15 @@ class Settings(BaseSettings):
     )
     AGENT_TOKEN_TTL_SECONDS: int = Field(default=600, ge=60, le=900)
     AGENT_TOKEN_EXCHANGES_PER_MINUTE: int = Field(default=30, ge=1, le=600)
+    AGENT_TOKEN_EXCHANGES_PER_MINUTE_PER_SOURCE: int = Field(
+        default=300, ge=1, le=6000,
+        description="Token exchanges one source address may attempt per minute, whatever keys it presents. Checked before any database read.",
+    )
+    TRUSTED_PROXY_HOPS: int = Field(
+        default=0, ge=0, le=5,
+        description="How many proxies core runs behind (Cloud Run: 1). The source address is then the entry that many places from the right of "
+        "X-Forwarded-For; 0 ignores the header. Never set higher than the real number: a caller controls everything to the left.",
+    )
     INTERNAL_SERVICE_TOKEN: SecretStr | None = Field(
         default=None,
         description=(
@@ -215,6 +223,13 @@ class Settings(BaseSettings):
             if not local and not self.OPERATOR_JWKS_URL.startswith("https://"):
                 raise ValueError("OPERATOR_JWKS_URL must use https outside development/test.")
             self.OPERATOR_JWT_SECRET = None  # JWKS mode never accepts shared-secret tokens
+        elif self.OPERATOR_JWT_SECRET is not None:
+            if not local:
+                # A shared secret both verifies and mints tokens: whoever holds it can sign in as any operator, in any organization.
+                raise ValueError(
+                    "OPERATOR_JWT_SECRET (HS256 shared-secret operator tokens) is only allowed when ENVIRONMENT is 'development' or "
+                    "'test'. Use OPERATOR_JWKS_URL and OPERATOR_JWT_ISSUER (asymmetric signing keys; in Supabase, enable JWT signing keys)."
+                )
         elif self.OPERATOR_JWT_SECRET is None:
             if not local:
                 raise ValueError(

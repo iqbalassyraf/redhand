@@ -123,6 +123,11 @@ class Settings(BaseSettings):
         default=False,
         description="Development only: allow http:// and private-network MCP server URLs.",
     )
+    TRUSTED_PROXY_HOPS: int = Field(
+        default=0, ge=0, le=5,
+        description="How many proxies the gateway runs behind (Cloud Run: 1). The caller's address is then the X-Forwarded-For entry that many "
+        "places from the right; 0 ignores the header. Never set higher than the real number: a caller controls everything to the left.",
+    )
     UPSTREAM_PIN_ENABLED: bool = Field(
         default=True,
         description="Connect to the address the destination check approved (closes DNS rebinding). False connects by name again after the "
