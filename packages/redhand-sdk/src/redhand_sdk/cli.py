@@ -17,6 +17,7 @@ from pathlib import Path
 from redhand_sdk.scanner.ast_checker import scan_directory, scan_python_file
 from redhand_sdk.scanner.fuzzer import run_adversarial_fuzz_suite
 from redhand_sdk.scanner.sarif import export_sarif_v2
+from redhand_sdk.scanner.secrets import scan_secrets, summary_lines
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -27,7 +28,20 @@ def main(argv: list[str] | None = None) -> int:
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     # 1. 'scan' subcommand
-    scan_parser = subparsers.add_parser("scan", help="Scan Python agent code for security anti-patterns")
+    scan_parser = subparsers.add_parser(
+        "scan",
+        help="Scan Python agent code for security anti-patterns, and prompt and config files for pasted secrets",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        description=(
+            "Two checks. (1) Python agent tools: missing @guard, broad IAM wildcards, unguarded destructive tools (RH-SEC-001 to 003).\n"
+            "(2) Secrets in prompt and config files (RH-SEC-004): prints file, line and kind, NEVER the value.\n\n"
+            "The secrets check reads .env, .env.*, .yaml, .yml, .json, .toml, .md, .txt and .py files, and finds only these key\n"
+            "formats: Anthropic, OpenAI-style, AWS access key id, Google Cloud access token, and private key headers. It does not\n"
+            "find passwords, database URLs or custom tokens. It skips files over 1 MiB, binary files, symlinks, and the folders\n"
+            ".git, node_modules, .venv and __pycache__; it stops at 5,000 files and reports at most 50 findings per file.\n"
+            "It makes no network call. A clean result is not a guarantee, and a found secret must be rotated (git history keeps it)."
+        ),
+    )
     scan_parser.add_argument("path", nargs="?", default=".", help="Path to Python file or repository root")
     scan_parser.add_argument("--sarif", help="Export findings to SARIF 2.1.0 JSON file")
     scan_parser.add_argument(
@@ -89,9 +103,19 @@ def main(argv: list[str] | None = None) -> int:
         print(f"🔍 RedHand ASPM Static Guard Scanning: {target.resolve()}\n")
 
         findings = scan_directory(target) if target.is_dir() else scan_python_file(target)
+        # Secrets in prompt and config files (RH-SEC-004). The findings hold file, line and kind only, never the value.
+        secrets_result = scan_secrets(target)
+        findings = findings + [f.to_scan_finding() for f in secrets_result.findings]
+        for line in summary_lines(secrets_result):
+            print(line)
+        print()
 
         if not findings:
-            print("✨ Zero vulnerabilities found! All agent tools guarded with downscoped IAM scopes.")
+            print(
+                "✨ No findings in the Python agent tools or in the secret formats this scan knows. This is not a guarantee: "
+                "it reads only the file types and key formats listed in `redhand scan --help`, and a clean result does not prove "
+                "that no secret exists."
+            )
             if args.sarif:
                 export_sarif_v2([], args.sarif)
                 print(f"📄 Exported clean SARIF report: {args.sarif}")
@@ -102,7 +126,8 @@ def main(argv: list[str] | None = None) -> int:
             badge = "ERROR" if f.severity == "error" else "WARN"
             print(f"  [{badge}] {f.rule_id}: {f.rule_name}")
             print(f"         Location: {f.file_path}:{f.line_number}")
-            print(f"         Tool:     {f.tool_name}()")
+            if f.tool_name:
+                print(f"         Tool:     {f.tool_name}()")
             print(f"         Details:  {f.message}\n")
 
         if args.sarif:
