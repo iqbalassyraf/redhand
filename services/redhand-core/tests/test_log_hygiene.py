@@ -34,35 +34,51 @@ def test_an_error_is_reduced_to_its_type_and_status() -> None:
     assert SECRET not in safe_error(status_error)
 
 
+async def _public_resolver(host: str, port: int) -> list[str]:
+    return ["93.184.216.34"]
+
+
+def _reach_the_http_layer(monkeypatch: pytest.MonkeyPatch, failure: Exception | None = None, status: int = 200) -> list[str]:
+    """Lets post_json pass every check (public address) and fails inside the request itself; returns the targets it was asked to call."""
+    from redhand_core.net import outbound
+
+    targets: list[str] = []
+
+    async def send(http: object, target: str, *args: object, **kwargs: object) -> outbound.OutboundResponse:
+        targets.append(target)
+        if failure is not None:
+            raise failure
+        return outbound.OutboundResponse(status, b"")
+
+    monkeypatch.setattr(outbound, "system_resolver", _public_resolver)
+    monkeypatch.setattr(outbound, "send_post", send)
+    return targets
+
+
 @pytest.mark.asyncio
 async def test_slack_failure_does_not_log_the_webhook_url(caplog: pytest.LogCaptureFixture, monkeypatch: pytest.MonkeyPatch) -> None:
+    from redhand_core.net.outbound import OutboundError
     from redhand_core.services.notifications import slack
 
-    async def fail(self: httpx.AsyncClient, url: str, **kwargs: object) -> httpx.Response:
-        request = httpx.Request("POST", url)
-        response = httpx.Response(404, request=request)
-        response.raise_for_status()  # raises with the URL in its message
-        return response
-
-    monkeypatch.setattr(httpx.AsyncClient, "post", fail)
+    targets = _reach_the_http_layer(monkeypatch, OutboundError("The request failed (ConnectError)."))
     caplog.set_level(logging.DEBUG)
     result = await slack.dispatch_slack_hitl_notification(URL, {"id": "intervention-1", "agent_id": "a", "tool_name": "t", "tool_arguments": {}})
     assert result is False
+    assert targets, "the request must have reached the HTTP layer, or this test proves nothing"
     assert SECRET not in caplog.text and "hooks.example.com" in caplog.text
 
 
 @pytest.mark.asyncio
 async def test_siem_failure_does_not_log_the_webhook_url(caplog: pytest.LogCaptureFixture, monkeypatch: pytest.MonkeyPatch) -> None:
+    from redhand_core.net.outbound import OutboundError
     from redhand_core.services.siem_exporter import SIEMExporter
 
-    async def fail(self: httpx.AsyncClient, url: str, **kwargs: object) -> httpx.Response:
-        raise httpx.ConnectError(f"cannot connect to {url}", request=httpx.Request("POST", url))
-
-    monkeypatch.setattr(httpx.AsyncClient, "post", fail)
+    targets = _reach_the_http_layer(monkeypatch, OutboundError("The request failed (ConnectError)."))
     caplog.set_level(logging.DEBUG)
     exporter = SIEMExporter(max_retries=1)
     assert await exporter.export_events(siem_webhook_url=URL, security_event_rows=[{"id": "e1", "message": "x"}]) is False
-    assert SECRET not in caplog.text
+    assert targets, "the request must have reached the HTTP layer, or this test proves nothing"
+    assert SECRET not in caplog.text and "hooks.example.com" in caplog.text
 
 
 def test_no_log_call_in_core_mentions_a_webhook_url_without_reducing_it() -> None:

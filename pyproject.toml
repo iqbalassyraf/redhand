@@ -83,6 +83,8 @@ files = [
     "services/redhand-core/src/redhand_core/services/local_store.py",
     "services/redhand-core/src/redhand_core/services/local_rpc.py",
     "services/redhand-core/src/redhand_core/services/notifications/slack.py",
+    "services/redhand-core/src/redhand_core/net/outbound.py",
+    "services/redhand-core/src/redhand_core/services/safe_log.py",
     "agentwall/src/gateway",
     "agentwall/src/bench",
     "agentwall/src/main.py",

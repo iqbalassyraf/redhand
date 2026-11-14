@@ -186,6 +186,10 @@ class Settings(BaseSettings):
         default=False,
         description="Development only: allow http:// and localhost MCP server URLs.",
     )
+    ALLOW_INSECURE_WEBHOOK_URLS: bool = Field(
+        default=False,
+        description="Development only: allow http:// and localhost webhook URLs (resume, Slack, SIEM). Never set this on staging or production.",
+    )
 
     @model_validator(mode="after")
     def _operator_auth_mode(self) -> Settings:
