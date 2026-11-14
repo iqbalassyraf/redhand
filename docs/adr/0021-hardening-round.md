@@ -85,6 +85,28 @@ and why, so a reviewer can follow the intent across the four PRs.
   **Not done:** pinning actions by commit SHA: the SHAs could not be resolved from this session (the repository scope blocks reading other
   repositories). Dependabot keeps the tags current; the SHA pin is an owner follow-up.
 
+## H4: enforcement tightening (behaviour changes for agents; each has a kill switch)
+- **Stale tokens are refused (H4.1).** A token carries the passport version it was issued at; the version rises with every change of status,
+  scopes or expiry (database trigger). The gateway parsed `ver` and never compared it, so a token issued before a freeze worked again after the
+  unfreeze. A token **older** than the passport is refused (HTTP 401, reason `token_stale`, recorded in the Black Box) after the status check, so
+  a frozen agent is still reported as frozen. A **newer** token is accepted: that only means the gateway's cached context lags a change by at
+  most its TTL, which already bounds every other decision. No new lookup (the version is in the context the gateway has). The agent exchanges
+  its key again. `scripts/staging_agent.py` does so once and retries; the agent SDK has no token exchange, so a customer's client must treat
+  this 401 as "exchange the key again". Plan said "differs"; "older than" is deliberate (see above).
+- **Strict pinning on first use (H4.2).** In Enforce mode a call to a tool this process has no checked version of was judged by its approved
+  name alone, so a rug-pulled tool passed on any instance that started empty (Cloud Run starts them at zero) or whose agent never re-listed. The
+  gateway now fetches the server's tool list itself (`pin_check.py`: the scan module's `list_tools` with the agent's own upstream credentials),
+  records every version it sees in the same memory a normal listing fills (and reports new ones to core), and judges the tool's current version.
+  If that cannot be done the call is refused. Bounded: one check per (organization, server) at a time (simultaneous callers share it; a caller
+  that disconnects does not cancel it), 50 at once, a 10 s deadline, the scan caps (5 pages, 500 tools); after a failure the same server is
+  refused quickly for 10 s instead of being asked again on every call. Cost: one extra initialize, initialized and tools/list (about a second)
+  on the first call per server per instance, only in Enforce mode.
+- **Upstream errors are treated like results (H4.3).** A JSON-RPC `error` from the server was passed through untouched while results were
+  redacted and bait-checked. An error now gets the same secret redaction (all methods) and honeytoken redaction and trip (`tools/call`); a
+  scanner failure denies, as for results. Nothing the server says is added or kept.
+- **Kill switches** (all default on; set to `false` on the gateway, no deploy of code needed): `AGENTWALL_TOKEN_VERSION_CHECK_ENABLED`,
+  `AGENTWALL_STRICT_PINNING_ENABLED`, `AGENTWALL_REDACT_UPSTREAM_ERRORS_ENABLED`.
+
 ## Alternatives considered
 - **Cache DNS answers at the gateway** to save a lookup: rejected, it would widen the DNS-rebinding window.
 - **Drop the in-memory audit chain** entirely and rely on the Black Box: rejected, the gateway's chain is a second, independent record.
@@ -101,3 +123,5 @@ and why, so a reviewer can follow the intent across the four PRs.
 - H2: a request body over 1 MiB (16 MiB on the two ingest routes) is refused with 413 on core.
 - H3: a deployment on the HS256 shared operator secret outside development no longer starts. The dashboard needs per-request rendering (no static
   pages). Token exchange has a per-address limit (300 a minute by default); many agents behind one egress address share it.
+- H4: a token issued before a freeze, unfreeze, scope change or expiry change is refused once; the agent must exchange its key again. In Enforce
+  mode the first call per server per instance costs about one extra second. An upstream error that contained a secret now reaches the agent redacted.
