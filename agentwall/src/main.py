@@ -67,6 +67,7 @@ def build_gateway(settings: Settings, firewall: FirewallPolicyEngine, audit: Tam
         ),
         forwarder=UpstreamForwarder(
             allow_insecure=settings.ALLOW_INSECURE_UPSTREAMS,
+            pin_connections=settings.UPSTREAM_PIN_ENABLED,
             max_response_bytes=settings.MAX_UPSTREAM_RESPONSE_BYTES,
             connect_timeout=settings.UPSTREAM_CONNECT_TIMEOUT_SECONDS,
             total_timeout=settings.UPSTREAM_TIMEOUT_SECONDS,

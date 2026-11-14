@@ -117,6 +117,11 @@ class Settings(BaseSettings):
         default=False,
         description="Development only: allow http:// and private-network MCP server URLs.",
     )
+    UPSTREAM_PIN_ENABLED: bool = Field(
+        default=True,
+        description="Connect to the address the destination check approved (closes DNS rebinding). False connects by name again after the "
+        "same check: a kill switch for a deployment where pinning misbehaves, not a setting to leave off.",
+    )
     UPSTREAM_CONNECT_TIMEOUT_SECONDS: float = Field(default=5.0, gt=0, le=30)
     UPSTREAM_TIMEOUT_SECONDS: float = Field(default=30.0, gt=0, le=120)
     MAX_UPSTREAM_RESPONSE_BYTES: int = Field(default=5 * 1024 * 1024, ge=1024, le=50 * 1024 * 1024)
