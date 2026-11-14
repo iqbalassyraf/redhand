@@ -774,11 +774,36 @@ export interface RiskList {
   ladder: RiskLadder;
 }
 
+export interface BehaviourBacktest {
+  hours: number;
+  flagged_hours: number;
+  spike_hours: number;
+  new_tool_starts: number;
+}
+
+/** Phase 4.5 B2, watch only: shown next to the score, never part of it. */
+export interface AgentBehaviour {
+  status: "ok" | "unavailable";
+  model: string;
+  warm: boolean;
+  history_days: number;
+  warmup_days: number;
+  hour_calls: number;
+  usual_hourly: number;
+  spike_threshold: number;
+  spike: boolean;
+  new_tools: string[];
+  warning: boolean;
+  backtest: BehaviourBacktest | null;
+}
+
 export interface RiskDetail {
   model: string;
   agent: AgentRiskSummary & { signals: RiskSignal[]; action_signals: RiskSignal[] };
   weights: { signal: string; label: string; points: number; cap: number }[];
   window_days: number;
+  /** Absent on a core without the behaviour baseline. */
+  behaviour?: AgentBehaviour | null;
 }
 
 export const riskApi = {

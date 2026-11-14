@@ -11,6 +11,7 @@ import React, { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 
 import { ApiError, type BlackBoxEvent, type RadarFinding, type RiskDetail, blackboxApi, radarApi, riskApi } from "@/lib/api";
+import { BEHAVIOUR_LIMITS_TEXT, backtestText, behaviourHeadline, hourText, shownToolName } from "@/lib/behaviour";
 import { LEVEL_LABEL, LEVEL_STYLE, RISK_LIMITS_TEXT, signalDetail } from "@/lib/riskForm";
 
 const button = "rounded-full border border-[#E5E5E5] bg-[#FFFFFF] px-3 py-1 text-[12px] font-semibold hover:bg-[#F2F2F2] disabled:opacity-50";
@@ -82,6 +83,24 @@ export function RiskPanel(props: { token: string; agentId: string; agentName: st
                 </li>
               ))}
             </ul>
+          )}
+
+          {detail.behaviour && (
+            <div className={`mt-4 rounded-[8px] p-3 ${detail.behaviour.warning ? "bg-[#FFF8E1]" : "bg-[#F7F7F7]"}`} aria-label="Behaviour">
+              <h3 className="text-[13px] font-semibold">Behaviour (watch only, not part of the score)</h3>
+              <p className="mt-1 font-semibold">{behaviourHeadline(detail.behaviour)}</p>
+              {detail.behaviour.status === "ok" && detail.behaviour.warm && <p className="mt-1">{hourText(detail.behaviour)}</p>}
+              {detail.behaviour.new_tools.length > 0 && (
+                <p className="mt-1">
+                  New tools in the last 24 hours:{" "}
+                  {detail.behaviour.new_tools.map((t, i) => (
+                    <React.Fragment key={t}>{i > 0 && ", "}<code className="rounded bg-[#FFFFFF] px-1">{shownToolName(t)}</code></React.Fragment>
+                  ))}
+                </p>
+              )}
+              {backtestText(detail.behaviour) && <p className="mt-1 text-[#606060]">{backtestText(detail.behaviour)}</p>}
+              <p className="mt-1 text-[#606060]">{BEHAVIOUR_LIMITS_TEXT}</p>
+            </div>
           )}
 
           <h3 className="mt-4 text-[13px] font-semibold">Evidence</h3>
