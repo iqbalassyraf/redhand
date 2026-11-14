@@ -115,6 +115,21 @@ class Settings(BaseSettings):
         default=True,
         description="Kill switch for the destination allowlist (Phase 4 M7). False skips the check entirely, whatever an agent's mode says.",
     )
+    TOKEN_VERSION_CHECK_ENABLED: bool = Field(
+        default=True,
+        description="Kill switch for the stale-token check (H4.1). False accepts a token issued for an older passport version again "
+        "(a token from before an unfreeze, or before a scope or expiry change). Status and scopes still decide every call.",
+    )
+    STRICT_PINNING_ENABLED: bool = Field(
+        default=True,
+        description="Kill switch for strict tool pinning (H4.2). False judges a tool this gateway process has not seen listed by its approved name "
+        "alone again; True fetches the server's tool list on first use and judges the tool's current version (refusing when that cannot be done).",
+    )
+    REDACT_UPSTREAM_ERRORS_ENABLED: bool = Field(
+        default=True,
+        description="Kill switch for redacting and bait-checking JSON-RPC errors from an MCP server (H4.3). False passes an upstream error through "
+        "untouched again, as before; a secret or a bait value in its message or data then reaches the agent.",
+    )
     RADAR_MODEL_ENABLED: bool = Field(
         default=False,
         description="Also run the second-stage injection model in the Radar's background scan (about 8 ms more CPU per large result, never inline).",

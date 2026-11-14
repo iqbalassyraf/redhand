@@ -72,6 +72,14 @@ def http_post(url: str, headers: dict[str, str], body: dict[str, Any] | None) ->
     return status, {k.lower(): v for k, v in response_headers.items()}, parsed
 
 
+STALE_TOKEN_TEXT = "Agent access token is out of date."
+
+
+def _is_stale_token_refusal(body: Any) -> bool:
+    error = body.get("error") if isinstance(body, dict) else None
+    return isinstance(error, dict) and str(error.get("message", "")).startswith(STALE_TOKEN_TEXT)
+
+
 class Agent:
     def __init__(self, label: str, core: str, gateway: str, server: str, key: str) -> None:
         self.label, self.core, self.gateway, self.server, self._key = label, core, gateway, server, key
@@ -97,9 +105,19 @@ class Agent:
     # -- MCP ------------------------------------------------------------------------------
     def mcp(self, method: str, params: dict[str, Any] | None = None, server: str | None = None,
             notification: bool = False) -> tuple[int, Any]:
+        status, response_headers, body = self._send(method, params, server, notification)
+        if status == 401 and _is_stale_token_refusal(body):
+            # The passport changed after this token was issued (an unfreeze, a scope or expiry edit): exchange the key again and retry ONCE.
+            self._token = None
+            status, response_headers, body = self._send(method, params, server, notification)
+        if method == "initialize" and "mcp-session-id" in response_headers:
+            self._session = response_headers["mcp-session-id"]
+        return status, body
+
+    def _send(self, method: str, params: dict[str, Any] | None, server: str | None, notification: bool) -> tuple[int, dict[str, str], Any]:
         ok, message = self.ensure_token()
         if not ok:
-            return 401, {"error": {"code": -32005, "message": message}}
+            return 401, {}, {"error": {"code": -32005, "message": message}}
         message_body: dict[str, Any] = {"jsonrpc": "2.0", "method": method}
         if params is not None:
             message_body["params"] = params
@@ -111,10 +129,7 @@ class Agent:
             headers["Mcp-Session-Id"] = self._session
         if method != "initialize":
             headers["MCP-Protocol-Version"] = PROTOCOL_VERSION
-        status, response_headers, body = http_post(f"{self.gateway}/mcp/{server or self.server}", headers, message_body)
-        if method == "initialize" and "mcp-session-id" in response_headers:
-            self._session = response_headers["mcp-session-id"]
-        return status, body
+        return http_post(f"{self.gateway}/mcp/{server or self.server}", headers, message_body)
 
     def initialize(self) -> tuple[int, Any]:
         status, body = self.mcp("initialize", {

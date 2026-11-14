@@ -102,6 +102,9 @@ def build_gateway(settings: Settings, firewall: FirewallPolicyEngine, audit: Tam
         loops=LoopMeter(),
         loop_detection_enabled=settings.LOOP_DETECTION_ENABLED,
         destination_check_enabled=settings.DESTINATION_CHECK_ENABLED,
+        token_version_check_enabled=settings.TOKEN_VERSION_CHECK_ENABLED,
+        strict_pinning_enabled=settings.STRICT_PINNING_ENABLED,
+        redact_upstream_errors_enabled=settings.REDACT_UPSTREAM_ERRORS_ENABLED,
     )
 
 
