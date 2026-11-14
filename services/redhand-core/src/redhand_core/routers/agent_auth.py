@@ -387,7 +387,7 @@ async def gateway_context(
     async def load_org() -> Any:
         res = await (
             supabase.table("organizations")
-            .select("safe_mode, payload_capture_enabled, radar_mode, output_check_mode, loop_mode, loop_limit, loop_window_seconds")
+            .select("safe_mode, utc_offset_minutes, payload_capture_enabled, radar_mode, output_check_mode, loop_mode, loop_limit, loop_window_seconds")
             .eq("id", str(organization_id)).maybe_single().execute()
         )
         return res.data if res else None
