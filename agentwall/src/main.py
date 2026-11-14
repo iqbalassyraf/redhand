@@ -32,6 +32,7 @@ from .gateway.scan import ScanError, list_tools
 from .gateway.budget import BudgetMeter, HttpUsageReporter
 from .gateway.loops import LoopMeter
 from .gateway.context import CoreContextClient
+from .gateway.security_headers import SecurityHeadersMiddleware
 from .gateway.identity import AgentTokenVerifier
 from .gateway.metrics import GatewayMetrics
 from .gateway.pins import HttpPinReporter, PinCoordinator
@@ -135,6 +136,8 @@ app = FastAPI(
     description="Enforces Agent Passports on MCP tool traffic.",
     lifespan=lifespan,
 )
+
+app.add_middleware(SecurityHeadersMiddleware)
 
 # Browsers only need to reach the gateway from the dashboard origin (MCP vetting).
 app.add_middleware(
