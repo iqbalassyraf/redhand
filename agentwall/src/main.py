@@ -97,6 +97,7 @@ def build_gateway(settings: Settings, firewall: FirewallPolicyEngine, audit: Tam
         ),
         loops=LoopMeter(),
         loop_detection_enabled=settings.LOOP_DETECTION_ENABLED,
+        destination_check_enabled=settings.DESTINATION_CHECK_ENABLED,
     )
 
 

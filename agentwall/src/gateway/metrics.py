@@ -28,6 +28,7 @@ class GatewayMetrics:
         self._pin_reports: Counter[str] = Counter()
         self._pin_events: Counter[str] = Counter()
         self._loops: Counter[str] = Counter()
+        self._destination_checks: Counter[str] = Counter()
         self._stage_buckets: dict[str, Counter[float]] = {}
         self._stage_sum: dict[str, float] = {}
         self._stage_count: Counter[str] = Counter()
@@ -107,6 +108,11 @@ class GatewayMetrics:
         """Loop detection outcomes (ok, flagged, throttled, untracked, error, evicted, report_throttled). Fixed names, no agent or tool."""
         with self._lock:
             self._loops[outcome] += count
+
+    def record_destination(self, outcome: str, count: int = 1) -> None:
+        """Destination checks by outcome (ok, flagged, refused, untracked, error, report_throttled). Fixed names, no agent, tool or host."""
+        with self._lock:
+            self._destination_checks[outcome] += count
 
     def record_honeytoken_scan_truncated(self) -> None:
         with self._lock:
@@ -197,6 +203,12 @@ class GatewayMetrics:
             ]
             for outcome, count in sorted(self._loops.items()):
                 lines.append(f'redhand_gateway_loops_total{{outcome="{outcome}"}} {count}')
+            lines += [
+                "# HELP redhand_gateway_destination_checks_total Destination allowlist checks by outcome (ok, flagged, refused, untracked, error, report_throttled).",
+                "# TYPE redhand_gateway_destination_checks_total counter",
+            ]
+            for outcome, count in sorted(self._destination_checks.items()):
+                lines.append(f'redhand_gateway_destination_checks_total{{outcome="{outcome}"}} {count}')
             lines += [
                 "# HELP redhand_gateway_radar_scans_total Background Radar scans by outcome (ok, error, dropped, throttled, truncated).",
                 "# TYPE redhand_gateway_radar_scans_total counter",

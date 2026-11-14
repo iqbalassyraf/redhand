@@ -784,6 +784,220 @@
         "title": "ControlAuditEntry",
         "type": "object"
       },
+      "DestinationAddRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "confirm": {
+            "default": false,
+            "description": "Required: an allowed destination widens what this agent may send data to.",
+            "title": "Confirm",
+            "type": "boolean"
+          },
+          "host": {
+            "description": "A host name or address only: no scheme, path or port.",
+            "maxLength": 300,
+            "minLength": 1,
+            "title": "Host",
+            "type": "string"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          }
+        },
+        "required": [
+          "host"
+        ],
+        "title": "DestinationAddRequest",
+        "type": "object"
+      },
+      "DestinationAddResponse": {
+        "properties": {
+          "added": {
+            "description": "False when the host was already on the list.",
+            "title": "Added",
+            "type": "boolean"
+          },
+          "host": {
+            "description": "The host as stored (lower case, punycode, dotted IPv4, compressed IPv6).",
+            "title": "Host",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "host",
+          "added"
+        ],
+        "title": "DestinationAddResponse",
+        "type": "object"
+      },
+      "DestinationCapabilities": {
+        "description": "What the signed-in operator may do, so the UI hides buttons the server would refuse. The server enforces it anyway.",
+        "properties": {
+          "can_change": {
+            "title": "Can Change",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "can_change"
+        ],
+        "title": "DestinationCapabilities",
+        "type": "object"
+      },
+      "DestinationEntry": {
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "host": {
+            "title": "Host",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "host",
+          "created_at"
+        ],
+        "title": "DestinationEntry",
+        "type": "object"
+      },
+      "DestinationModeRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "confirm": {
+            "default": false,
+            "description": "Required to turn enforcement on (it refuses calls) or to turn the check off.",
+            "title": "Confirm",
+            "type": "boolean"
+          },
+          "destination_mode": {
+            "enum": [
+              "off",
+              "observe",
+              "enforce"
+            ],
+            "title": "Destination Mode",
+            "type": "string"
+          },
+          "expected_mode": {
+            "description": "The mode the caller saw; a different current mode is a conflict.",
+            "enum": [
+              "off",
+              "observe",
+              "enforce"
+            ],
+            "title": "Expected Mode",
+            "type": "string"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          }
+        },
+        "required": [
+          "destination_mode",
+          "expected_mode"
+        ],
+        "title": "DestinationModeRequest",
+        "type": "object"
+      },
+      "DestinationRemoveResponse": {
+        "properties": {
+          "removed": {
+            "title": "Removed",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "removed"
+        ],
+        "title": "DestinationRemoveResponse",
+        "type": "object"
+      },
+      "DestinationSettingsResponse": {
+        "properties": {
+          "capabilities": {
+            "$ref": "#/components/schemas/DestinationCapabilities"
+          },
+          "destination_mode": {
+            "enum": [
+              "off",
+              "observe",
+              "enforce"
+            ],
+            "title": "Destination Mode",
+            "type": "string"
+          },
+          "destination_mode_changed_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Destination Mode Changed At"
+          },
+          "entries": {
+            "items": {
+              "$ref": "#/components/schemas/DestinationEntry"
+            },
+            "title": "Entries",
+            "type": "array"
+          },
+          "last_7_days": {
+            "additionalProperties": true,
+            "title": "Last 7 Days",
+            "type": "object"
+          },
+          "max_entries": {
+            "default": 100,
+            "title": "Max Entries",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "destination_mode",
+          "entries",
+          "last_7_days",
+          "capabilities"
+        ],
+        "title": "DestinationSettingsResponse",
+        "type": "object"
+      },
       "DevLoginRequest": {
         "additionalProperties": false,
         "properties": {
@@ -1073,6 +1287,17 @@
             "title": "Confidence",
             "type": "string"
           },
+          "detail": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Detail"
+          },
           "evasion": {
             "items": {
               "type": "string"
@@ -1098,7 +1323,8 @@
             "enum": [
               "injection",
               "output",
-              "loop"
+              "loop",
+              "destination"
             ],
             "title": "Kind",
             "type": "string"
@@ -3663,7 +3889,7 @@
             "type": "string"
           },
           "rule_id": {
-            "pattern": "^RAD-(INJ|OUT|LOOP)-[0-9]{3}$",
+            "pattern": "^RAD-(INJ|OUT|LOOP|DST)-[0-9]{3}$",
             "title": "Rule Id",
             "type": "string"
           }
@@ -5827,7 +6053,7 @@
             "schema": {
               "anyOf": [
                 {
-                  "pattern": "^(injection|output|loop)$",
+                  "pattern": "^(injection|output|loop|destination)$",
                   "type": "string"
                 },
                 {
@@ -5844,7 +6070,7 @@
             "schema": {
               "anyOf": [
                 {
-                  "pattern": "^RAD-(INJ|OUT|LOOP)-[0-9]{3}$",
+                  "pattern": "^RAD-(INJ|OUT|LOOP|DST)-[0-9]{3}$",
                   "type": "string"
                 },
                 {
@@ -7959,6 +8185,353 @@
         "summary": "Set Agent Budget",
         "tags": [
           "Budget Guard"
+        ]
+      }
+    },
+    "/v1/passports/{agent_id}/destination-mode": {
+      "put": {
+        "description": "observe records addresses outside the list and refuses nothing. enforce also refuses the call (needs a non-empty list and confirm: true).\noff checks nothing (needs confirm: true). The body carries the mode the caller saw.",
+        "operationId": "put_destination_mode_v1_passports__agent_id__destination_mode_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "agent_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Agent Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-RedHand-Org",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Redhand-Org"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DestinationModeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DestinationSettingsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Put Destination Mode",
+        "tags": [
+          "Destination allowlist"
+        ]
+      }
+    },
+    "/v1/passports/{agent_id}/destinations": {
+      "get": {
+        "operationId": "get_destinations_v1_passports__agent_id__destinations_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "agent_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Agent Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-RedHand-Org",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Redhand-Org"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DestinationSettingsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Destinations",
+        "tags": [
+          "Destination allowlist"
+        ]
+      },
+      "post": {
+        "description": "Allows one host (a name or an address, nothing else). Needs confirm: true. Adding the same host again changes nothing.",
+        "operationId": "add_destination_v1_passports__agent_id__destinations_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "agent_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Agent Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-RedHand-Org",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Redhand-Org"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DestinationAddRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DestinationAddResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Add Destination",
+        "tags": [
+          "Destination allowlist"
+        ]
+      }
+    },
+    "/v1/passports/{agent_id}/destinations/{entry_id}": {
+      "delete": {
+        "operationId": "remove_destination_v1_passports__agent_id__destinations__entry_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "agent_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Agent Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "entry_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Entry Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "reason",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 500,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Reason"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-RedHand-Org",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Redhand-Org"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DestinationRemoveResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Remove Destination",
+        "tags": [
+          "Destination allowlist"
         ]
       }
     },

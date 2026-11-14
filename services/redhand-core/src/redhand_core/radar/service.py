@@ -51,8 +51,9 @@ logger = logging.getLogger("redhand.core.radar")
 
 MAX_FINDINGS_RETURNED = 100
 _SAFE_TOOL_NAME = re.compile(r"[^A-Za-z0-9_.:-]")
+_SAFE_HOST = re.compile(r"[^a-z0-9_.:-]")
 _FINDING_COLUMNS = (
-    "id,agent_id,rule_id,family,kind,severity,confidence,place,evasion,tool_name,server_slug,would_block,occurrences,"
+    "id,agent_id,rule_id,family,kind,severity,confidence,place,evasion,tool_name,server_slug,would_block,occurrences,detail,"
     "first_seen_at,last_seen_at,review_status,reviewed_at,review_note"
 )
 
@@ -247,7 +248,7 @@ async def record_findings(supabase: Any, telegram: TelegramClient | None, report
         raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "The findings could not be recorded.") from None
     data = response.data
     metrics = get_metrics()
-    for kind in ("injection", "output", "loop"):
+    for kind in ("injection", "output", "loop", "destination"):
         count = sum(1 for i in report.items if i.kind == kind)
         if count and int(data["new"]):
             metrics.increment_counter("redhand_radar_findings_total", float(min(count, int(data["new"]))), labels={"kind": kind})
@@ -268,6 +269,15 @@ async def record_findings(supabase: Any, telegram: TelegramClient | None, report
             supabase, telegram, report.organization_id,
             f"Loop: agent '{data.get('agent')}' sent the same call to {tool} more often than the loop limit allows. "
             "Open the dashboard, Radar, Repeated calls. If throttling is on, the extra repeats were refused. Counts only: no call details are sent.",
+        )
+    if data.get("destination_alert"):
+        tool = _SAFE_TOOL_NAME.sub("", str(data.get("destination_tool") or ""))[:64] or "a tool"
+        host = _SAFE_HOST.sub("", str(data.get("destination_detail") or ""))[:64] or "an address"
+        outcome = "The call was refused." if data.get("destination_mode") == "enforce" else "Recorded only: nothing was refused."
+        await notify_organization(
+            supabase, telegram, report.organization_id,
+            f"Destination: agent '{data.get('agent')}' put an address outside its allowed list ({host}) in a call to {tool}. {outcome} "
+            "Open the dashboard, Passports, Allowed destinations. Only the last two parts of the address are shown: no call details are sent.",
         )
     return FindingReportResponse(
         new=int(data["new"]), coalesced=int(data["coalesced"]), suppressed=int(data["suppressed"]),

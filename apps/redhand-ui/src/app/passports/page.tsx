@@ -25,6 +25,7 @@ import {
   telegramApi,
 } from "@/lib/api";
 import { useAuth, useRequiredSession } from "@/lib/auth";
+import { DestinationsPanel } from "./DestinationsPanel";
 
 // Budget Guard's automatic freezes are recorded under this fixed actor (not a person).
 const SYSTEM_ACTOR_ID = "00000000-0000-0000-0000-000000000000";
@@ -62,6 +63,7 @@ export default function PassportsPage() {
   const [usage, setUsage] = useState<UsageSummary | null>(null);
   const [budgetDefault, setBudgetDefault] = useState<number | null>(null);
   const [budgetEditing, setBudgetEditing] = useState<Passport | null>(null);
+  const [destinationsFor, setDestinationsFor] = useState<Passport | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [revealedKey, setRevealedKey] = useState<{ name: string; key: string } | null>(null);
@@ -324,6 +326,7 @@ export default function PassportsPage() {
           onEditScopes={(p) => setEditing(p)}
           usage={usage}
           onEditBudget={(p) => setBudgetEditing(p)}
+          onDestinations={(p) => setDestinationsFor(destinationsFor?.id === p.id ? null : p)}
           orgSafeMode={orgSafeMode}
           onSafeMode={(p) => {
             if (!p.safe_mode) {
@@ -335,6 +338,20 @@ export default function PassportsPage() {
             act(`Safe Mode is off for ${p.name}.`, () => passportsApi.setSafeMode(token, p.id, false, reason));
           }}
         />
+
+        {destinationsFor && token && (
+          <DestinationsPanel
+            key={destinationsFor.id}
+            token={token}
+            agentId={destinationsFor.id}
+            agentName={destinationsFor.name}
+            onClose={() => setDestinationsFor(null)}
+            onUnauthorized={() => {
+              signOut();
+              window.location.href = "/login";
+            }}
+          />
+        )}
 
         {budgetEditing && (
           <BudgetEditor
@@ -419,6 +436,7 @@ function PassportTable(props: {
   onSafeMode: (p: Passport) => void;
   usage: UsageSummary | null;
   onEditBudget: (p: Passport) => void;
+  onDestinations: (p: Passport) => void;
 }) {
   const { passports, busy } = props;
   const usageByAgent = new Map<string, AgentUsage>((props.usage?.agents ?? []).map((u) => [u.agent_id, u]));
@@ -516,6 +534,7 @@ function PassportTable(props: {
                       <>
                         <ActionButton disabled={busy} onClick={() => props.onEditScopes(p)} label="Scopes" />
                         <ActionButton disabled={busy} onClick={() => props.onEditBudget(p)} label="Limit" />
+                        <ActionButton disabled={busy} onClick={() => props.onDestinations(p)} label="Destinations" />
                         <ActionButton
                           disabled={busy}
                           onClick={() => props.onSafeMode(p)}

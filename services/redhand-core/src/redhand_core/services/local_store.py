@@ -285,6 +285,7 @@ def apply_insert_defaults(table: str, row: dict[str, Any]) -> None:
         row.setdefault("safe_mode", False)
         row.setdefault("daily_call_limit", None)
         row.setdefault("budget_action", "deny")
+        row.setdefault("destination_mode", "off")
     elif table == "organizations":
         row.setdefault("blackbox_retention_days", 30)
         row.setdefault("payload_capture_enabled", False)
