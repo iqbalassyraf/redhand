@@ -14,6 +14,7 @@ from __future__ import annotations
 from contextlib import asynccontextmanager
 import hmac
 import json
+import math
 import time
 from typing import Annotated, Any, AsyncGenerator
 from uuid import uuid4
@@ -181,6 +182,19 @@ _vet_limiter = _IpRateLimiter()
 _scan_limiter = _IpRateLimiter()
 
 
+def _reject_constant(name: str) -> Any:
+    """`json.loads` accepts the tokens NaN, Infinity and -Infinity, which JSON (RFC 8259) does not have and which cannot be sent on."""
+    raise ValueError(f"{name} is not valid JSON")
+
+
+def _finite_float(text: str) -> float:
+    """`1e999` is valid JSON text but parses to infinity, which cannot be sent on either: refuse it like the tokens above."""
+    value = float(text)
+    if not math.isfinite(value):
+        raise ValueError("number out of range")
+    return value
+
+
 async def _read_json_body(request: Request, limit: int) -> Any:
     declared = request.headers.get("content-length")
     if declared and declared.isdigit() and int(declared) > limit:
@@ -189,8 +203,10 @@ async def _read_json_body(request: Request, limit: int) -> Any:
     if len(body) > limit:
         raise HTTPException(status_code=status.HTTP_413_CONTENT_TOO_LARGE, detail="Request body too large.")
     try:
-        return json.loads(body)
-    except (json.JSONDecodeError, UnicodeDecodeError):
+        return json.loads(body, parse_constant=_reject_constant, parse_float=_finite_float)
+    except (ValueError, RecursionError):
+        # ValueError covers a syntax error (JSONDecodeError), bad UTF-8 (UnicodeDecodeError), the refusals above and an integer of more than
+        # 4,300 digits; RecursionError is a body nested too deep. All of them are an unusable body, answered after authentication.
         return None
 
 
