@@ -15,6 +15,8 @@ from typing import Any
 
 import httpx
 
+from redhand_core.services.safe_log import safe_error, safe_host
+
 logger = logging.getLogger("redhand.core.siem_exporter")
 
 
@@ -71,16 +73,16 @@ class SIEMExporter:
                     logger.info(
                         "Exported %d OCSF security findings to SIEM (%s)",
                         len(ocsf_batch),
-                        siem_webhook_url,
+                        safe_host(siem_webhook_url),
                     )
                     return True
                 except httpx.HTTPError as exc:
                     if attempt == self.max_retries:
                         logger.warning(
                             "SIEM export to %s failed after %d attempts: %s",
-                            siem_webhook_url,
+                            safe_host(siem_webhook_url),
                             attempt,
-                            exc,
+                            safe_error(exc),
                         )
                         return False
                     await asyncio.sleep(0.25 * (2 ** (attempt - 1)))

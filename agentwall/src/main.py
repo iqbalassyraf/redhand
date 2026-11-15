@@ -349,10 +349,15 @@ async def get_audit_logs(limit: int = Query(default=50, ge=1, le=1000)) -> list[
 @app.get("/v1/audit/verify", dependencies=[Depends(require_service_token)])
 async def verify_audit_chain() -> dict[str, Any]:
     is_valid, reason = audit_logger.verify_chain_integrity()
+    stats = audit_logger.stats()
     return {
         "tamper_evident_chain_intact": is_valid,
-        "scope": "records held by this gateway process since start",
-        "details": reason or "All records verified.",
+        "scope": "the most recent records held in memory by this gateway process since start; older ones are dropped from memory "
+                 "(the complete record of every decision is the Black Box in redhand-core)",
+        "records_verified": stats.retained,
+        "records_dropped_from_memory": stats.dropped,
+        "records_total": stats.total,
+        "details": reason or "All retained records verified.",
     }
 
 

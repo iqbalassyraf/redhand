@@ -728,6 +728,25 @@ async def test_operational_endpoints_accept_service_token(monkeypatch: pytest.Mo
     assert wrong.status_code == 401
 
 
+@pytest.mark.asyncio
+async def test_the_audit_verify_answer_states_what_it_covers_after_old_records_are_dropped(monkeypatch: pytest.MonkeyPatch) -> None:
+    from pydantic import SecretStr
+
+    from agentwall.src.telemetry.audit_logger import TamperEvidentAuditLogger
+
+    monkeypatch.setattr(gateway_main.settings, "CORE_SERVICE_TOKEN", SecretStr(SERVICE_TOKEN))
+    small = TamperEvidentAuditLogger(max_records=5)
+    for i in range(12):
+        small.record(trace_id=f"t{i}", span_id="s", agent_id="a", caller_identity="c", tool_name="x", arguments={}, firewall_decision="ALLOW")
+    monkeypatch.setattr(gateway_main, "audit_logger", small)
+    auth = {"Authorization": f"Bearer {SERVICE_TOKEN}"}
+    async with AsyncClient(transport=ASGITransport(app=gateway_main.app), base_url="http://test") as client:
+        body = (await client.get("/v1/audit/verify", headers=auth)).json()
+    assert body["tamper_evident_chain_intact"] is True
+    assert (body["records_verified"], body["records_dropped_from_memory"], body["records_total"]) == (5, 7, 12)
+    assert "most recent records" in body["scope"] and "Black Box" in body["scope"]
+
+
 # ---------------------------------------------------------------------------
 # Safe Mode (Phase 2, M2): only tools declared 'read' are allowed
 # ---------------------------------------------------------------------------

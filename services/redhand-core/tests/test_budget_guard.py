@@ -304,9 +304,14 @@ def test_the_day_follows_the_organization_offset(env: Env) -> None:
     agent_id = _agent(env)
     org = next(o for o in env.store.tables["organizations"] if o["id"] == DEFAULT_ORG_ID)
     org["utc_offset_minutes"] = -300
+    # The reset moment shows the offset at any time of day: local midnight is 05:00 UTC at UTC-5 and 16:00 UTC at the default UTC+8. A day-only
+    # check passed while production ignored the setting (the column was never selected), because the two offsets share a calendar day
+    # for most of the clock.
+    assert datetime.fromisoformat(env.budget_of(agent_id)["resets_at"]).astimezone(timezone.utc).hour == 5
     assert env.budget_of(agent_id)["day_key"] == budget.local_day(utcnow(), -300).isoformat()
     org["utc_offset_minutes"] = "garbage"
     assert env.budget_of(agent_id)["day_key"] == budget.local_day(utcnow(), 480).isoformat()
+    assert datetime.fromisoformat(env.budget_of(agent_id)["resets_at"]).astimezone(timezone.utc).hour == 16  # garbage falls back to UTC+8
 
 
 def test_a_failed_usage_lookup_makes_the_context_unavailable(env: Env, monkeypatch: pytest.MonkeyPatch) -> None:

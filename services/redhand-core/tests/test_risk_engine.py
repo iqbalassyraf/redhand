@@ -549,3 +549,102 @@ def test_the_in_memory_twin_scopes_hourly_counts_by_organization(env: Env) -> No
     mine = asyncio.run(env.store.rpc("agent_behaviour_hours", {"p_org": DEFAULT_ORG_ID, **params}).execute()).data
     theirs = asyncio.run(env.store.rpc("agent_behaviour_hours", {"p_org": OTHER_ORG, **params}).execute()).data
     assert len(mine) == 3 and theirs == []  # the same agent id asked for under another organization: nothing, like the SQL function
+
+
+# --- scoring never delays the Black Box reply (H1.4) ---------------------------------------------------------------------------
+
+def _block_item(agent: str, n: int = 0) -> dict[str, Any]:
+    return {"agent_id": agent, "occurred_at": datetime.now(timezone.utc).isoformat(), "gateway_instance": "gw-risk-test", "server": "fs",
+            "method": "tools/call", "tool_name": f"t{n}", "decision": "BLOCK",
+            "reasons": ["Tool 'x' on server 'fs' is not in this agent's passport scopes."], "upstream_status": None, "latency_ms": 1.0,
+            "argument_keys": [], "arguments_sha256": "a" * 64, "result_size_bytes": None, "redaction_count": 0, "credential_jti": "jti-1"}
+
+
+def test_the_black_box_reply_is_sent_before_risk_scoring_runs(env: Env, monkeypatch: pytest.MonkeyPatch) -> None:
+    """ASGI order: the response must start before the evaluation begins. Scoring used to be awaited inside the handler, so a slow database
+    delayed the reply, the gateway's 5 s report timeout fired, and the batch was resent."""
+    import asyncio
+    import json
+
+    from redhand_core.risk import service as risk_service
+
+    order: list[str] = []
+    real = risk_service.evaluate_agents
+
+    async def recording(*args: Any, **kwargs: Any) -> None:
+        order.append("evaluate")
+        await real(*args, **kwargs)
+
+    monkeypatch.setattr(risk_service, "evaluate_agents", recording)
+    body = json.dumps({"instance_id": "gw-risk-test", "batch_id": str(uuid4()), "organization_id": DEFAULT_ORG_ID, "items": [_block_item(env.agent)]}).encode()
+    scope = {"type": "http", "asgi": {"version": "3.0"}, "http_version": "1.1", "method": "POST", "path": "/internal/v1/events", "raw_path": b"/internal/v1/events",
+             "query_string": b"", "root_path": "", "scheme": "http", "server": ("test", 80), "client": ("test", 1),
+             "headers": [(b"content-type", b"application/json"), (b"content-length", str(len(body)).encode()),
+                         (b"authorization", f"Bearer {SERVICE_TOKEN}".encode())]}
+
+    async def run() -> None:
+        sent = False
+
+        async def receive() -> dict[str, Any]:
+            nonlocal sent
+            if sent:
+                return {"type": "http.disconnect"}
+            sent = True
+            return {"type": "http.request", "body": body, "more_body": False}
+
+        async def send(message: dict[str, Any]) -> None:
+            if message["type"] == "http.response.start":
+                order.append("response")
+
+        await env.client.app(scope, receive, send)  # type: ignore[attr-defined]
+
+    asyncio.run(run())
+    assert order == ["response", "evaluate"]
+
+
+def test_a_batch_naming_many_agents_reads_signals_once(env: Env, monkeypatch: pytest.MonkeyPatch) -> None:
+    from redhand_core.services import local_rpc
+
+    agents = [env.register(f"Fleet {i}")["id"] for i in range(6)]
+    calls: list[Any] = []
+    real = local_rpc.HANDLERS["agent_risk_signals"]
+
+    def counting(store: Any, p: dict[str, Any]) -> Any:
+        calls.append(p.get("p_agent"))
+        return real(store, p)
+
+    monkeypatch.setitem(local_rpc.HANDLERS, "agent_risk_signals", counting)
+    body = {"instance_id": "gw-risk-test", "batch_id": str(uuid4()), "organization_id": DEFAULT_ORG_ID, "items": [_block_item(a, i) for i, a in enumerate(agents)]}
+    assert env.client.post("/internal/v1/events", json=body, headers=GATEWAY).json()["accepted"] == 6
+    assert calls == [None]  # one organization-wide read, not one per agent
+
+
+def test_a_few_agents_are_read_one_by_one(env: Env, monkeypatch: pytest.MonkeyPatch) -> None:
+    from redhand_core.services import local_rpc
+
+    calls: list[Any] = []
+    real = local_rpc.HANDLERS["agent_risk_signals"]
+
+    def counting(store: Any, p: dict[str, Any]) -> Any:
+        calls.append(p.get("p_agent"))
+        return real(store, p)
+
+    monkeypatch.setitem(local_rpc.HANDLERS, "agent_risk_signals", counting)
+    body = {"instance_id": "gw-risk-test", "batch_id": str(uuid4()), "organization_id": DEFAULT_ORG_ID, "items": [_block_item(env.agent)]}
+    env.client.post("/internal/v1/events", json=body, headers=GATEWAY)
+    assert calls == [env.agent]
+
+
+def test_evaluations_are_capped_and_a_skipped_one_is_counted_not_lost(env: Env, monkeypatch: pytest.MonkeyPatch) -> None:
+    from redhand_core.risk import service as risk_service
+
+    env.ladder_put(alert_at=2)
+    monkeypatch.setattr(risk_service, "MAX_EVALUATIONS_IN_FLIGHT", 0)
+    before = counter("risk_evaluations_total", outcome="skipped")
+    body = {"instance_id": "gw-risk-test", "batch_id": str(uuid4()), "organization_id": DEFAULT_ORG_ID, "items": [_block_item(env.agent)]}
+    assert env.client.post("/internal/v1/events", json=body, headers=GATEWAY).status_code == 200
+    assert counter("risk_evaluations_total", outcome="skipped") == before + 1
+    assert env.risk_alerts() == []  # nothing ran; the signal is stored, so the next report evaluates it
+    monkeypatch.setattr(risk_service, "MAX_EVALUATIONS_IN_FLIGHT", 8)
+    env.report([finding()])
+    assert env.me()["reason"].startswith("Radar finding")  # the refusal recorded earlier is still counted by the next evaluation

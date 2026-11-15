@@ -18,6 +18,8 @@ from uuid import NAMESPACE_DNS, UUID, uuid5
 
 import httpx
 
+from redhand_core.services.safe_log import safe_error, safe_host
+
 logger = logging.getLogger("redhand.core.slack")
 
 
@@ -114,7 +116,8 @@ async def dispatch_slack_hitl_notification(
             logger.info("Dispatched Slack Block Kit notification for intervention %s", intervention.get("id"))
             return True
     except httpx.HTTPError as exc:
-        logger.warning("Failed to dispatch Slack notification to %s: %s", webhook_url, exc)
+        # The webhook URL is the credential, and httpx repeats it in its error text: log the host and the error type only.
+        logger.warning("Failed to dispatch Slack notification to %s: %s", safe_host(webhook_url), safe_error(exc))
         return False
 
 

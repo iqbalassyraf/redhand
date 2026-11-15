@@ -294,6 +294,8 @@ class GatewayContextResponse(BaseModel):
 
 LAST_SEEN_WRITE_INTERVAL_SECONDS = 60
 LOOP_RULE_ID = "RAD-LOOP-001"
+# The agent columns the context reads, and only those: the full row (every column) used to be fetched on every passport cache miss.
+AGENT_CONTEXT_COLUMNS = "status, expires_at, scopes, version, safe_mode, daily_call_limit, budget_action, last_seen_at, destination_mode"
 
 
 def _bounded_int(value: Any, low: int, high: int, default: int) -> int:
@@ -387,14 +389,14 @@ async def gateway_context(
     async def load_org() -> Any:
         res = await (
             supabase.table("organizations")
-            .select("safe_mode, payload_capture_enabled, radar_mode, output_check_mode, loop_mode, loop_limit, loop_window_seconds")
+            .select("safe_mode, utc_offset_minutes, payload_capture_enabled, radar_mode, output_check_mode, loop_mode, loop_limit, loop_window_seconds")
             .eq("id", str(organization_id)).maybe_single().execute()
         )
         return res.data if res else None
 
     async def load_agent() -> Any:
         res = await (
-            supabase.table("agents").select("*").eq("id", str(agent_id)).eq("organization_id", str(organization_id))
+            supabase.table("agents").select(AGENT_CONTEXT_COLUMNS).eq("id", str(agent_id)).eq("organization_id", str(organization_id))
             .maybe_single().execute()
         )
         return res.data if res else None
@@ -438,8 +440,6 @@ async def gateway_context(
     if not agent:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Agent not found.")
 
-    destination_mode, allowed_destinations = await load_allowed_destinations(agent)
-
     now = utcnow()
     try:
         scopes = parse_scopes(agent.get("scopes", []))
@@ -477,16 +477,46 @@ async def gateway_context(
     else:
         limit = 0  # malformed stored limit: the restrictive reading is "nothing is allowed"
     day = budget_rules.local_day(now, offset)
-    try:
-        others_res = await supabase.rpc(
-            "usage_by_others",
-            {"p_org": str(organization_id), "p_agent": str(agent_id), "p_day": day.isoformat(),
-             "p_instance": instance_id or "unidentified-caller"},
-        ).execute()
-        used_by_others = int(others_res.data or 0)
-    except Exception as exc:  # noqa: BLE001  without usage the gateway cannot decide, so it denies
-        logger.error("Usage lookup failed: %s", type(exc).__name__)
-        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "Usage lookup failed.") from None
+
+    async def load_used_by_others() -> int:
+        try:
+            others_res = await supabase.rpc(
+                "usage_by_others",
+                {"p_org": str(organization_id), "p_agent": str(agent_id), "p_day": day.isoformat(),
+                 "p_instance": instance_id or "unidentified-caller"},
+            ).execute()
+            return int(others_res.data or 0)
+        except Exception as exc:  # noqa: BLE001  without usage the gateway cannot decide, so it denies
+            logger.error("Usage lookup failed: %s", type(exc).__name__)
+            raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "Usage lookup failed.") from None
+
+    async def touch_last_seen() -> None:
+        """"Last seen" is for the dashboard only, so it is written at most once a minute per agent instead of on every lookup. A malformed
+        or missing value simply means "write now"."""
+        if _last_seen_is_stale(agent.get("last_seen_at"), now):
+            try:
+                await (
+                    supabase.table("agents")
+                    .update({"last_seen_at": now.isoformat()})
+                    .eq("id", str(agent_id))
+                    .eq("organization_id", str(organization_id))
+                    .execute()
+                )
+            except Exception as exc:  # noqa: BLE001  a dashboard-only write must never deny an authorization lookup
+                logger.warning("Last-seen update failed: %s", type(exc).__name__)
+
+    # The destination list, the usage by other instances and the last-seen write do not depend on each other, so they run together
+    # (three round trips in a row on every cache miss before). Every failure still fails the whole lookup: the first HTTPException wins.
+    destinations_outcome, usage_outcome, _ = await asyncio.gather(
+        load_allowed_destinations(agent), load_used_by_others(), touch_last_seen(), return_exceptions=True
+    )
+    for outcome in (destinations_outcome, usage_outcome):
+        if isinstance(outcome, BaseException):
+            raise outcome
+    if isinstance(destinations_outcome, BaseException) or isinstance(usage_outcome, BaseException):  # unreachable: narrowed for the type checker
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "Context lookup failed.")
+    destination_mode, allowed_destinations = destinations_outcome
+    used_by_others = usage_outcome
     budget = GatewayBudgetContext(
         daily_call_limit=limit,
         used_by_other_instances=used_by_others,
@@ -494,17 +524,6 @@ async def gateway_context(
         resets_at=budget_rules.next_reset_utc(now, offset),
         action="freeze" if agent.get("budget_action") == "freeze" else "deny",
     )
-
-    # "Last seen" is for the dashboard only, so it is written at most once a minute per agent instead of on every lookup
-    # (a write on the critical path of every cache miss). A malformed or missing value simply means "write now".
-    if _last_seen_is_stale(agent.get("last_seen_at"), now):
-        await (
-            supabase.table("agents")
-            .update({"last_seen_at": now.isoformat()})
-            .eq("id", str(agent_id))
-            .eq("organization_id", str(organization_id))
-            .execute()
-        )
 
     return GatewayContextResponse(
         agent=GatewayAgentContext(

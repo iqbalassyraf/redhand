@@ -102,11 +102,13 @@ class LocalTableQueryBuilder:
         self._on_conflict: str | None = None
         self._filters: list[tuple[str, str, Any]] = []  # (column, op, value); op is "eq" or "lt"
         self._maybe_single: bool = False
+        self._columns: tuple[str, ...] | None = None  # None means every column ("*" or a form this twin does not project)
         self._order: tuple[str, bool] | None = None
         self._limit: int | None = None
 
-    def select(self, _columns: str = "*") -> LocalTableQueryBuilder:
+    def select(self, columns: str = "*") -> LocalTableQueryBuilder:
         self._operation = "select"
+        self._columns = _selected_columns(columns)
         return self
 
     def insert(self, rows: dict[str, Any] | list[dict[str, Any]]) -> LocalTableQueryBuilder:
@@ -171,6 +173,10 @@ class LocalTableQueryBuilder:
                 matched.sort(key=lambda r: _sort_key(r.get(column)), reverse=desc)
             if self._limit is not None:
                 matched = matched[: self._limit]
+            if self._columns is not None:
+                # Like PostgREST: a column that was not selected is simply not in the answer. Without this, code that reads a column it
+                # never selected passes here and fails in production (the budget day ignored the organization's offset that way).
+                matched = [{c: r[c] for c in self._columns if c in r} for r in matched]
             if self._maybe_single:
                 return QueryResult(data=matched[0] if matched else None)
             return QueryResult(data=matched)
@@ -258,6 +264,15 @@ class LocalTableQueryBuilder:
 # -----------------------------------------------------------------------------
 
 APPEND_ONLY_TABLES = frozenset({"control_audit_log"})
+
+
+def _selected_columns(columns: str) -> tuple[str, ...] | None:
+    """The plain column names of a select list, or None for "*" and for forms with embedded relations or casts (not projected)."""
+    text = columns.strip()
+    if text in ("", "*") or any(ch in text for ch in "(:!>"):
+        return None
+    names = tuple(part.strip() for part in text.split(",") if part.strip())
+    return names if names and all(name.replace("_", "").isalnum() for name in names) else None
 
 
 class LocalStoreConstraintError(Exception):
