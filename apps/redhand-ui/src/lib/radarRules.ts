@@ -36,8 +36,13 @@ export const RADAR_RULES: Readonly<Record<string, RadarRule>> = {
   "RAD-OUT-007": { family: "path", kind: "output", severity: "high", reason: "The content points at a sensitive file or escapes its directory." },
 };
 
+/** The loop rule is not one of the Radar's text rules (radar.py), so it is kept apart from RADAR_RULES, which a test compares with radar.py. */
+export const LOOP_RULE_ID = "RAD-LOOP-001";
+export const LOOP_RULE_REASON = "The agent sent the same tool call, with the same arguments, more often than the limit in a short time: it may be stuck in a loop.";
+
 /** Plain wording for a rule id; an id this version does not know is shown as itself, never hidden. */
 export function describeRule(ruleId: string): string {
+  if (ruleId === LOOP_RULE_ID) return LOOP_RULE_REASON;
   return RADAR_RULES[ruleId]?.reason ?? `Rule ${ruleId} (newer than this page).`;
 }
 

@@ -574,10 +574,10 @@ export interface RadarFinding {
   agent_name: string | null;
   rule_id: string;
   family: string;
-  kind: "injection" | "output";
+  kind: "injection" | "output" | "loop";
   severity: RadarLevel;
   confidence: RadarLevel;
-  place: "text" | "hidden" | "decoded";
+  place: "text" | "hidden" | "decoded" | "call";
   evasion: string[];
   tool_name: string;
   server_slug: string;
@@ -648,6 +648,27 @@ export const radarApi = {
     apiFetch<{ id: string; created: boolean; expires_at: string }>("/v1/radar/suppressions", t, { method: "POST", body }),
   removeSuppression: (t: string, id: string) =>
     apiFetch<{ revoked: boolean }>(`/v1/radar/suppressions/${id}`, t, { method: "DELETE" }),
+};
+
+// --- Loop detection (Phase 4 M6) ---------------------------------------------------------------------------------------------
+
+export type LoopMode = "off" | "observe" | "throttle";
+
+export interface LoopSettings {
+  loop_mode: LoopMode;
+  loop_limit: number;
+  loop_window_seconds: number;
+  loop_mode_changed_at: string | null;
+  last_7_days: { findings?: number; occurrences?: number; open?: number };
+  capabilities: { can_change_modes: boolean; can_review: boolean; can_suppress: boolean };
+}
+
+export const loopApi = {
+  settings: (t: string) => apiFetch<LoopSettings>("/v1/radar/loop-settings", t),
+  save: (
+    t: string,
+    body: { loop_mode: LoopMode; loop_limit: number; loop_window_seconds: number; expected_mode: LoopMode; confirm: boolean }
+  ) => apiFetch<LoopSettings>("/v1/radar/loop-settings", t, { method: "PUT", body }),
 };
 
 export interface SelfTestCategory {

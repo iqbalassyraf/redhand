@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 import logging
+import re
 from typing import Any
 from uuid import UUID
 
@@ -26,6 +27,8 @@ from redhand_core.radar.models import (
     FindingReviewResponse,
     FindingsResponse,
     FindingView,
+    LoopSettingsRequest,
+    LoopSettingsResponse,
     RadarCapabilities,
     RadarSettingsRequest,
     RadarSettingsResponse,
@@ -47,6 +50,7 @@ from redhand_core.telegram.client import TelegramClient
 logger = logging.getLogger("redhand.core.radar")
 
 MAX_FINDINGS_RETURNED = 100
+_SAFE_TOOL_NAME = re.compile(r"[^A-Za-z0-9_.:-]")
 _FINDING_COLUMNS = (
     "id,agent_id,rule_id,family,kind,severity,confidence,place,evasion,tool_name,server_slug,would_block,occurrences,"
     "first_seen_at,last_seen_at,review_status,reviewed_at,review_note"
@@ -100,6 +104,41 @@ async def set_settings(supabase: Any, operator: OperatorContext, request: RadarS
     if data.get("conflict"):
         raise StateConflictError
     return await get_settings(supabase, operator)
+
+
+async def get_loop_settings(supabase: Any, operator: OperatorContext) -> LoopSettingsResponse:
+    data = await _rpc(
+        supabase, "loop_settings", {"p_org": str(operator.organization_id)},
+        not_found_detail="Organization not found.", conflict_detail="The loop settings could not be read.",
+    )
+    return LoopSettingsResponse(
+        loop_mode=data["loop_mode"], loop_limit=int(data["loop_limit"]), loop_window_seconds=int(data["loop_window_seconds"]),
+        loop_mode_changed_at=data.get("loop_mode_changed_at"), last_7_days=dict(data.get("last_7_days") or {}),
+        capabilities=capabilities_for(operator.role),
+    )
+
+
+@retry_once_on_conflict
+async def set_loop_settings(supabase: Any, operator: OperatorContext, request: LoopSettingsRequest) -> LoopSettingsResponse:
+    """Compare-and-set against the settings read just now (and, when the caller says which mode it saw, against that too).
+    Turning throttling on refuses calls, and turning detection off removes a safeguard: both need confirmation."""
+    current = await get_loop_settings(supabase, operator)
+    if request.expected_mode is not None and request.expected_mode != current.loop_mode:
+        raise HTTPException(status.HTTP_409_CONFLICT, "The loop settings were changed by someone else. Reload and try again.")
+    if request.loop_mode == "throttle" and current.loop_mode != "throttle":
+        _require_confirmation(request.confirm, "Turning loop throttling on (repeated identical calls are refused)")
+    if request.loop_mode == "off" and current.loop_mode != "off":
+        _require_confirmation(request.confirm, "Turning loop detection off")
+    data = await _rpc(
+        supabase, "control_loop_settings",
+        {"p_org": str(operator.organization_id), "p_actor": str(operator.user_id), "p_mode": request.loop_mode,
+         "p_limit": request.loop_limit, "p_window": request.loop_window_seconds, "p_expected_mode": current.loop_mode,
+         "p_expected_limit": current.loop_limit, "p_expected_window": current.loop_window_seconds, "p_reason": request.reason},
+        not_found_detail="Organization not found.", conflict_detail="The loop settings conflicted with another change; try again.",
+    )
+    if data.get("conflict"):
+        raise StateConflictError
+    return await get_loop_settings(supabase, operator)
 
 
 async def list_findings(
@@ -208,7 +247,7 @@ async def record_findings(supabase: Any, telegram: TelegramClient | None, report
         raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "The findings could not be recorded.") from None
     data = response.data
     metrics = get_metrics()
-    for kind in ("injection", "output"):
+    for kind in ("injection", "output", "loop"):
         count = sum(1 for i in report.items if i.kind == kind)
         if count and int(data["new"]):
             metrics.increment_counter("redhand_radar_findings_total", float(min(count, int(data["new"]))), labels={"kind": kind})
@@ -221,6 +260,14 @@ async def record_findings(supabase: Any, telegram: TelegramClient | None, report
             supabase, telegram, report.organization_id,
             f"Radar: agent '{data.get('agent')}' has {int(data['new'])} new finding(s) in tool results ({rules}). "
             "Open the dashboard, MCP Scanner, Runtime findings. These are known-pattern checks: a clean result is not a guarantee.",
+        )
+    if data.get("loop_alert"):
+        # The tool name came from the agent's own call: keep only plain characters and a short length before it reaches a chat.
+        tool = _SAFE_TOOL_NAME.sub("", str(data.get("loop_tool") or ""))[:64] or "a tool"
+        await notify_organization(
+            supabase, telegram, report.organization_id,
+            f"Loop: agent '{data.get('agent')}' sent the same call to {tool} more often than the loop limit allows. "
+            "Open the dashboard, Radar, Repeated calls. If throttling is on, the extra repeats were refused. Counts only: no call details are sent.",
         )
     return FindingReportResponse(
         new=int(data["new"]), coalesced=int(data["coalesced"]), suppressed=int(data["suppressed"]),

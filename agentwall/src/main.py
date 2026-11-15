@@ -30,6 +30,7 @@ from .firewall.engine import FirewallPolicyEngine
 from .firewall.mcp_vetting import MCPServerAuditor, MCPVettingReport
 from .gateway.scan import ScanError, list_tools
 from .gateway.budget import BudgetMeter, HttpUsageReporter
+from .gateway.loops import LoopMeter
 from .gateway.context import CoreContextClient
 from .gateway.identity import AgentTokenVerifier
 from .gateway.metrics import GatewayMetrics
@@ -94,6 +95,8 @@ def build_gateway(settings: Settings, firewall: FirewallPolicyEngine, audit: Tam
             reporter=HttpFindingsReporter(core_url=core, service_token=token), metrics=metrics, use_model=settings.RADAR_MODEL_ENABLED,
             counts_reporter=HttpScanCountsReporter(core_url=core, service_token=token),
         ),
+        loops=LoopMeter(),
+        loop_detection_enabled=settings.LOOP_DETECTION_ENABLED,
     )
 
 
