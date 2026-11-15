@@ -114,6 +114,13 @@ class UpstreamForwarder:
     ) -> UpstreamResult:
         await check_destination(url, self._allow_insecure)
 
+        # Encode once, here, with the same options httpx uses for `json=`, so a value that cannot be sent (NaN, infinity, an integer of more
+        # than 4,300 digits, text that is not valid UTF-8) is an upstream error and never an exception out of the gateway.
+        try:
+            content = json.dumps(message, ensure_ascii=False, separators=(",", ":"), allow_nan=False).encode("utf-8")
+        except (ValueError, TypeError, RecursionError) as exc:
+            raise UpstreamError("The request could not be encoded.") from exc
+
         headers = {
             "Content-Type": "application/json",
             "Accept": "application/json, text/event-stream",
@@ -126,7 +133,7 @@ class UpstreamForwarder:
             headers["Authorization"] = upstream_authorization
 
         try:
-            async with self._http.stream("POST", url, json=message, headers=headers) as resp:
+            async with self._http.stream("POST", url, content=content, headers=headers) as resp:
                 chunks: list[bytes] = []
                 size = 0
                 async for chunk in resp.aiter_bytes():
