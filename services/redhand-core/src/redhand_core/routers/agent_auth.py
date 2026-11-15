@@ -23,6 +23,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
 from pydantic import BaseModel
 
+from redhand_core.destinations.hosts import normalize_host
 from redhand_core.auth import bearer_token
 from redhand_core.config import Settings, get_settings
 from redhand_core.passports import budget as budget_rules
@@ -254,6 +255,10 @@ class GatewayAgentContext(BaseModel):
     loop_limit: int
     loop_window_seconds: int
     loop_exempt: bool
+    # Destination allowlist (Phase 4 M7). Required by the gateway, like the fields above: an older core makes the lookup fail and the call is
+    # denied. Deploy core before the gateway. The list is sent only while the mode is not "off".
+    destination_mode: Literal["off", "observe", "enforce"]
+    allowed_destinations: list[str]
 
 
 class GatewayBudgetContext(BaseModel):
@@ -394,6 +399,25 @@ async def gateway_context(
         )
         return res.data if res else None
 
+    async def load_allowed_destinations(row: Any) -> tuple[Literal["off", "observe", "enforce"], list[str]]:
+        """The agent's destination mode and, unless it is off, its allowed hosts. A missing mode is off (a row from before the feature); a
+        mode that is present but not one of the three is read as ENFORCE (the restrictive reading, as for Safe Mode). A failed list lookup is
+        a 503: the gateway cannot compare without the list, so the call is denied rather than checked against nothing."""
+        raw = row.get("destination_mode") if isinstance(row, dict) else None
+        mode: Literal["off", "observe", "enforce"] = "off" if raw is None else raw if raw in ("off", "observe", "enforce") else "enforce"
+        if mode == "off":
+            return mode, []
+        try:
+            res = await (
+                supabase.table("agent_destinations").select("host")
+                .eq("organization_id", str(organization_id)).eq("agent_id", str(agent_id)).limit(101).execute()
+            )
+        except Exception as exc:  # noqa: BLE001  without the list the gateway cannot decide, so it denies
+            logger.error("Destination list lookup failed: %s", type(exc).__name__)
+            raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "Destination list lookup failed.") from None
+        hosts = {h for h in (r.get("host") for r in (res.data or [])) if isinstance(h, str) and normalize_host(h) == h}
+        return mode, sorted(hosts)[:100]  # a stored entry that does not normalize to itself is dropped: fewer allowed, never more
+
     async def load_loop_exempt() -> bool:
         """True while a suppression of the loop rule is live for this agent. A failed lookup means NOT exempt, the restrictive reading
         (the agent may be flagged or throttled that it should not be) instead of failing the whole lookup for a side question."""
@@ -413,6 +437,8 @@ async def gateway_context(
     )
     if not agent:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Agent not found.")
+
+    destination_mode, allowed_destinations = await load_allowed_destinations(agent)
 
     now = utcnow()
     try:
@@ -499,6 +525,8 @@ async def gateway_context(
             loop_limit=loop_limit,
             loop_window_seconds=loop_window_seconds,
             loop_exempt=loop_exempt,
+            destination_mode=destination_mode,
+            allowed_destinations=allowed_destinations,
         ),
         server=GatewayServerContext(
             slug=server_row["slug"], url=server_row["url"], pin_mode=pin_mode, approved_tools=approved_tools

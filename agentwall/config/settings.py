@@ -105,6 +105,10 @@ class Settings(BaseSettings):
         default=True,
         description="Kill switch for loop detection (Phase 4 M6). False skips the meter entirely, whatever the organization's mode says.",
     )
+    DESTINATION_CHECK_ENABLED: bool = Field(
+        default=True,
+        description="Kill switch for the destination allowlist (Phase 4 M7). False skips the check entirely, whatever an agent's mode says.",
+    )
     RADAR_MODEL_ENABLED: bool = Field(
         default=False,
         description="Also run the second-stage injection model in the Radar's background scan (about 8 ms more CPU per large result, never inline).",

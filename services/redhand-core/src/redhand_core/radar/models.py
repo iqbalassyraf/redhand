@@ -17,9 +17,9 @@ from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictInt
 from redhand_core.passports.models import MAX_REASON_LENGTH
 
 RULE_ID_PATTERN = r"^RAD-(INJ|OUT)-[0-9]{3}$"  # the injection and output rules: scan counts and readiness only know these
-FINDING_RULE_PATTERN = r"^RAD-(INJ|OUT|LOOP)-[0-9]{3}$"  # every rule a finding or a suppression may name
+FINDING_RULE_PATTERN = r"^RAD-(INJ|OUT|LOOP|DST)-[0-9]{3}$"  # every rule a finding or a suppression may name
 Level = Literal["low", "medium", "high"]
-FindingKind = Literal["injection", "output", "loop"]
+FindingKind = Literal["injection", "output", "loop", "destination"]
 RadarKind = Literal["injection", "output"]  # the Radar's own two checks: scan counts and readiness never include loops
 Place = Literal["text", "hidden", "decoded", "call"]
 LoopMode = Literal["off", "observe", "throttle"]
@@ -47,6 +47,8 @@ class FindingItem(BaseModel):
     server: str = Field(default="", max_length=63)
     would_block: bool = False
     occurrences: int = Field(default=1, ge=1, le=1000)
+    # Destination findings only: the last two labels of the address, never a subdomain (a subdomain can carry the stolen data).
+    detail: str | None = Field(default=None, max_length=64, pattern=r"^[a-z0-9_.:-]+$")
 
 
 class FindingReport(BaseModel):
@@ -81,6 +83,7 @@ class FindingView(BaseModel):
     server_slug: str
     would_block: bool
     occurrences: int
+    detail: str | None = None
     first_seen_at: datetime
     last_seen_at: datetime
     review_status: ReviewStatus

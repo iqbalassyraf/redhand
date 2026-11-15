@@ -574,7 +574,7 @@ export interface RadarFinding {
   agent_name: string | null;
   rule_id: string;
   family: string;
-  kind: "injection" | "output" | "loop";
+  kind: "injection" | "output" | "loop" | "destination";
   severity: RadarLevel;
   confidence: RadarLevel;
   place: "text" | "hidden" | "decoded" | "call";
@@ -583,6 +583,8 @@ export interface RadarFinding {
   server_slug: string;
   would_block: boolean;
   occurrences: number;
+  /** Destination findings only: the last two parts of the address (never a subdomain). */
+  detail?: string | null;
   first_seen_at: string;
   last_seen_at: string;
   review_status: FindingReviewStatus;
@@ -669,6 +671,35 @@ export const loopApi = {
     t: string,
     body: { loop_mode: LoopMode; loop_limit: number; loop_window_seconds: number; expected_mode: LoopMode; confirm: boolean }
   ) => apiFetch<LoopSettings>("/v1/radar/loop-settings", t, { method: "PUT", body }),
+};
+
+// --- Destination allowlist (Phase 4 M7) --------------------------------------------------------------------------------------
+
+export type DestinationMode = "off" | "observe" | "enforce";
+
+export interface DestinationEntry {
+  id: string;
+  host: string;
+  created_at: string;
+}
+
+export interface DestinationSettings {
+  destination_mode: DestinationMode;
+  destination_mode_changed_at: string | null;
+  entries: DestinationEntry[];
+  max_entries: number;
+  last_7_days: { findings?: number; occurrences?: number; open?: number };
+  capabilities: { can_change: boolean };
+}
+
+export const destinationsApi = {
+  settings: (t: string, agentId: string) => apiFetch<DestinationSettings>(`/v1/passports/${agentId}/destinations`, t),
+  add: (t: string, agentId: string, body: { host: string; confirm: boolean }) =>
+    apiFetch<{ id: string; host: string; added: boolean }>(`/v1/passports/${agentId}/destinations`, t, { method: "POST", body }),
+  remove: (t: string, agentId: string, entryId: string) =>
+    apiFetch<{ removed: boolean }>(`/v1/passports/${agentId}/destinations/${entryId}`, t, { method: "DELETE" }),
+  setMode: (t: string, agentId: string, body: { destination_mode: DestinationMode; expected_mode: DestinationMode; confirm: boolean }) =>
+    apiFetch<DestinationSettings>(`/v1/passports/${agentId}/destination-mode`, t, { method: "PUT", body }),
 };
 
 export interface SelfTestCategory {

@@ -26,7 +26,7 @@ import {
 } from "@/lib/api";
 import { useAuth, useRequiredSession } from "@/lib/auth";
 import { type BlockGate, isCoverageData } from "@/lib/coverage";
-import { EVASION_LABEL, LOOP_RULE_ID, describeRule } from "@/lib/radarRules";
+import { DESTINATION_RULE_ID, EVASION_LABEL, LOOP_RULE_ID, describeRule } from "@/lib/radarRules";
 import {
   LOOP_LIMITS_TEXT,
   LOOP_LIMIT_MAX,
@@ -649,6 +649,7 @@ export default function RadarPage() {
                     <option value="injection">Hidden instructions</option>
                     <option value="output">Risky output</option>
                     <option value="loop">Repeated calls</option>
+                    <option value="destination">Address outside the list</option>
                   </select>
                 </div>
               </div>
@@ -669,7 +670,10 @@ export default function RadarPage() {
                         </span>
                         <span className="ml-auto text-[#606060]">{when(f.last_seen_at)}</span>
                       </div>
-                      <p className="mt-1">{describeRule(f.rule_id)}</p>
+                      <p className="mt-1">
+                        {describeRule(f.rule_id)}
+                        {f.rule_id === DESTINATION_RULE_ID && f.detail ? <> Address: <code className="rounded bg-[#F2F2F2] px-1">{f.detail}</code>.</> : null}
+                      </p>
                       <p className="mt-1 text-[#606060]">
                         {f.severity} severity, {f.confidence} confidence, {PLACE_LABEL[f.place]}
                         {f.evasion.length ? `, tricks: ${f.evasion.map((e) => EVASION_LABEL[e] ?? e).join(", ")}` : ""}
