@@ -939,6 +939,8 @@ def _record_events(store: LocalSupabaseAdapter, p: dict[str, Any]) -> dict[str, 
             "redaction_count": redaction_count, "credential_jti": credential_jti,
             **payloads, "prev_hash": prev, "hash": h, "batch_id": batch_id,
         })
+        if method == "tools/call":
+            _behaviour_rollup(store, org, agent_id, occurred_at, tool_name, decision)  # trg_agent_events_behaviour
         prev = h
         accepted += 1
         first_seq = seq if first_seq is None else first_seq
@@ -1680,6 +1682,34 @@ def _risk_mark_alerted(store: LocalSupabaseAdapter, p: dict[str, Any]) -> bool:
     return True
 
 
+# --- Behaviour baseline (Phase 4.5 B2): emulation of supabase/migrations/20261123000000_behaviour_baseline.sql -------------------------
+
+def _utc_hour(value: Any) -> datetime:
+    return _parse_ts(value).astimezone(timezone.utc).replace(minute=0, second=0, microsecond=0)
+
+
+def _behaviour_rollup(store: LocalSupabaseAdapter, org: str, agent_id: str, occurred_at: Any, tool_name: str, decision: Any) -> None:
+    hour, tool = _utc_hour(occurred_at), str(tool_name)[:128]
+    rows = store.tables.setdefault("agent_tool_hourly", [])
+    row = next((r for r in rows if r["agent_id"] == agent_id and r["hour"] == hour and r["tool_name"] == tool), None)
+    if row is None:
+        row = {"organization_id": org, "agent_id": agent_id, "hour": hour, "tool_name": tool, "calls": 0, "refused": 0}
+        rows.append(row)
+    row["calls"] += 1
+    row["refused"] += 1 if decision == "BLOCK" else 0
+
+
+def _agent_behaviour_hours(store: LocalSupabaseAdapter, p: dict[str, Any]) -> list[dict[str, Any]]:
+    org, only = str(p["p_org"]), (str(p["p_agent"]) if p.get("p_agent") else None)
+    since, until = _parse_ts(p["p_since"]), _parse_ts(p["p_until"])
+    rows = [
+        r for r in store.tables.get("agent_tool_hourly", [])
+        if r["organization_id"] == org and (only is None or r["agent_id"] == only) and since <= r["hour"] <= until
+    ]
+    rows.sort(key=lambda r: (r["agent_id"], r["hour"]))
+    return [{"agent_id": r["agent_id"], "hour": r["hour"].isoformat(), "tool_name": r["tool_name"], "calls": r["calls"]} for r in rows]
+
+
 HANDLERS: dict[str, RpcHandler] = {
     "control_agent_change": _control_agent_change,
     "control_freeze_all": _control_freeze_all,
@@ -1729,6 +1759,7 @@ HANDLERS: dict[str, RpcHandler] = {
     "agent_risk_signals": _agent_risk_signals,
     "control_risk_ladder": _control_risk_ladder,
     "risk_mark_alerted": _risk_mark_alerted,
+    "agent_behaviour_hours": _agent_behaviour_hours,
 }
 
 

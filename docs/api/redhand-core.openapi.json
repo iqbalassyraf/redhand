@@ -482,6 +482,165 @@
         "title": "ApproveAllResponse",
         "type": "object"
       },
+      "BehaviourBacktestView": {
+        "properties": {
+          "flagged_hours": {
+            "title": "Flagged Hours",
+            "type": "integer"
+          },
+          "hours": {
+            "title": "Hours",
+            "type": "integer"
+          },
+          "new_tool_starts": {
+            "title": "New Tool Starts",
+            "type": "integer"
+          },
+          "spike_hours": {
+            "title": "Spike Hours",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "hours",
+          "flagged_hours",
+          "spike_hours",
+          "new_tool_starts"
+        ],
+        "title": "BehaviourBacktestView",
+        "type": "object"
+      },
+      "BehaviourSummaryResponse": {
+        "description": "How noisy the behaviour baseline would be for this organization: counts only, so it can be judged before it is given weight.",
+        "properties": {
+          "agents": {
+            "title": "Agents",
+            "type": "integer"
+          },
+          "backtest": {
+            "$ref": "#/components/schemas/BehaviourBacktestView"
+          },
+          "flagged_agents": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Flagged Agents",
+            "type": "array"
+          },
+          "model": {
+            "title": "Model",
+            "type": "string"
+          },
+          "new_tools_now": {
+            "title": "New Tools Now",
+            "type": "integer"
+          },
+          "spikes_now": {
+            "title": "Spikes Now",
+            "type": "integer"
+          },
+          "warm_agents": {
+            "title": "Warm Agents",
+            "type": "integer"
+          },
+          "warnings_now": {
+            "title": "Warnings Now",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "model",
+          "agents",
+          "warm_agents",
+          "warnings_now",
+          "spikes_now",
+          "new_tools_now",
+          "backtest",
+          "flagged_agents"
+        ],
+        "title": "BehaviourSummaryResponse",
+        "type": "object"
+      },
+      "BehaviourView": {
+        "description": "Phase 4.5 B2, watch only: shown next to the score, never part of it. `status` is \"unavailable\" when the counts could not be read\n(the score is still shown); every other field is then at its empty value.",
+        "properties": {
+          "backtest": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/BehaviourBacktestView"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "history_days": {
+            "default": 0,
+            "title": "History Days",
+            "type": "integer"
+          },
+          "hour_calls": {
+            "default": 0,
+            "title": "Hour Calls",
+            "type": "integer"
+          },
+          "model": {
+            "title": "Model",
+            "type": "string"
+          },
+          "new_tools": {
+            "items": {
+              "type": "string"
+            },
+            "title": "New Tools",
+            "type": "array"
+          },
+          "spike": {
+            "default": false,
+            "title": "Spike",
+            "type": "boolean"
+          },
+          "spike_threshold": {
+            "default": 0,
+            "title": "Spike Threshold",
+            "type": "integer"
+          },
+          "status": {
+            "enum": [
+              "ok",
+              "unavailable"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "usual_hourly": {
+            "default": 0.0,
+            "title": "Usual Hourly",
+            "type": "number"
+          },
+          "warm": {
+            "default": false,
+            "title": "Warm",
+            "type": "boolean"
+          },
+          "warmup_days": {
+            "title": "Warmup Days",
+            "type": "integer"
+          },
+          "warning": {
+            "default": false,
+            "title": "Warning",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "status",
+          "model",
+          "warmup_days"
+        ],
+        "title": "BehaviourView",
+        "type": "object"
+      },
       "BlackBoxCapabilities": {
         "description": "What the caller's role allows, computed by the server. It exists so the dashboard can hide buttons it\nwould be refused; the server still enforces every action, so ignoring this field grants nothing.",
         "properties": {
@@ -3521,6 +3680,16 @@
         "properties": {
           "agent": {
             "$ref": "#/components/schemas/AgentRiskDetail"
+          },
+          "behaviour": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/BehaviourView"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "model": {
             "title": "Model",
@@ -10331,6 +10500,72 @@
           }
         },
         "summary": "Get Agent Risk",
+        "tags": [
+          "Risk Engine"
+        ]
+      }
+    },
+    "/v1/risk/behaviour/summary": {
+      "get": {
+        "description": "Phase 4.5 B2, watch only: for every active agent, whether its behaviour is unusual now, and how often it would have been flagged\nover the last 168 hours. Counts and agent names only. Read this before giving behaviour any weight in the score.",
+        "operationId": "behaviour_summary_v1_risk_behaviour_summary_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-RedHand-Org",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Redhand-Org"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BehaviourSummaryResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Behaviour Summary",
         "tags": [
           "Risk Engine"
         ]

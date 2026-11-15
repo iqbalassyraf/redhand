@@ -140,6 +140,14 @@ PROMISES = [
     ("A person released this agent on", "apps/redhand-ui/src/app/passports/RiskPanel.tsx"),
     ("Elevated", "apps/redhand-ui/src/lib/riskForm.ts"),
     ("Critical", "apps/redhand-ui/src/lib/riskForm.ts"),
+    # Part I (behaviour baseline)
+    ("Behaviour (watch only, not part of the score)", "apps/redhand-ui/src/app/passports/RiskPanel.tsx"),
+    ("Nothing is judged yet.", "apps/redhand-ui/src/lib/behaviour.ts"),
+    ("Usual behaviour.", "apps/redhand-ui/src/lib/behaviour.ts"),
+    ("Unusual: a surge of calls this hour.", "apps/redhand-ui/src/lib/behaviour.ts"),
+    ("Unusual: a tool it has not used before.", "apps/redhand-ui/src/lib/behaviour.ts"),
+    ("this would have flagged", "apps/redhand-ui/src/lib/behaviour.ts"),
+    ("Usual hour: ", "apps/redhand-ui/src/lib/behaviour.ts"),
 ]
 
 

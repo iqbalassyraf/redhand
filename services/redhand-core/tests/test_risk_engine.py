@@ -453,3 +453,99 @@ def test_each_evaluation_counts_the_level_it_found(env: Env) -> None:
     before = counter("risk_evaluations_by_level_total", level="elevated")
     env.trip(env.honeytoken())
     assert counter("risk_evaluations_by_level_total", level="elevated") == before + 1
+
+
+# --- behaviour baseline (Phase 4.5 B2, watch only) ------------------------------------------------------------------------------
+
+def _seed_hours(env: Env, agent: str, hours: range, per_hour: int, tool: str = "read_ticket", org: str = DEFAULT_ORG_ID) -> None:
+    top = datetime.now(timezone.utc).replace(minute=0, second=0, microsecond=0)
+    rows = env.store.tables.setdefault("agent_tool_hourly", [])
+    for back in hours:
+        rows.append({"organization_id": org, "agent_id": agent, "hour": top - timedelta(hours=back), "tool_name": tool, "calls": per_hour,
+                     "refused": 0})
+
+
+def test_a_new_agent_is_warming_up(env: Env) -> None:
+    behaviour = env.detail().json()["behaviour"]
+    assert behaviour["status"] == "ok" and behaviour["warm"] is False and behaviour["warmup_days"] == 7 and behaviour["warning"] is False
+
+
+def test_a_surge_on_a_warm_agent_is_a_behaviour_warning_but_not_part_of_the_score(env: Env) -> None:
+    _seed_hours(env, env.agent, range(1, 15 * 24), per_hour=2)
+    _seed_hours(env, env.agent, range(0, 1), per_hour=40)
+    detail = env.detail().json()
+    b = detail["behaviour"]
+    assert b["warm"] is True and b["usual_hourly"] == 2.0 and b["spike_threshold"] == 30 and b["spike"] is True and b["warning"] is True
+    assert b["backtest"]["hours"] == 168 and b["backtest"]["flagged_hours"] == 0
+    assert detail["agent"]["score"] == 0  # watch only: no points
+    assert env.risk_alerts() == []  # and no alert
+
+
+def test_a_tool_never_used_before_is_listed_as_new(env: Env) -> None:
+    _seed_hours(env, env.agent, range(1, 15 * 24), per_hour=2)
+    _seed_hours(env, env.agent, range(3, 4), per_hour=1, tool="export_customers")
+    assert env.detail().json()["behaviour"]["new_tools"] == ["export_customers"]
+
+
+def test_recorded_tool_calls_feed_the_hourly_counts(env: Env) -> None:
+    item = {"agent_id": env.agent, "occurred_at": datetime.now(timezone.utc).isoformat(), "gateway_instance": "gw-risk-test", "server": "xero",
+            "method": "tools/call", "tool_name": "list_invoices", "decision": "ALLOW", "reasons": [], "upstream_status": 200, "latency_ms": 1.0,
+            "argument_keys": [], "arguments_sha256": "a" * 64, "result_size_bytes": 10, "redaction_count": 0, "credential_jti": "jti-1"}
+    other = {**item, "method": "tools/list", "tool_name": ""}
+    body = {"instance_id": "gw-risk-test", "batch_id": str(uuid4()), "organization_id": DEFAULT_ORG_ID, "items": [item, item, other]}
+    assert env.client.post("/internal/v1/events", json=body, headers=GATEWAY).json()["accepted"] == 3
+    rows = [r for r in env.store.tables["agent_tool_hourly"] if r["agent_id"] == env.agent]
+    assert len(rows) == 1 and rows[0]["calls"] == 2 and rows[0]["tool_name"] == "list_invoices"  # tools/list is not a tool call
+    assert env.detail().json()["behaviour"]["hour_calls"] == 2
+
+
+def test_if_the_counts_cannot_be_read_the_score_is_still_shown(env: Env, monkeypatch: pytest.MonkeyPatch) -> None:
+    from redhand_core.services import local_rpc
+
+    def boom(store: Any, p: dict[str, Any]) -> Any:
+        raise local_rpc._error("XX000", "simulated database failure")
+
+    env.trip(env.honeytoken())
+    monkeypatch.setitem(local_rpc.HANDLERS, "agent_behaviour_hours", boom)
+    resp = env.detail()
+    assert resp.status_code == 200 and resp.json()["agent"]["score"] == 40
+    assert resp.json()["behaviour"]["status"] == "unavailable" and resp.json()["behaviour"]["warning"] is False
+    assert env.client.get("/v1/risk/behaviour/summary", headers=env.h("operator")).status_code == 503
+
+
+@pytest.mark.parametrize(("user", "code"), [("viewer", 403), ("operator", 200), ("admin", 200)])
+def test_the_behaviour_summary_needs_the_security_operator_role(env: Env, user: str, code: int) -> None:
+    assert env.client.get("/v1/risk/behaviour/summary", headers=env.h(user)).status_code == code
+
+
+def test_the_behaviour_summary_counts_this_organization_only(env: Env) -> None:
+    _seed_hours(env, env.agent, range(1, 15 * 24), per_hour=2)
+    _seed_hours(env, env.agent, range(0, 1), per_hour=40)
+    other = str(uuid4())
+    env.store.tables["agents"].append({"id": other, "organization_id": OTHER_ORG, "name": "Other bot", "external_agent_id": "o", "status": "active"})
+    _seed_hours(env, other, range(0, 1), per_hour=500, org=OTHER_ORG)
+    summary = env.client.get("/v1/risk/behaviour/summary", headers=env.h("operator")).json()
+    assert summary["warnings_now"] == 1 and summary["spikes_now"] == 1 and summary["flagged_agents"] == ["Risky bot"]
+    assert summary["warm_agents"] == 1 and summary["backtest"]["hours"] == 168
+    theirs = env.client.get("/v1/risk/behaviour/summary", headers=operator_headers(settings=env.settings, user_id=UUID(OTHER_OWNER))).json()
+    assert theirs["flagged_agents"] == [] and theirs["warnings_now"] == 0  # their own agent is not warm; ours is not theirs
+
+
+def test_an_agent_s_behaviour_is_its_own(env: Env) -> None:
+    noisy = env.register("Noisy bot")["id"]
+    _seed_hours(env, noisy, range(1, 15 * 24), per_hour=2)
+    _seed_hours(env, noisy, range(0, 1), per_hour=40)
+    _seed_hours(env, env.agent, range(1, 15 * 24), per_hour=2)
+    assert env.detail(noisy).json()["behaviour"]["spike"] is True
+    assert env.detail().json()["behaviour"]["spike"] is False  # the other agent's surge is not this one's
+
+
+def test_the_in_memory_twin_scopes_hourly_counts_by_organization(env: Env) -> None:
+    import asyncio
+
+    _seed_hours(env, env.agent, range(0, 3), per_hour=1)
+    now = datetime.now(timezone.utc)
+    params = {"p_agent": env.agent, "p_since": (now - timedelta(days=1)).isoformat(), "p_until": now.isoformat()}
+    mine = asyncio.run(env.store.rpc("agent_behaviour_hours", {"p_org": DEFAULT_ORG_ID, **params}).execute()).data
+    theirs = asyncio.run(env.store.rpc("agent_behaviour_hours", {"p_org": OTHER_ORG, **params}).execute()).data
+    assert len(mine) == 3 and theirs == []  # the same agent id asked for under another organization: nothing, like the SQL function
