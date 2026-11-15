@@ -22,12 +22,18 @@ import {
   type TelegramLink,
   type TelegramLinkCode,
   type UsageSummary,
+  type AgentRiskSummary,
+  type RiskList,
+  riskApi,
   telegramApi,
 } from "@/lib/api";
 import { useAuth, useRequiredSession } from "@/lib/auth";
+import { LEVEL_LABEL, LEVEL_STYLE, automaticActorLabel } from "@/lib/riskForm";
 import { DestinationsPanel } from "./DestinationsPanel";
+import { RiskLadderCard } from "./RiskLadderCard";
+import { RiskPanel } from "./RiskPanel";
 
-// Budget Guard's automatic freezes are recorded under this fixed actor (not a person).
+// RedHand's own automatic actions (Budget Guard, honeytokens, the Risk Engine) are recorded under this fixed actor (not a person).
 const SYSTEM_ACTOR_ID = "00000000-0000-0000-0000-000000000000";
 
 const FRAMEWORKS = ["n8n", "Claude", "LangGraph", "CrewAI", "custom"];
@@ -64,6 +70,8 @@ export default function PassportsPage() {
   const [budgetDefault, setBudgetDefault] = useState<number | null>(null);
   const [budgetEditing, setBudgetEditing] = useState<Passport | null>(null);
   const [destinationsFor, setDestinationsFor] = useState<Passport | null>(null);
+  const [risk, setRisk] = useState<RiskList | null>(null);
+  const [riskFor, setRiskFor] = useState<Passport | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [revealedKey, setRevealedKey] = useState<{ name: string; key: string } | null>(null);
@@ -110,6 +118,11 @@ export default function PassportsPage() {
       setOrgSafeMode(o.enabled);
       setUsage(u);
       setBudgetDefault(d.default_daily_call_limit);
+      // Risk scores need the security operator role, and an older core has no Risk Engine: either way the rest of the page works.
+      setRisk(await riskApi.list(token).catch((err: unknown) => {
+        if (err instanceof ApiError && (err.status === 403 || err.status === 404)) return null;
+        throw err;
+      }));
     } catch (err) {
       handleError(err);
     }
@@ -273,6 +286,16 @@ export default function PassportsPage() {
         )}
         {notice && <div className="rounded-[8px] bg-[#E6F4EA] p-3 text-[13px] text-[#1E7B34]">{notice}</div>}
 
+        {risk && token && (
+          <RiskLadderCard
+            key={`${risk.ladder.alert_at}-${risk.ladder.safe_mode_at}-${risk.ladder.freeze_at}`}
+            token={token}
+            ladder={risk.ladder}
+            onSaved={(message) => { setNotice(message); refresh(); }}
+            onError={handleError}
+          />
+        )}
+
         {revealedKey && (
           <div className="rounded-[12px] border-2 border-[#0F0F0F] bg-[#FFFFFF] p-4">
             <p className="text-[13px] font-semibold">Agent key for {revealedKey.name}</p>
@@ -327,6 +350,8 @@ export default function PassportsPage() {
           usage={usage}
           onEditBudget={(p) => setBudgetEditing(p)}
           onDestinations={(p) => setDestinationsFor(destinationsFor?.id === p.id ? null : p)}
+          risk={risk}
+          onRisk={(p) => setRiskFor(riskFor?.id === p.id ? null : p)}
           orgSafeMode={orgSafeMode}
           onSafeMode={(p) => {
             if (!p.safe_mode) {
@@ -346,6 +371,20 @@ export default function PassportsPage() {
             agentId={destinationsFor.id}
             agentName={destinationsFor.name}
             onClose={() => setDestinationsFor(null)}
+            onUnauthorized={() => {
+              signOut();
+              window.location.href = "/login";
+            }}
+          />
+        )}
+
+        {riskFor && token && (
+          <RiskPanel
+            key={riskFor.id}
+            token={token}
+            agentId={riskFor.id}
+            agentName={riskFor.name}
+            onClose={() => setRiskFor(null)}
             onUnauthorized={() => {
               signOut();
               window.location.href = "/login";
@@ -437,8 +476,11 @@ function PassportTable(props: {
   usage: UsageSummary | null;
   onEditBudget: (p: Passport) => void;
   onDestinations: (p: Passport) => void;
+  risk: RiskList | null;
+  onRisk: (p: Passport) => void;
 }) {
   const { passports, busy } = props;
+  const riskByAgent = new Map<string, AgentRiskSummary>((props.risk?.agents ?? []).map((r) => [r.agent_id, r]));
   const usageByAgent = new Map<string, AgentUsage>((props.usage?.agents ?? []).map((u) => [u.agent_id, u]));
   return (
     <section className="overflow-x-auto rounded-[12px] border border-[#E5E5E5] bg-[#FFFFFF]">
@@ -478,6 +520,21 @@ function PassportTable(props: {
                     {p.status}
                   </span>
                   {p.status_reason && <div className="mt-1 text-[11px] text-[#606060]">{p.status_reason}</div>}
+                  {(() => {
+                    const r = riskByAgent.get(p.id);
+                    if (!r) return null;  // no score: a role that cannot read risk, or an older core
+                    return (
+                      <div className="mt-1">
+                        <button
+                          onClick={() => props.onRisk(p)}
+                          title={r.reason}
+                          className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${LEVEL_STYLE[r.level]} hover:underline`}
+                        >
+                          risk {r.score} · {LEVEL_LABEL[r.level]}
+                        </button>
+                      </div>
+                    );
+                  })()}
                   {p.status !== "revoked" && (p.safe_mode || props.orgSafeMode) && (
                     <div className="mt-1">
                       <span className="rounded-full bg-[#FFF4E5] px-2 py-0.5 text-[11px] font-semibold text-[#8A4B00]">
@@ -895,7 +952,7 @@ function AuditPanel(props: { entries: ControlAuditEntry[]; passports: Passport[]
               )}
             </span>
             <span className="text-[11px] text-[#606060]">
-              by {e.actor_user_id === SYSTEM_ACTOR_ID ? "RedHand Budget Guard" : shortId(e.actor_user_id)} ·{" "}
+              by {e.actor_user_id === SYSTEM_ACTOR_ID ? automaticActorLabel(e.reason) : shortId(e.actor_user_id)} ·{" "}
               {new Date(e.created_at).toLocaleString()}
             </span>
           </li>

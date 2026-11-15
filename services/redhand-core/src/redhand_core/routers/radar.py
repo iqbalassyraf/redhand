@@ -57,6 +57,9 @@ from redhand_core.routers.agent_auth import require_internal_service
 from redhand_core.routers.mcp_scan import GatewayClientDep
 from redhand_core.routers.telegram import OptionalClientDep
 from redhand_core.routers.telemetry import get_supabase_service_client
+from redhand_core.passports.models import utcnow
+from redhand_core.risk import service as risk_service
+from redhand_core.telegram.bot import AlertBatch
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["Prompt Injection Radar"])
@@ -177,9 +180,19 @@ async def get_findings(
 
 @router.post("/v1/findings/{finding_id}/review", response_model=FindingReviewResponse)
 async def review_finding(
-    finding_id: UUID, payload: FindingReviewRequest, operator: SecurityOperatorDep, supabase: SupabaseDep
+    finding_id: UUID, payload: FindingReviewRequest, operator: SecurityOperatorDep, supabase: SupabaseDep, telegram: OptionalClientDep
 ) -> FindingReviewResponse:
-    return await service.review_finding(supabase, operator, finding_id, payload)
+    result = await service.review_finding(supabase, operator, finding_id, payload)
+    if result.changed and result.review_status == "confirmed":
+        # A finding a person marks as real weighs more in the agent's risk score, so the ladder is evaluated again.
+        res = await (
+            supabase.table("security_findings").select("agent_id")
+            .eq("id", str(finding_id)).eq("organization_id", str(operator.organization_id)).execute()
+        )
+        rows = list(res.data or [])
+        if rows:
+            await risk_service.evaluate_agents(supabase, telegram, operator.organization_id, [UUID(str(rows[0]["agent_id"]))], utcnow())
+    return result
 
 
 @router.get("/v1/radar/suppressions", response_model=SuppressionsResponse)
@@ -210,7 +223,11 @@ async def delete_suppression(
     include_in_schema=False,
 )
 async def report_findings(report: FindingReport, supabase: SupabaseDep, telegram: OptionalClientDep) -> FindingReportResponse:
-    return await service.record_findings(supabase, telegram, report)
+    alerts = AlertBatch()  # the findings alert and any risk alert leave as one Telegram message
+    result = await service.record_findings(supabase, telegram, report, alerts)
+    await risk_service.evaluate_agents(supabase, telegram, report.organization_id, [report.agent_id], utcnow(), alerts)  # never raises
+    await alerts.flush(supabase, telegram)
+    return result
 
 
 @router.post(

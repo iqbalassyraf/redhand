@@ -27,7 +27,7 @@ from redhand_core.passports import service as passport_service
 from redhand_core.passports.budget import SYSTEM_ACTOR_ID
 from redhand_core.passports.models import utcnow
 from redhand_core.services.metrics import get_metrics
-from redhand_core.telegram.bot import notify_organization
+from redhand_core.telegram.bot import AlertBatch, send_alert
 from redhand_core.telegram.client import TelegramClient
 
 logger = logging.getLogger("redhand.core.honeytokens")
@@ -132,7 +132,7 @@ def _alert_text(report: TripReport, label: str, agent_name: str, frozen: bool, h
     return text
 
 
-async def handle_trip(supabase: Any, telegram: TelegramClient | None, report: TripReport) -> bool:
+async def handle_trip(supabase: Any, telegram: TelegramClient | None, report: TripReport, alerts: AlertBatch | None = None) -> bool:
     """
     Records one trip (idempotent), then does what the STORED action says: alert the organization and, if the
     action is freeze, freeze the agent as the system actor. The gateway's claims are never trusted: it sends
@@ -172,8 +172,8 @@ async def handle_trip(supabase: Any, telegram: TelegramClient | None, report: Tr
         except HTTPException as exc:
             logger.warning("Trip freeze refused for agent %s: %s", report.agent_id, exc.status_code)
     if data.get("alert"):
-        await notify_organization(
-            supabase, telegram, report.organization_id,
+        await send_alert(
+            alerts, supabase, telegram, report.organization_id, agent_id=report.agent_id, text=
             _alert_text(report, str(data.get("label")), str(data.get("agent_name")), frozen,
                         str(data["kind"]) if isinstance(data.get("kind"), str) else None),
         )

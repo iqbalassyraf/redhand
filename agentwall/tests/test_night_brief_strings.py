@@ -116,6 +116,30 @@ PROMISES = [
         "agentwall/config/settings.py",
     ),  # the AGENTWALL_ prefix is applied by the settings class (env_prefix)
     ("AGENTWALL_DESTINATION_CHECK_ENABLED", "docs/runbooks/destination-allowlist.md"),
+    # Part D (self-test and gate)
+    ("A self-test ran a moment ago. Wait about a minute and try again.", "apps/redhand-ui/src/lib/selfTest.ts"),
+    ("Hidden instructions in tool answers", "apps/redhand-ui/src/lib/selfTest.ts"),
+    ("Sensitive file paths", "apps/redhand-ui/src/lib/selfTest.ts"),
+    ("Internal and cloud-metadata addresses", "apps/redhand-ui/src/lib/selfTest.ts"),
+    ("Script and active markup", "apps/redhand-ui/src/lib/selfTest.ts"),
+    ("Helper model: ", RADAR_PAGE),
+    ("The rules changed after this round was scored. It needs a new round.", "agentwall/src/bench/gate.py"),
+    # Part H (Risk Engine)
+    ("Risk response saved. It applies from the next signal.", "apps/redhand-ui/src/app/passports/RiskLadderCard.tsx"),
+    ("I understand: RedHand will turn Safe Mode on or freeze agents by itself when their risk score reaches these numbers. A person can undo it.",
+     "apps/redhand-ui/src/lib/riskForm.ts"),
+    ("Freeze (every call refused)", "apps/redhand-ui/src/lib/riskForm.ts"),
+    ("Alert (Telegram message)", "apps/redhand-ui/src/lib/riskForm.ts"),
+    ("honeytoken or canary trip", "services/redhand-core/src/redhand_core/risk/scoring.py"),
+    (" in the last 24 hours", "apps/redhand-ui/src/lib/riskForm.ts"),
+    ("How the score is counted", "apps/redhand-ui/src/app/passports/RiskPanel.tsx"),
+    ("reached a risk score of", "services/redhand-core/src/redhand_core/risk/service.py"),
+    ("Nothing was changed automatically.", "services/redhand-core/src/redhand_core/risk/service.py"),
+    ("frozen it", "services/redhand-core/src/redhand_core/risk/service.py"),
+    ("RedHand Risk Engine", "apps/redhand-ui/src/lib/riskForm.ts"),
+    ("A person released this agent on", "apps/redhand-ui/src/app/passports/RiskPanel.tsx"),
+    ("Elevated", "apps/redhand-ui/src/lib/riskForm.ts"),
+    ("Critical", "apps/redhand-ui/src/lib/riskForm.ts"),
 ]
 
 
@@ -151,3 +175,14 @@ def test_the_commands_in_the_brief_use_options_the_staging_agent_really_has() ->
 def test_the_brief_never_asks_for_a_secret_to_be_pasted_into_chat() -> None:
     assert "Never paste a key, token or secret into chat" in BRIEF
     assert "NOT RUN is not PASS" in BRIEF and "Do **NOT** read shell history" in BRIEF
+
+
+def test_the_self_test_numbers_in_the_brief_are_what_the_real_self_test_gives() -> None:
+    """Part D D1 quotes numbers. They come from running the same function the gateway runs, so a rule change that moves them fails here."""
+    from agentwall.src.gateway.selftest import run_self_test
+
+    result = run_self_test(False)
+    assert f"sample set {result['corpus']}" in BRIEF and f"on {result['samples']} texts" in BRIEF
+    for row in result["categories"]:
+        assert f"{row['detected']} of {row['malicious']} (" in BRIEF, row["category"]
+        assert f"{row['false_alarms']} of {row['benign']} (at most " in BRIEF, row["category"]

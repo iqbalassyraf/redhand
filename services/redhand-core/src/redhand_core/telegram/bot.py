@@ -269,6 +269,43 @@ async def notify_organization(
         logger.warning("Telegram alert not delivered: %s", type(exc).__name__)
 
 
+MAX_ALERT_CHARS = 4000  # Telegram refuses a message over 4096 characters
+
+
+class AlertBatch:
+    """The alerts one request raises, sent as ONE message per organization and agent (paragraphs joined) when the request ends, so a single
+    event (a trip that also moves that agent's risk score) does not buzz the owner's phone twice, while alerts about different agents stay
+    separate messages. Belongs to one request only."""
+
+    def __init__(self) -> None:
+        self._texts: dict[tuple[UUID, UUID | None], list[str]] = {}
+
+    def add(self, organization_id: UUID, text: str, agent_id: UUID | None = None) -> None:
+        texts = self._texts.setdefault((organization_id, agent_id), [])
+        if text not in texts:
+            texts.append(text)
+
+    async def flush(self, supabase: Any, client: TelegramClient | None) -> None:
+        """Sends and empties. Never raises (notify_organization is best effort)."""
+        pending, self._texts = self._texts, {}
+        for (organization_id, _agent), texts in pending.items():
+            body = "\n\n".join(texts)
+            if len(body) > MAX_ALERT_CHARS:
+                body = body[: MAX_ALERT_CHARS - 1] + "…"
+            await notify_organization(supabase, client, organization_id, body)
+
+
+async def send_alert(
+    batch: AlertBatch | None, supabase: Any, client: TelegramClient | None, organization_id: UUID, text: str,
+    agent_id: UUID | None = None,
+) -> None:
+    """Adds to the request's batch when there is one, otherwise sends at once (the behaviour before batches existed)."""
+    if batch is None:
+        await notify_organization(supabase, client, organization_id, text)
+    else:
+        batch.add(organization_id, text, agent_id)
+
+
 def _count(command: str, outcome: str) -> None:
     get_metrics().increment_counter(
         "redhand_telegram_commands_total", labels={"command": command, "outcome": outcome}

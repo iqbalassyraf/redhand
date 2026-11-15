@@ -286,6 +286,8 @@ def apply_insert_defaults(table: str, row: dict[str, Any]) -> None:
         row.setdefault("daily_call_limit", None)
         row.setdefault("budget_action", "deny")
         row.setdefault("destination_mode", "off")
+        row.setdefault("risk_last_alert_at", None)
+        row.setdefault("risk_released_at", None)
     elif table == "organizations":
         row.setdefault("blackbox_retention_days", 30)
         row.setdefault("payload_capture_enabled", False)
@@ -293,6 +295,9 @@ def apply_insert_defaults(table: str, row: dict[str, Any]) -> None:
         row.setdefault("radar_mode", "observe")
         row.setdefault("output_check_mode", "observe")
         row.setdefault("loop_mode", "observe")
+        row.setdefault("risk_alert_threshold", 50)
+        row.setdefault("risk_safe_mode_threshold", None)
+        row.setdefault("risk_freeze_threshold", None)
         row.setdefault("loop_limit", 20)
         row.setdefault("loop_window_seconds", 60)
 
@@ -304,6 +309,9 @@ def _apply_update_triggers(table: str, before: dict[str, Any], after: dict[str, 
         after["version"] = int(before.get("version") or 1) + 1
     if before.get("status") != after.get("status"):
         after["status_changed_at"] = datetime.now(timezone.utc).isoformat()
+    # trg_agents_risk_release (20261122000000_risk_engine.sql): an unfreeze or Safe Mode turned off is a human release.
+    if (before.get("status") == "frozen" and after.get("status") == "active") or (before.get("safe_mode") and not after.get("safe_mode")):
+        after["risk_released_at"] = datetime.now(timezone.utc).isoformat()
 
 
 class LocalSupabaseAdapter:
@@ -370,6 +378,9 @@ class LocalSupabaseAdapter:
                 "output_check_mode_changed_at": now.isoformat(),
                 "loop_mode": "observe",
                 "loop_limit": 20,
+                "risk_alert_threshold": 50,
+                "risk_safe_mode_threshold": None,
+                "risk_freeze_threshold": None,
                 "loop_window_seconds": 60,
                 "loop_mode_changed_at": now.isoformat(),
             }

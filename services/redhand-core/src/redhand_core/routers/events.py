@@ -19,7 +19,10 @@ from fastapi import APIRouter, Depends
 
 from redhand_core.blackbox import service as blackbox_service
 from redhand_core.blackbox.models import EventIngestRequest, EventIngestResponse
+from redhand_core.passports.models import utcnow
+from redhand_core.risk import service as risk_service
 from redhand_core.routers.agent_auth import require_internal_service
+from redhand_core.routers.telegram import OptionalClientDep
 from redhand_core.routers.telemetry import get_supabase_service_client
 
 router = APIRouter(tags=["Black Box Recorder"])
@@ -33,8 +36,12 @@ SupabaseDep = Annotated[Any, Depends(get_supabase_service_client)]
     dependencies=[Depends(require_internal_service)],
     include_in_schema=False,
 )
-async def ingest_events(report: EventIngestRequest, supabase: SupabaseDep) -> EventIngestResponse:
+async def ingest_events(report: EventIngestRequest, supabase: SupabaseDep, telegram: OptionalClientDep) -> EventIngestResponse:
     accepted, rejected = await blackbox_service.ingest_events(
         supabase, report.instance_id, report.batch_id, report.organization_id, report.items
     )
+    # A refused call is a risk signal; only agents with a BLOCK in this batch are evaluated (most batches have none). Never raises.
+    blocked = [item.agent_id for item in report.items if item.decision == "BLOCK"]
+    if accepted and blocked:
+        await risk_service.evaluate_agents(supabase, telegram, report.organization_id, blocked, utcnow())
     return EventIngestResponse(accepted=accepted, rejected=rejected)
