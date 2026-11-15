@@ -11,7 +11,6 @@ Agent authentication.
 from __future__ import annotations
 
 import asyncio
-from collections import deque
 from datetime import date, datetime, timedelta
 import hashlib
 import hmac
@@ -20,12 +19,14 @@ import time
 from typing import Annotated, Any, Literal
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, status
 from pydantic import BaseModel
 
 from redhand_core.destinations.hosts import normalize_host
 from redhand_core.auth import bearer_token
 from redhand_core.config import Settings, get_settings
+from redhand_core.net.source import client_source
+from redhand_core.services.rate_limit import SlidingWindowLimiter
 from redhand_core.passports import budget as budget_rules
 from redhand_core.passports.credentials import AgentTokenSigner, hash_agent_key, looks_like_agent_key
 from redhand_core.passports.models import (
@@ -76,22 +77,8 @@ SignerDep = Annotated[AgentTokenSigner, Depends(get_agent_token_signer)]
 # -----------------------------------------------------------------------------
 
 
-class SlidingWindowLimiter:
-    def __init__(self, window_seconds: float = 60.0) -> None:
-        self._window = window_seconds
-        self._events: dict[str, deque[float]] = {}
-
-    def allow(self, key: str, limit: int, now: float) -> bool:
-        events = self._events.setdefault(key, deque())
-        while events and now - events[0] >= self._window:
-            events.popleft()
-        if len(events) >= limit:
-            return False
-        events.append(now)
-        return True
-
-
-_exchange_limiter = SlidingWindowLimiter()
+_exchange_limiter = SlidingWindowLimiter()  # per agent key
+_source_limiter = SlidingWindowLimiter()  # per source address, across every key it tries
 
 # -----------------------------------------------------------------------------
 # Token exchange
@@ -118,11 +105,21 @@ def _invalid_key() -> HTTPException:
 
 @router.post("/v1/agent-auth/token", response_model=AgentTokenResponse)
 async def exchange_agent_key(
+    request: Request,
     supabase: SupabaseDep,
     settings: Annotated[Settings, Depends(get_settings)],
     signer: SignerDep,
     authorization: Annotated[str | None, Header(alias="Authorization")] = None,
 ) -> AgentTokenResponse:
+    # Per source first, before any hashing or database read: a caller trying one new key after another is limited as a caller, not per guess.
+    source = client_source(request.scope, settings.TRUSTED_PROXY_HOPS)
+    if not _source_limiter.allow(source, settings.AGENT_TOKEN_EXCHANGES_PER_MINUTE_PER_SOURCE, time.monotonic()):
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Too many token requests from this address.",
+            headers={"Retry-After": "60"},
+        )
+
     presented = bearer_token(authorization) or ""
     if not looks_like_agent_key(presented):
         raise _invalid_key()

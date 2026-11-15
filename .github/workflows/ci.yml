@@ -43,6 +43,13 @@ jobs:
       - name: Tests (unit, integration and Phase 1 end-to-end)
         run: uv run --frozen pytest -q
 
+      # Fails on any known vulnerability in a locked dependency (CLAUDE.md section 13). It reads the public advisory database, so a new
+      # advisory can turn this red without a code change: fix by upgrading the package, or record why it does not apply here.
+      - name: Dependency audit (pip-audit, locked versions)
+        run: |
+          uv export --frozen --no-hashes --no-emit-workspace --format requirements-txt > "$RUNNER_TEMP/requirements.txt"
+          uvx pip-audit@2.10.1 -r "$RUNNER_TEMP/requirements.txt" --no-deps --disable-pip --progress-spinner off
+
   sql:
     name: SQL migrations (apply, tests, rollback)
     runs-on: ubuntu-latest
@@ -92,6 +99,10 @@ jobs:
 
       - name: Install locked dependencies
         run: npm ci --no-audit --no-fund
+
+      # Fails on a known high or critical vulnerability in a locked dependency. Same note as the Python audit: new advisories can turn it red.
+      - name: Dependency audit (npm audit, high and above)
+        run: npm audit --audit-level=high
 
       - name: Type-check
         run: npx tsc --noEmit

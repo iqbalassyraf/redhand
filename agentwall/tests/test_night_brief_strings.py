@@ -53,6 +53,12 @@ PROMISES = [
     # body limits (Part K)
     ("Request body too large.", "services/redhand-core/src/redhand_core/middleware/body_limit.py"),
     ("Request body too large.", "agentwall/src/main.py"),
+    # token exchange limit (Part L)
+    ("Too many token requests from this address.", "services/redhand-core/src/redhand_core/routers/agent_auth.py"),
+    # stale token and the passports buttons (Part M)
+    ("Agent access token is out of date. Request a new one.", GATEWAY),
+    ("It will be able to call its tools again.", "apps/redhand-ui/src/app/passports/page.tsx"),
+    ("PolicyViolation: tool 'ask_question' is out of scope.".replace("ask_question", "{tool_name}"), GATEWAY),
     # loop card
     ("Repeated-call settings saved. They reach the gateway within a few seconds.", RADAR_PAGE),
     ("Tick the box to confirm this change.", RADAR_PAGE),
@@ -204,3 +210,9 @@ def test_the_self_test_numbers_in_the_brief_are_what_the_real_self_test_gives() 
     for row in result["categories"]:
         assert f"{row['detected']} of {row['malicious']} (" in BRIEF, row["category"]
         assert f"{row['false_alarms']} of {row['benign']} (at most " in BRIEF, row["category"]
+
+
+def test_the_h4_kill_switch_names_in_the_brief_match_the_settings() -> None:
+    settings = (ROOT / "agentwall" / "config" / "settings.py").read_text(encoding="utf-8")
+    for name in ("TOKEN_VERSION_CHECK_ENABLED", "STRICT_PINNING_ENABLED", "REDACT_UPSTREAM_ERRORS_ENABLED", "UPSTREAM_PIN_ENABLED"):
+        assert f"{name}: bool" in settings and f"AGENTWALL_{name}" in BRIEF, name

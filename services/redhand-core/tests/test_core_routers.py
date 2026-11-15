@@ -273,13 +273,16 @@ async def test_aws_sts_downscoper_and_router() -> None:
 
 def test_local_store_refused_outside_development(monkeypatch: pytest.MonkeyPatch) -> None:
     """The seeded dev key and demo data must never back a production deployment."""
-    from pydantic import SecretStr
 
     from redhand_core.config import Settings
 
     # Operator auth must be configured to build production settings at all (startup rule);
     # the local store is then refused separately.
-    production = Settings(ENVIRONMENT="production", OPERATOR_JWT_SECRET=SecretStr("x" * 40))
+    production = Settings(
+        ENVIRONMENT="production",
+        OPERATOR_JWKS_URL="https://example.supabase.co/auth/v1/.well-known/jwks.json",
+        OPERATOR_JWT_ISSUER="https://example.supabase.co/auth/v1",
+    )
     monkeypatch.setattr("redhand_core.main.get_settings", lambda: production)
     with pytest.raises(RuntimeError, match="only allowed"):
         with TestClient(create_app()):

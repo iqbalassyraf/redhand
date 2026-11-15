@@ -1,0 +1,28 @@
+# Weekly dependency update pull requests (CLAUDE.md section 13). Grouped, so a week's updates are one reviewable pull request per ecosystem.
+# Dependabot only opens pull requests; nothing is merged or deployed by it, and CI (including the dependency audit) runs on each.
+version: 2
+updates:
+  - package-ecosystem: "uv"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    groups:
+      python-dependencies:
+        patterns: ["*"]
+  - package-ecosystem: "npm"
+    directory: "/apps/redhand-ui"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    groups:
+      dashboard-dependencies:
+        patterns: ["*"]
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    groups:
+      github-actions:
+        patterns: ["*"]

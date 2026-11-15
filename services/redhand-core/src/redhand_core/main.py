@@ -19,6 +19,7 @@ from supabase import acreate_client
 
 from redhand_core.config import Settings, get_settings
 from redhand_core.middleware.body_limit import BodySizeLimitMiddleware
+from redhand_core.middleware.security_headers import SecurityHeadersMiddleware
 from redhand_core.routers.agent_auth import require_internal_service
 from redhand_core.routers.agent_auth import router as agent_auth_router
 from redhand_core.routers.dev import router as dev_router
@@ -133,6 +134,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "/v1/telemetry": active_settings.MAX_INGEST_REQUEST_BYTES,
         },
     )
+    app.add_middleware(SecurityHeadersMiddleware)  # outside the body limit, so a 413 carries the headers too
     app.add_middleware(
         CORSMiddleware,
         allow_origins=active_settings.CORS_ALLOWED_ORIGINS,
