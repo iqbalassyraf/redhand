@@ -105,6 +105,7 @@
 | Allowlist widened or enforcement switched off by the wrong person, or locked into refusing everything (M7) | Admin only; adding a host, turning enforcement on and turning the check off each need a confirmation; every change is audited with the actor and host; the mode change is compare-and-set; enforce needs a non-empty list and the last host cannot be removed while enforcing; 100 hosts per agent and tenant checks are enforced in SQL. A hijacked agent has no access to core. A compromised admin can still widen a list: the audit log and dashboard show it |
 | Scanner abused for CPU or evasion by an agent-controlled argument (M7) | Bounded work (64 KiB of text, 1,000 values, depth 16, 200 matches, 50 distinct destinations per call; no DNS); whatever is past a bound is `untracked` and refused in enforce, so it is never allowed unread. Measured: hostile 64 KiB inputs cost about 5 ms (they cost up to 31 ms before the match cap). Findings keep only the last two labels of a host, never a subdomain or a path |
 
+
 ## 3. Out of scope so far
 Local stdio MCP servers, non-MCP REST APIs, LLM API spend (Budget Guard, Phase 2), honeytokens and
 honey tools (Black Box M3), MCP server reputation (Phase 4). Payload capture (Black Box M2b) is in scope: see the
