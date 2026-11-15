@@ -274,7 +274,6 @@ _MARKER = (
     re.compile(r"<\|(?:im_start|im_end|system|assistant|user|endoftext)\|>"),
     re.compile(r"<<\s*/?sys\s*>>|\[/?inst\]"),
     re.compile(r"(?:^|[\s>\]#*])\[(?:system|admin|sistem|assistant)\]"),
-    re.compile(r"#{2,}\s*(?:system|new instructions?|instructions?|admin|official|arahan|instruksi|directive)(?: \w+){0,3}\s*:?#{0,}"),
     re.compile(r"(?:^|[\s#>\[*:!])system (?:override|note for the (?:model|ai|assistant)|prompt:|message:)(?: ?[:#\]!]|$)"),
     re.compile(r"\b(?:begin|end)[ _](?:system|hidden|secret|admin)[ _](?:prompt|instructions?|message)\b"),
     re.compile(r"(?:^|[\s>])system: ?(?:you|call|run|ignore|send|forward|delete|execute|reveal|disregard)\b"),
@@ -283,11 +282,13 @@ _MARKER = (
     re.compile(r"\[//\]: ?# ?\([^)]{0,300}\b(?:ai|agent|assistant|model)s?\b"),
 )
 # A bracketed or commented directive that carries a call: [SYSTEM: send_email(...)], <!-- Trigger: drop_database(...) -->, [ARAHAN_SISTEM: panggil request_refund(...)].
+# M4.7b: the keyword must be a whole word (a link to ".../devtools-panel/..." is not a "tool"), the bracket text must not contain a "/" (a link or
+# a path is not a label), and a "[" followed by a quote opens a diagram node label or a list of strings, not a directive.
 _WRAPPER = re.compile(
-    r"(?:\[|<!--|\{)[^\]}>]{0,40}?(?:system|admin|sistem|arahan|mesej|instruksi|instruction|perintah|tindakan|trigger|invoke|hook|command|action|automation|call|tool|official|rasmi|resmi)"
+    r"(?:\[(?![\"'])|<!--|\{)[^\]}>/]{0,40}?(?<![a-z0-9])(?:system|admin|sistem|arahan|mesej|instruksi|instruction|perintah|tindakan|trigger|invoke|hook|command|action|automation|call|tool|official|rasmi|resmi)s?(?![a-z0-9])"
 )
 _WRAPPER_CALL = re.compile(
-    r"(?:\[|<!--|\{)[^\]}>]{0,80}?\b[a-z][a-z0-9]*(?:_[a-z0-9]+)+\s*\("
+    r"(?:\[(?![\"'])|<!--|\{)[^\]}>]{0,80}?\b[a-z][a-z0-9]*(?:_[a-z0-9]+)+\s*\("
 )
 
 def _combine(patterns: Iterable[re.Pattern[str]]) -> re.Pattern[str]:
@@ -298,6 +299,10 @@ def _combine(patterns: Iterable[re.Pattern[str]]) -> re.Pattern[str]:
 _OVERRIDE_ANY = (_combine(_OVERRIDE_EN), _combine(_OVERRIDE_MS))
 _PERSONA_ANY = (_combine(_PERSONA),)
 _MARKER_ANY = _combine(_MARKER)
+# A markdown heading that starts with a role word. Plain documentation has many of these ("## System Architecture", "### Admin Interface",
+# "### Directive"), so on its own it is weak evidence (M4.7b, measured on the tuning set in docs/security/m4-7b-baseline.md): it is
+# strong only with a real payload cue in the same window (see _HEADING_PAYLOAD), and the payload is usually caught by its own rule too.
+_MARKER_HEADING = re.compile(r"#{2,}\s*(?:system|new instructions?|instructions?|admin|official|arahan|instruksi|directive)(?: \w+){0,3}\s*:?#{0,}")
 
 _SECRET_OBJ = (
     r"(?:conversation(?: history| summary| log)?|chat (?:history|logs?)|api[ _-]?keys?|master keys?|access[ _-]?tokens?|bearer tokens?|auth(?:entication)? (?:tokens?|headers?)|session[ _-]?(?:tokens?|ids?|cookies?)|"
@@ -338,7 +343,7 @@ _EXFIL_URL = re.compile(
 _REDIRECT = re.compile(r"\b(?:replace|change|swap|substitute|tukar|ganti)\b[^.]{0,40}\b(?:domain|link|url|address|website|pautan|alamat|tautan)\b[^.]{0,25}\b(?:with|to|dengan|kepada|menjadi)\b")
 _CALL_ID = re.compile(r"\b(?:call|invoke|run|execute|trigger|use|panggil|jalankan|gunakan)\b(?: the| alat| fungsi)?(?: [a-z']{1,12}){0,2}? (?P<id>[a-z][a-z0-9]*_[a-z0-9_]+)\b")
 _CALL_NAMED = re.compile(r"\b(?:call|invoke|run|execute|panggil)\b(?: the)? (?P<id>[a-z][a-z0-9_]{3,40}) (?:tool|function|alat)\b")
-_CALL_SHELL = re.compile(r"\b(?:run|execute|jalankan)\b[^.]{0,40}\b(?:curl|wget|bash|sh|nc|netcat|powershell|rm -rf|chmod|cat ~|cat /)\b|\b(?:curl|wget) \S+ ?\| ?(?:sh|bash)\b|\| ?nc \S+ \d+")
+_CALL_SHELL = re.compile(r"\b(?:run|execute|jalankan)\b[^.]{0,40}(?<!```)\b(?:curl|wget|bash|sh|nc|netcat|powershell|rm -rf|chmod|cat ~|cat /)\b|\b(?:curl|wget) \S+ ?\| ?(?:sh|bash)\b|\| ?nc \S+ \d+")
 _CONCEAL = re.compile(
     r"\b(?:do not|don't|dont|never|jangan)\s+(?:\w+ ){0,3}?(?:tell|mention|reveal|show|inform|notify|alert|disclose|log|record|report|flag|dedahkan|beritahu|bagitahu|sebut|maklumkan|rekodkan|tunjuk|catat|laporkan|beri tahu)\b(?: [\w']+){0,6}"
     r"|\b(?:without|before|tanpa|sebelum) (?:telling|informing|notifying|alerting|asking|logging|recording|mencatat|mencatatkan|merekod|memaklumkan|memberitahu) ?(?:the |any |apa-apa )?(?:user|human|operator|owner|pengguna|log|logs)?\b"
@@ -405,7 +410,8 @@ _DOC_HEADER = re.compile(
 
 # Per-sentence cues as bits, so combining neighbouring sentences is three integer ORs.
 (OVERRIDE, OVERRIDE_STRONG, QUOTED, PERSONA, MARKER, CALL, CALL_HELD, EXFIL, DEST, CONCEAL, URGENCY, AUTH, REVEAL, RISKY, AGENT, MENTION_HELD,
- DIRECTED, WRAPPER, VOID, INBAND, SECRET, PII) = (1 << i for i in range(22))
+ DIRECTED, WRAPPER, VOID, INBAND, SECRET, PII, HEADING) = (1 << i for i in range(23))
+_HEADING_PAYLOAD = OVERRIDE | CALL | RISKY | REVEAL | EXFIL | AGENT | CONCEAL | VOID | AUTH
 _CUES = DEST | CONCEAL | URGENCY | AUTH | REVEAL | AGENT | RISKY | CALL | SECRET
 
 
@@ -471,7 +477,7 @@ def _features(seg: str, ctx: ScanContext) -> int:
     found, quoted_only = _first_unguarded(_OVERRIDE_ANY, seg)
     f |= _bit(found or quoted_only, OVERRIDE) | _bit(quoted_only and not found, QUOTED) | _bit(found, OVERRIDE_STRONG)
     f |= _bit(_first_unguarded(_PERSONA_ANY, seg)[0], PERSONA)
-    f |= _bit(_MARKER_ANY.search(seg), MARKER)
+    f |= _bit(_MARKER_ANY.search(seg), MARKER) | _bit(_MARKER_HEADING.search(seg), HEADING)
     f |= _bit(_WRAPPER.search(seg), WRAPPER)
     calls = [m for p in (_CALL_ID, _CALL_NAMED) for m in p.finditer(seg) if not _NEGATION.search(seg[max(0, m.start() - 45): m.start()])]
     f |= _bit(calls or _unnegated(_CALL_SHELL, seg) or _WRAPPER_CALL.search(seg), CALL)
@@ -559,9 +565,12 @@ def _analyse_injection(text: str, ctx: ScanContext, where: Where, evasion: tuple
         if flags[i] == 0 and ((i > 0 and flags[i - 1]) or (i + 1 < len(segs) and flags[i + 1])):
             flags[i] = _bit(_directed(seg), DIRECTED)  # whether a neighbouring sentence is a command still matters to a rule
 
-    def add(rule_id: str, base: Level, cues: int, held: bool, quoted: bool = False, severity: Level | None = None) -> None:
-        if rule_id not in found:
-            found[rule_id] = _finding(rule_id, where, _confidence(base, cues=cues, evasion=evasion, held=held, quoted=quoted), evasion, severity)
+    def add(rule_id: str, base: Level, cues: int, held: bool, quoted: bool = False, severity: Level | None = None, evasion_raises: bool = True) -> None:
+        new = _finding(rule_id, where, _confidence(base, cues=cues, evasion=evasion if evasion_raises else (), held=held, quoted=quoted), evasion, severity)
+        old = found.get(rule_id)
+        # The stronger sighting wins, so a weak early hit (a plain heading) cannot hide a real one that comes later in the text.
+        if old is None or _LEVELS.index(new.confidence) > _LEVELS.index(old.confidence):
+            found[rule_id] = new
 
     for i, seg in enumerate(segs):
         if flags[i] and _REPORTING.search(seg):
@@ -582,6 +591,11 @@ def _analyse_injection(text: str, ctx: ScanContext, where: Where, evasion: tuple
         if f & MARKER or (f & WRAPPER and (f & CALL or w & (RISKY | REVEAL | EXFIL | SECRET | PII | OVERRIDE))):
             # a lone marker (a tag named system in a bug report) is weak evidence; with a directive next to it, it is not
             add("RAD-INJ-003", "medium" if w & (DIRECTED | OVERRIDE | CALL | RISKY | REVEAL | EXFIL | SECRET | PII) else "low", cues, held)
+        elif f & HEADING:
+            # Without a payload cue a heading stays low whatever else is in the document: the "leet" flag is set for the whole text and
+            # ordinary documentation trips it, which would raise every plain heading to medium (M4.7b, tuning set).
+            payload = bool(w & _HEADING_PAYLOAD)
+            add("RAD-INJ-003", "medium" if payload else "low", cues if payload else 0, held and payload, evasion_raises=payload)
         if f & EXFIL and w & (DIRECTED | DEST | INBAND | AGENT | CONCEAL | OVERRIDE_STRONG | URGENCY | AUTH):
             add("RAD-INJ-004", "medium", cues, held)
         if f & CALL and (w & (DEST | CONCEAL | URGENCY | AUTH | AGENT | OVERRIDE_STRONG | RISKY | WRAPPER) or f & CALL_HELD):
@@ -674,7 +688,7 @@ _NETWORK_SCHEMES = {"http", "https", "ftp", "smb", "smtp", "smtps", "imap", "pop
 _REBINDING = ("nip.io", "sslip.io", "xip.io", "localtest.me", "lvh.me", "vcap.me", "traefik.me")
 _REBINDING_LABEL = re.compile(r"(?:^|[.-])(?:rebind|rebinding|dnsrebind)(?:[.-]|$)")
 _SENSITIVE_PATH = re.compile(
-    r"/etc/(?:passwd|shadow|gshadow|sudoers|master\.passwd|ssl/private|ssh/)|/proc/(?:self|\d+)/(?:environ|cmdline|maps|mem|fd)|/root/|"
+    r"/etc/(?:passwd|shadow|gshadow|sudoers|master\.passwd|ssl/private|ssh/)|/proc/(?:self|\d+)/(?:environ|cmdline|maps|mem|fd)|(?<![\w.-])/root/|"
     r"(?:~|/home/[\w.-]+|/users/[\w. -]+|/mnt/c/users/[\w. -]+)/\.(?:ssh|aws|kube|docker|gnupg|config/gcloud|bash_history|zsh_history|netrc|npmrc|git-credentials)\b|"
     r"\.ssh/|\bid_(?:rsa|ed25519|ecdsa|dsa)\b|\.aws/(?:credentials|config)|\.kube/config|\.docker/config\.json|\.config/gcloud|\.git/config|\.git-credentials|"
     r"\b(?:credentials\.db|\.bash_history|\.zsh_history|\.pgpass|\.netrc)\b|/var/log/(?:auth|secure)|/var/lib/(?:mysql|docker|postgresql)|"
@@ -684,6 +698,7 @@ _SENSITIVE_PATH = re.compile(
 )
 _TRAVERSAL = re.compile(r"(?:\.\.[/\\]){2,}|\.{2,}//+|\.\.;/|\.\.%c0%af|%c0%ae", re.I)
 _TRAVERSAL_ONE = re.compile(r"\.\.[/\\]", re.I)
+_TRAVERSAL_RUN = re.compile(r"(?:\.\.[/\\])+")
 _READ_VERB = re.compile(r"\b(?:read|open|show|cat|print|dump|attach|include|display|paste|send|fetch|load|add|baca|buka|tunjuk|tampal|sertakan)\b", re.I)
 _PATH_DOC = re.compile(r"\b(?:never|do not|don't|avoid|rejects?|blocks?|blocked|should not|must not|attack|lists? accounts|ignored by git|do not commit|never commit|copy \.env\.example)\b", re.I)
 _SENTENCE_END = re.compile(r"[.;!?](?=\s)|\n")
@@ -849,8 +864,9 @@ class OutputDetector:
             if _PATH_DOC.search(window):
                 continue
             near_traversal = _TRAVERSAL_ONE.search(text[max(0, m.start() - 60): m.start() + 2])
-            is_env = ".env" in m.group(0).lower() or "prod.env" in m.group(0).lower()
-            if is_env and not (near_traversal or _READ_VERB.search(text[max(0, m.start() - 40): m.start()])):
+            # .env files and .git/config are named in ordinary documentation; a bare mention needs a read verb or a traversal (M4.7b)
+            gated = ".env" in m.group(0).lower() or "prod.env" in m.group(0).lower() or m.group(0).lower() == ".git/config"
+            if gated and not (near_traversal or _READ_VERB.search(text[max(0, m.start() - 40): m.start()])):
                 continue
             weak_suffix = m.group(0).lower().endswith((".pem", ".key")) and not (near_traversal or _READ_VERB.search(text[max(0, m.start() - 40): m.start()]))
             if weak_suffix:
@@ -865,7 +881,8 @@ class OutputDetector:
                 add("RAD-OUT-007", "high")
                 return
         if traversal and not _PATH_DOC.search(text):
-            depth = len(_TRAVERSAL_ONE.findall(text))
+            # The longest single run of "../", not a count over the whole text: a source file imports "../x" many times (M4.7b).
+            depth = max((len(run.group(0)) // 3 for run in _TRAVERSAL_RUN.finditer(text)), default=0)
             if depth >= 3 or "....//" in text or "..;/" in text or _TRAV_TARGET.search(text):
                 add("RAD-OUT-007")
 

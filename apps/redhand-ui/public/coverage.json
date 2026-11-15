@@ -126,9 +126,9 @@
             "passed": true
           },
           {
-            "detail": "The round was scored on the rules that run now.",
+            "detail": "The rules changed after this round was scored. It needs a new round.",
             "id": "G2",
-            "passed": true
+            "passed": false
           },
           {
             "detail": "False alarms: 10 of 146 harmless samples, 95% upper bound 12.1% (limit 3.0%); 48 built to look like attacks (need 40). Even with no false alarm, at least 125 harmless samples are needed.",
@@ -170,9 +170,9 @@
             "passed": true
           },
           {
-            "detail": "The round was scored on the rules that run now.",
+            "detail": "The rules changed after this round was scored. It needs a new round.",
             "id": "G2",
-            "passed": true
+            "passed": false
           },
           {
             "detail": "False alarms: 0 of 120 harmless samples, 95% upper bound 3.1% (limit 3.0%); 45 built to look like attacks (need 40). Even with no false alarm, at least 125 harmless samples are needed.",
@@ -214,9 +214,9 @@
             "passed": true
           },
           {
-            "detail": "The round was scored on the rules that run now.",
+            "detail": "The rules changed after this round was scored. It needs a new round.",
             "id": "G2",
-            "passed": true
+            "passed": false
           },
           {
             "detail": "False alarms: 3 of 120 harmless samples, 95% upper bound 7.1% (limit 3.0%); 45 built to look like attacks (need 40). Even with no false alarm, at least 125 harmless samples are needed.",
@@ -258,9 +258,9 @@
             "passed": true
           },
           {
-            "detail": "The round was scored on the rules that run now.",
+            "detail": "The rules changed after this round was scored. It needs a new round.",
             "id": "G2",
-            "passed": true
+            "passed": false
           },
           {
             "detail": "False alarms: 6 of 120 harmless samples, 95% upper bound 10.5% (limit 3.0%); 45 built to look like attacks (need 40). Even with no false alarm, at least 125 harmless samples are needed.",
@@ -309,7 +309,7 @@
         "name": "Tested on long, realistic text"
       }
     ],
-    "rules_fingerprint": "a7818a78351aa02e"
+    "rules_fingerprint": "2527e7917c908899"
   },
   "corpus": "1eef50813cce3eaa",
   "detectors": [
