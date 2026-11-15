@@ -16,9 +16,9 @@ from typing import Any
 from urllib.parse import parse_qs
 from uuid import NAMESPACE_DNS, UUID, uuid5
 
-import httpx
 
-from redhand_core.services.safe_log import safe_error, safe_host
+from redhand_core.net.outbound import OutboundBlockedError, OutboundError, insecure_webhooks_allowed, post_json, record_blocked
+from redhand_core.services.safe_log import safe_host
 
 logger = logging.getLogger("redhand.core.slack")
 
@@ -110,14 +110,15 @@ async def dispatch_slack_hitl_notification(
 
     payload = build_slack_hitl_blocks(intervention)
     try:
-        async with httpx.AsyncClient(timeout=httpx.Timeout(5.0, connect=2.0)) as client:
-            resp = await client.post(webhook_url, json=payload)
-            resp.raise_for_status()
-            logger.info("Dispatched Slack Block Kit notification for intervention %s", intervention.get("id"))
-            return True
-    except httpx.HTTPError as exc:
-        # The webhook URL is the credential, and httpx repeats it in its error text: log the host and the error type only.
-        logger.warning("Failed to dispatch Slack notification to %s: %s", safe_host(webhook_url), safe_error(exc))
+        resp = await post_json(webhook_url, payload, allow_insecure=insecure_webhooks_allowed(), timeout=5.0)
+        resp.raise_for_status()
+        logger.info("Dispatched Slack Block Kit notification for intervention %s", intervention.get("id"))
+        return True
+    except OutboundError as exc:
+        # The webhook URL is the credential: log the host and the fixed error wording only (OutboundError never contains the URL).
+        if isinstance(exc, OutboundBlockedError):
+            record_blocked("slack")
+        logger.warning("Failed to dispatch Slack notification to %s: %s", safe_host(webhook_url), exc)
         return False
 
 

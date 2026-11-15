@@ -182,9 +182,22 @@ class Settings(BaseSettings):
     )
     TELEGRAM_COMMANDS_PER_MINUTE: int = Field(default=20, ge=1, le=120)
 
+    MAX_REQUEST_BYTES: int = Field(
+        default=1024 * 1024, ge=1024, le=16 * 1024 * 1024,
+        description="Largest request body core reads on any route, counted as the bytes arrive. Larger is answered 413.",
+    )
+    MAX_INGEST_REQUEST_BYTES: int = Field(
+        default=16 * 1024 * 1024, ge=1024 * 1024, le=64 * 1024 * 1024,
+        description="The larger cap for the batched ingest routes (gateway event reports, trace ingest): up to 500 events or 250 spans a call.",
+    )
+
     ALLOW_INSECURE_MCP_URLS: bool = Field(
         default=False,
         description="Development only: allow http:// and localhost MCP server URLs.",
+    )
+    ALLOW_INSECURE_WEBHOOK_URLS: bool = Field(
+        default=False,
+        description="Development only: allow http:// and localhost webhook URLs (resume, Slack, SIEM). Never set this on staging or production.",
     )
 
     @model_validator(mode="after")
@@ -209,6 +222,19 @@ class Settings(BaseSettings):
                     "OPERATOR_JWT_ISSUER) or OPERATOR_JWT_SECRET."
                 )
             self.OPERATOR_JWT_SECRET = SecretStr(secrets.token_urlsafe(32))
+        return self
+
+    @model_validator(mode="after")
+    def _insecure_flags_are_development_only(self) -> Settings:
+        """The ALLOW_INSECURE_* switches turn off the checks that stop core calling an internal address. A shared environment that has one set
+        (forgotten, or copied from a dev file) refuses to start; it never runs with the check off."""
+        if self.ENVIRONMENT in ("development", "test"):
+            return self
+        on = [
+            name for name in ("ALLOW_INSECURE_MCP_URLS", "ALLOW_INSECURE_WEBHOOK_URLS") if getattr(self, name)
+        ]
+        if on:
+            raise ValueError(f"{', '.join(on)} may only be set when ENVIRONMENT is 'development' or 'test'.")
         return self
 
     @field_validator("TELEGRAM_WEBHOOK_SECRET")

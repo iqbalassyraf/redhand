@@ -46,7 +46,8 @@ class Env:
             {"id": str(uuid4()), "organization_id": OTHER_ORG, "user_id": OTHER_OWNER, "role": "owner"}
         )
         settings.setdefault("INTERNAL_SERVICE_TOKEN", SecretStr(SERVICE_TOKEN))
-        settings.setdefault("ALLOW_INSECURE_MCP_URLS", True)
+        # The development-only flag is refused outside development and test (H2.5), so a harness that runs as staging cannot default it on.
+        settings.setdefault("ALLOW_INSECURE_MCP_URLS", settings.get("ENVIRONMENT", "development") in ("development", "test"))
         self.client, self.settings = make_client(self.store, **settings)
         agent_auth._exchange_limiter._events.clear()
 

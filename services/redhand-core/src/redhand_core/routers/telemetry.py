@@ -19,6 +19,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, 
 from pydantic import BaseModel, ConfigDict, Field, HttpUrl, field_validator, model_validator
 from supabase import AsyncClient
 
+from redhand_core.net.outbound import OutboundBlockedError, check_url, insecure_webhooks_allowed
 from redhand_core.passports.models import effective_status
 from redhand_core.services.dlp_scrubber import get_dlp_scrubber
 from redhand_core.services.metrics import get_metrics
@@ -157,6 +158,19 @@ class HITLCheckpointPayload(BaseModel):
         default=None,
         description="Optional Slack/PagerDuty webhook override for this specific intervention.",
     )
+    @field_validator("resume_webhook_url", "notification_webhook_url")
+    @classmethod
+    def reject_unsafe_webhook_url(cls, v: HttpUrl | None) -> HttpUrl | None:
+        """Refuse at ingest a URL that core would never be allowed to call (static checks only;
+        the address is checked again, after DNS, at send time)."""
+        if v is None:
+            return v
+        try:
+            check_url(str(v), allow_insecure=insecure_webhooks_allowed())
+        except OutboundBlockedError as exc:
+            raise ValueError(str(exc)) from None
+        return v
+
     ttl_seconds: int = Field(
         default=3600,
         ge=60,

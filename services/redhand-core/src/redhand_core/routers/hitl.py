@@ -20,9 +20,9 @@ from typing import Annotated, Any
 from uuid import UUID
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Path, Request, status
-import httpx
 
-from redhand_core.services.safe_log import safe_error, safe_host
+from redhand_core.net.outbound import OutboundBlockedError, OutboundError, insecure_webhooks_allowed, post_json, record_blocked
+from redhand_core.services.safe_log import safe_host
 from pydantic import BaseModel, ConfigDict, Field
 from supabase import AsyncClient
 
@@ -123,48 +123,51 @@ async def trigger_agent_resume_webhook(
     `resume_webhook_url` with the verified serialized state and operator decision.
     Updates the intervention status to `'resumed'` (or `'failed'` on transport error).
     """
-    async with httpx.AsyncClient(timeout=httpx.Timeout(timeout_seconds, connect=3.0)) as client:
-        try:
-            response = await client.post(
-                resume_webhook_url,
-                json=wake_payload,
-                headers={
-                    "Content-Type": "application/json",
-                    "X-RedHand-Intervention-ID": str(intervention_id),
-                    "X-RedHand-Event": "hitl.approved",
-                },
-            )
-            response.raise_for_status()
+    try:
+        response = await post_json(
+            resume_webhook_url,
+            wake_payload,
+            allow_insecure=insecure_webhooks_allowed(),
+            headers={
+                "Content-Type": "application/json",
+                "X-RedHand-Intervention-ID": str(intervention_id),
+                "X-RedHand-Event": "hitl.approved",
+            },
+            timeout=timeout_seconds,
+        )
+        response.raise_for_status()
 
-            await (
-                supabase.table("hitl_interventions")
-                .update(
-                    {
-                        "status": "resumed",
-                        "resumed_at": datetime.now(timezone.utc).isoformat(),
-                    }
-                )
-                .eq("id", str(intervention_id))
-                .execute()
+        await (
+            supabase.table("hitl_interventions")
+            .update(
+                {
+                    "status": "resumed",
+                    "resumed_at": datetime.now(timezone.utc).isoformat(),
+                }
             )
-            logger.info(
-                "Successfully woke suspended agent for intervention %s via %s",
-                intervention_id,
-                safe_host(resume_webhook_url),
-            )
-        except httpx.HTTPError as exc:
-            logger.error(
-                "Failed to invoke the resume webhook on %s for intervention %s: %s",
-                safe_host(resume_webhook_url),
-                intervention_id,
-                safe_error(exc),
-            )
-            await (
-                supabase.table("hitl_interventions")
-                .update({"status": "failed"})
-                .eq("id", str(intervention_id))
-                .execute()
-            )
+            .eq("id", str(intervention_id))
+            .execute()
+        )
+        logger.info(
+            "Successfully woke suspended agent for intervention %s via %s",
+            intervention_id,
+            safe_host(resume_webhook_url),
+        )
+    except OutboundError as exc:
+        if isinstance(exc, OutboundBlockedError):
+            record_blocked("resume")
+        logger.error(
+            "Failed to invoke the resume webhook on %s for intervention %s: %s",
+            safe_host(resume_webhook_url),
+            intervention_id,
+            exc,
+        )
+        await (
+            supabase.table("hitl_interventions")
+            .update({"status": "failed"})
+            .eq("id", str(intervention_id))
+            .execute()
+        )
 
 
 # =============================================================================

@@ -67,6 +67,7 @@ def build_gateway(settings: Settings, firewall: FirewallPolicyEngine, audit: Tam
         ),
         forwarder=UpstreamForwarder(
             allow_insecure=settings.ALLOW_INSECURE_UPSTREAMS,
+            pin_connections=settings.UPSTREAM_PIN_ENABLED,
             max_response_bytes=settings.MAX_UPSTREAM_RESPONSE_BYTES,
             connect_timeout=settings.UPSTREAM_CONNECT_TIMEOUT_SECONDS,
             total_timeout=settings.UPSTREAM_TIMEOUT_SECONDS,
@@ -199,9 +200,15 @@ async def _read_json_body(request: Request, limit: int) -> Any:
     declared = request.headers.get("content-length")
     if declared and declared.isdigit() and int(declared) > limit:
         raise HTTPException(status_code=status.HTTP_413_CONTENT_TOO_LARGE, detail="Request body too large.")
-    body = await request.body()
-    if len(body) > limit:
-        raise HTTPException(status_code=status.HTTP_413_CONTENT_TOO_LARGE, detail="Request body too large.")
+    # Counted as it arrives: the header is only an early exit, and request.body() would buffer a chunked or mis-declared body whole first.
+    received: list[bytes] = []
+    size = 0
+    async for chunk in request.stream():
+        size += len(chunk)
+        if size > limit:
+            raise HTTPException(status_code=status.HTTP_413_CONTENT_TOO_LARGE, detail="Request body too large.")
+        received.append(chunk)
+    body = b"".join(received)
     try:
         return json.loads(body, parse_constant=_reject_constant, parse_float=_finite_float)
     except (ValueError, RecursionError):

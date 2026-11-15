@@ -27,6 +27,30 @@ and why, so a reviewer can follow the intent across the four PRs.
 - **Folded into H2.2:** the gateway resolves an upstream's DNS twice per message (once to check it, once inside httpx). The only safe fix
   is to connect to the address that was checked (connection pinning), not to cache DNS, which would weaken the per-request check.
 
+## H2: SSRF and edge limits (new refusals; no change for valid use)
+- **One outbound rule set for webhooks (core).** `net/outbound.py` is the only way core calls a customer-supplied URL (Slack, the SIEM export,
+  the resume webhook). In order: static checks (https, no credentials, no local or internal name, a literal address must be public); one DNS
+  lookup, every answer must be public (IPv4-mapped IPv6 is judged as the IPv4 address, one private answer refuses the name); the request goes
+  to a checked address with the original `Host` and TLS name (httpx `sni_hostname`, proven with a real local TLS server: a certificate for
+  another name is still refused); no redirects; one total deadline; a response size cap; error text that never contains the URL. A refused URL
+  is permanent: no retry, `redhand_outbound_blocked_total{purpose}`, host-only log. `resume_webhook_url` and `notification_webhook_url` are
+  also refused at ingest (static checks; the address is checked again at send time). Development flag `ALLOW_INSECURE_WEBHOOK_URLS`.
+- **The gateway connects to the address it checked (closes DNS rebinding).** `resolve_destination` resolves once, applies the same rules and
+  returns the ways to connect: a checked address (IPv4 first, at most 3) with the original Host and TLS name. A connection that cannot be
+  opened moves to the next checked address; any other failure ends the call (a request that may have been delivered is never repeated).
+  `UPSTREAM_PIN_ENABLED=false` is a kill switch: the same check, then connect by name. This also removes the second DNS lookup per message
+  (H1.6).
+- **One deadline for a whole upstream call.** The lookup, every connection attempt and the whole body share `UPSTREAM_TIMEOUT_SECONDS`; before,
+  only each read had a timeout, so a server answering one byte at a time could hold a call open.
+- **Body caps.** Core had none (only Telegram checked its own). A pure ASGI middleware answers 413 above `MAX_REQUEST_BYTES` (1 MiB), counting
+  the bytes as they arrive; `/internal/v1/events` and `/v1/telemetry` get `MAX_INGEST_REQUEST_BYTES` (16 MiB: 500 events or 250 spans a call).
+  The gateway's reader counted only after `request.body()` had buffered everything; it now stops at the limit.
+- **Development flags cannot run in a shared environment.** Core refuses to start with `ALLOW_INSECURE_MCP_URLS` or
+  `ALLOW_INSECURE_WEBHOOK_URLS` unless `ENVIRONMENT` is development or test. The gateway's environment name is a free string, so only
+  `development`, `dev`, `test` or `local` is trusted for `ALLOW_INSECURE_UPSTREAMS`; a typo such as "prod" fails closed.
+- **Kept in step.** Core and the gateway have separate copies of the URL rules (separate processes, no shared package); one vector file
+  (`agentwall/tests/data/outbound_url_vectors.json`, 31 static and 9 resolved cases) is run through both.
+
 ## Alternatives considered
 - **Cache DNS answers at the gateway** to save a lookup: rejected, it would widen the DNS-rebinding window.
 - **Drop the in-memory audit chain** entirely and rely on the Black Box: rejected, the gateway's chain is a second, independent record.
@@ -37,3 +61,7 @@ and why, so a reviewer can follow the intent across the four PRs.
 - `/v1/audit/verify` now proves the retained window, not "all records since start"; its answer says so.
 - A failed last-seen write is logged and the lookup succeeds.
 - Scoring after a Black Box batch can be skipped under load (counted); the next report catches up.
+- H2: a webhook or upstream URL that used to work only because a check was missing (an internal address, plain http, a name that resolves to a
+  private address) is now refused. Pinning means the gateway's call goes to an IP: an upstream that cannot be reached by its first checked
+  addresses fails as "unreachable" (kill switch: `AGENTWALL_UPSTREAM_PIN_ENABLED=false`).
+- H2: a request body over 1 MiB (16 MiB on the two ingest routes) is refused with 413 on core.
