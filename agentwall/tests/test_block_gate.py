@@ -182,13 +182,16 @@ def test_the_recorded_rounds_are_the_ones_the_plan_measured() -> None:
     assert gates["injection_indirect"].evidence_round == "round3" and gates["output_xss"].evidence_round == "round2"
     for g in gates.values():
         assert not g.eligible and "G3" in failed_rules(g) and "G5" in failed_rules(g)
-    assert "G2" not in failed_rules(gates["output_xss"])  # the recorded fingerprint still matches the rules file in this checkout
+    # M4.7b edited the rules file, so the fingerprint the rounds were scored on no longer matches it: G2 fails for every check until a new round
+    # is scored on the new rules (blind round 4). Before M4.7b this line asserted the opposite.
+    for g in gates.values():
+        assert "G2" in failed_rules(g)
 
 
 def test_script_checks_fail_on_a_hair_and_say_how_many_samples_are_missing() -> None:
     xss = next(g for g in evaluate_gate(BLIND_ROUNDS, rules_fingerprint()) if g.category == "output_xss")
     assert (xss.false_alarms, xss.benign) == (0, 120) and wilson(0, 120)[1] > FALSE_ALARM_UPPER_LIMIT
-    assert "at least 125" in xss.missing[0]
+    assert any("at least 125" in line for line in xss.missing)  # the "rules changed" line (G2) now comes first, so look through them all
 
 
 # --- what the page and the matrix are given ---------------------------------------------------------------------
