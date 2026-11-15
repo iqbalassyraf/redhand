@@ -1,0 +1,337 @@
+[
+ {
+  "input": "example.com",
+  "expected": "example.com",
+  "note": "plain"
+ },
+ {
+  "input": "EXAMPLE.com",
+  "expected": "example.com",
+  "note": "case"
+ },
+ {
+  "input": "  example.com ",
+  "expected": "example.com",
+  "note": "surrounding spaces"
+ },
+ {
+  "input": "example.com.",
+  "expected": "example.com",
+  "note": "one trailing dot"
+ },
+ {
+  "input": "example.com...",
+  "expected": "example.com",
+  "note": "several trailing dots"
+ },
+ {
+  "input": "LOCALHOST.",
+  "expected": "localhost",
+  "note": "single label"
+ },
+ {
+  "input": "localhost",
+  "expected": "localhost",
+  "note": "single label"
+ },
+ {
+  "input": "sub.Example.CO.uk",
+  "expected": "sub.example.co.uk",
+  "note": "deep name"
+ },
+ {
+  "input": "under_score.example.com",
+  "expected": "under_score.example.com",
+  "note": "underscore"
+ },
+ {
+  "input": "1.2.3.com",
+  "expected": "1.2.3.com",
+  "note": "digits in labels but a letter in the last"
+ },
+ {
+  "input": "",
+  "expected": null,
+  "note": "empty"
+ },
+ {
+  "input": ".",
+  "expected": null,
+  "note": "only a dot"
+ },
+ {
+  "input": ".example.com",
+  "expected": null,
+  "note": "leading dot"
+ },
+ {
+  "input": "exa..mple.com",
+  "expected": null,
+  "note": "empty label"
+ },
+ {
+  "input": "-bad.com",
+  "expected": null,
+  "note": "leading hyphen"
+ },
+ {
+  "input": "bad-.com",
+  "expected": null,
+  "note": "trailing hyphen"
+ },
+ {
+  "input": "exa mple.com",
+  "expected": null,
+  "note": "space inside"
+ },
+ {
+  "input": "exam!ple.com",
+  "expected": null,
+  "note": "punctuation"
+ },
+ {
+  "input": "example.com/x",
+  "expected": null,
+  "note": "path"
+ },
+ {
+  "input": "ex@mple.com",
+  "expected": null,
+  "note": "at sign"
+ },
+ {
+  "input": "user:pw@x.com",
+  "expected": null,
+  "note": "userinfo"
+ },
+ {
+  "input": "example.com:80",
+  "expected": null,
+  "note": "a port is stripped before this function"
+ },
+ {
+  "input": "a\\b.com",
+  "expected": null,
+  "note": "backslash"
+ },
+ {
+  "input": "exa\u0000mple.com",
+  "expected": null,
+  "note": "control character"
+ },
+ {
+  "input": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.com",
+  "expected": null,
+  "note": "label of 64 characters"
+ },
+ {
+  "input": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.com",
+  "expected": null,
+  "note": "name over 253 characters"
+ },
+ {
+  "input": "%65xample.com",
+  "expected": "example.com",
+  "note": "encoded letter"
+ },
+ {
+  "input": "exam%70le.com",
+  "expected": "example.com",
+  "note": "encoded letter inside"
+ },
+ {
+  "input": "example.com%2f",
+  "expected": null,
+  "note": "encoded slash"
+ },
+ {
+  "input": "good.com%40evil.com",
+  "expected": null,
+  "note": "encoded at sign"
+ },
+ {
+  "input": "%2565xample.com",
+  "expected": null,
+  "note": "double encoding"
+ },
+ {
+  "input": "%zz.com",
+  "expected": null,
+  "note": "invalid escape"
+ },
+ {
+  "input": "%ff.com",
+  "expected": null,
+  "note": "invalid utf-8 after decoding"
+ },
+ {
+  "input": "b\u00fccher.de",
+  "expected": "xn--bcher-kva.de",
+  "note": "umlaut"
+ },
+ {
+  "input": "M\u00dcNCHEN.de",
+  "expected": "xn--mnchen-3ya.de",
+  "note": "umlaut in capitals"
+ },
+ {
+  "input": "\u0430pple.com",
+  "expected": "xn--pple-43d.com",
+  "note": "cyrillic a (homograph of apple.com)"
+ },
+ {
+  "input": "\uff45\uff58\uff41\uff4d\uff50\uff4c\uff45\uff0e\uff43\uff4f\uff4d",
+  "expected": "example.com",
+  "note": "fullwidth letters and dot"
+ },
+ {
+  "input": "example\u3002com",
+  "expected": "example.com",
+  "note": "ideographic full stop"
+ },
+ {
+  "input": "xn--bcher-kva.de",
+  "expected": "xn--bcher-kva.de",
+  "note": "already punycode"
+ },
+ {
+  "input": "XN--BCHER-KVA.DE",
+  "expected": "xn--bcher-kva.de",
+  "note": "punycode in capitals"
+ },
+ {
+  "input": "127.0.0.1",
+  "expected": "127.0.0.1",
+  "note": "dotted"
+ },
+ {
+  "input": "2130706433",
+  "expected": "127.0.0.1",
+  "note": "one decimal number"
+ },
+ {
+  "input": "0x7f000001",
+  "expected": "127.0.0.1",
+  "note": "one hex number"
+ },
+ {
+  "input": "0x7f.1",
+  "expected": "127.0.0.1",
+  "note": "hex and short"
+ },
+ {
+  "input": "0177.0.0.1",
+  "expected": "127.0.0.1",
+  "note": "octal"
+ },
+ {
+  "input": "127.1",
+  "expected": "127.0.0.1",
+  "note": "two parts"
+ },
+ {
+  "input": "127.0.1",
+  "expected": "127.0.0.1",
+  "note": "three parts"
+ },
+ {
+  "input": "0300.0250.0.1",
+  "expected": "192.168.0.1",
+  "note": "octal private address"
+ },
+ {
+  "input": "0x7f.0x0.0x0.0x1",
+  "expected": "127.0.0.1",
+  "note": "all hex"
+ },
+ {
+  "input": "127.0.0.1.",
+  "expected": "127.0.0.1",
+  "note": "trailing dot"
+ },
+ {
+  "input": "256.1.1.1",
+  "expected": null,
+  "note": "part above 255"
+ },
+ {
+  "input": "1.2.3.4.5",
+  "expected": null,
+  "note": "five parts"
+ },
+ {
+  "input": "4294967296",
+  "expected": null,
+  "note": "above 32 bits"
+ },
+ {
+  "input": "08",
+  "expected": null,
+  "note": "invalid octal"
+ },
+ {
+  "input": "1.2.3.256",
+  "expected": null,
+  "note": "last part too large for four parts"
+ },
+ {
+  "input": "[::1]",
+  "expected": "::1",
+  "note": "bracketed loopback"
+ },
+ {
+  "input": "::1",
+  "expected": "::1",
+  "note": "bare, as an allowlist entry"
+ },
+ {
+  "input": "[0:0:0:0:0:0:0:1]",
+  "expected": "::1",
+  "note": "long form"
+ },
+ {
+  "input": "[2001:DB8::1]",
+  "expected": "2001:db8::1",
+  "note": "capitals"
+ },
+ {
+  "input": "[::ffff:127.0.0.1]",
+  "expected": "127.0.0.1",
+  "note": "IPv4-mapped, dotted"
+ },
+ {
+  "input": "[::ffff:7f00:1]",
+  "expected": "127.0.0.1",
+  "note": "IPv4-mapped, hex"
+ },
+ {
+  "input": "[fe80::1%25eth0]",
+  "expected": null,
+  "note": "zone id"
+ },
+ {
+  "input": "[::1",
+  "expected": null,
+  "note": "unclosed bracket"
+ },
+ {
+  "input": "[]",
+  "expected": null,
+  "note": "empty brackets"
+ },
+ {
+  "input": "[example.com]",
+  "expected": null,
+  "note": "a name in brackets"
+ },
+ {
+  "input": "\uff10\uff58\uff17\uff46\uff0e\uff11",
+  "expected": "127.0.0.1",
+  "note": "fullwidth hex IPv4 (NFKC must run before the number check)"
+ },
+ {
+  "input": "\uff11\uff12\uff17\uff0e\uff10\uff0e\uff10\uff0e\uff11",
+  "expected": "127.0.0.1",
+  "note": "fullwidth digits"
+ }
+]

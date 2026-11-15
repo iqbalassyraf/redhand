@@ -30,6 +30,8 @@ the text. Mark one `confirmed` or `false_alarm` with `POST /v1/findings/{id}/rev
 | Readiness "Same rules the whole time" fails | The rules changed, the helper model was on, or the gateway cannot tell its rules | Expected after a gateway deploy that changed the Radar; evidence starts again on the new rules |
 
 ## Honest limits
+**Update 2026-11-13 (M4.7b):** documentation headings, links, diagram labels and a few path forms no longer raise strong findings. Measured on real documents: 29% to 5% on the documents the change was tuned on, but still 15.8% (9 of 57) on documents it was not tuned on, against a goal of under 5%. Because the rules changed, the block gate says every round needs a new one. Details: `docs/security/m4-7b-results.md`.
+
 Measured on unseen samples (blind round 2): injection 41% found with 8% false alarms on hard benign documents; markup about 92%;
 addresses about 62%; file paths about 64%. It misses rephrased and long buried attacks. It is a smoke detector, not a wall, and
 block mode will not exist until a measured gate is passed.

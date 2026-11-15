@@ -23,6 +23,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
 from pydantic import BaseModel
 
+from redhand_core.destinations.hosts import normalize_host
 from redhand_core.auth import bearer_token
 from redhand_core.config import Settings, get_settings
 from redhand_core.passports import budget as budget_rules
@@ -248,6 +249,16 @@ class GatewayAgentContext(BaseModel):
     # requires both fields and denies if they are missing (an older core), like the fields above. Deploy core before the gateway.
     radar_mode: Literal["off", "observe"]
     output_check_mode: Literal["off", "observe"]
+    # Loop detection (Phase 4 M6). The gateway requires all four, like the fields above (an older core makes the lookup fail and the
+    # call is denied): deploy core before the gateway. `loop_exempt` is true while a suppression of RAD-LOOP-001 is live for this agent.
+    loop_mode: Literal["off", "observe", "throttle"]
+    loop_limit: int
+    loop_window_seconds: int
+    loop_exempt: bool
+    # Destination allowlist (Phase 4 M7). Required by the gateway, like the fields above: an older core makes the lookup fail and the call is
+    # denied. Deploy core before the gateway. The list is sent only while the mode is not "off".
+    destination_mode: Literal["off", "observe", "enforce"]
+    allowed_destinations: list[str]
 
 
 class GatewayBudgetContext(BaseModel):
@@ -282,6 +293,14 @@ class GatewayContextResponse(BaseModel):
 
 
 LAST_SEEN_WRITE_INTERVAL_SECONDS = 60
+LOOP_RULE_ID = "RAD-LOOP-001"
+
+
+def _bounded_int(value: Any, low: int, high: int, default: int) -> int:
+    """A stored setting that is a plain integer inside its bounds, else the default (a bool is not an integer here)."""
+    if isinstance(value, int) and not isinstance(value, bool) and low <= value <= high:
+        return value
+    return default
 
 
 def _last_seen_is_stale(value: Any, now: datetime) -> bool:
@@ -368,7 +387,7 @@ async def gateway_context(
     async def load_org() -> Any:
         res = await (
             supabase.table("organizations")
-            .select("safe_mode, payload_capture_enabled, radar_mode, output_check_mode")
+            .select("safe_mode, payload_capture_enabled, radar_mode, output_check_mode, loop_mode, loop_limit, loop_window_seconds")
             .eq("id", str(organization_id)).maybe_single().execute()
         )
         return res.data if res else None
@@ -380,11 +399,46 @@ async def gateway_context(
         )
         return res.data if res else None
 
-    agent, (server_row, pin_mode, approved_tools), org_row, (honeytokens, honey_tools) = await asyncio.gather(
-        load_agent(), load_server(), load_org(), load_honey()
+    async def load_allowed_destinations(row: Any) -> tuple[Literal["off", "observe", "enforce"], list[str]]:
+        """The agent's destination mode and, unless it is off, its allowed hosts. A missing mode is off (a row from before the feature); a
+        mode that is present but not one of the three is read as ENFORCE (the restrictive reading, as for Safe Mode). A failed list lookup is
+        a 503: the gateway cannot compare without the list, so the call is denied rather than checked against nothing."""
+        raw = row.get("destination_mode") if isinstance(row, dict) else None
+        mode: Literal["off", "observe", "enforce"] = "off" if raw is None else raw if raw in ("off", "observe", "enforce") else "enforce"
+        if mode == "off":
+            return mode, []
+        try:
+            res = await (
+                supabase.table("agent_destinations").select("host")
+                .eq("organization_id", str(organization_id)).eq("agent_id", str(agent_id)).limit(101).execute()
+            )
+        except Exception as exc:  # noqa: BLE001  without the list the gateway cannot decide, so it denies
+            logger.error("Destination list lookup failed: %s", type(exc).__name__)
+            raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "Destination list lookup failed.") from None
+        hosts = {h for h in (r.get("host") for r in (res.data or [])) if isinstance(h, str) and normalize_host(h) == h}
+        return mode, sorted(hosts)[:100]  # a stored entry that does not normalize to itself is dropped: fewer allowed, never more
+
+    async def load_loop_exempt() -> bool:
+        """True while a suppression of the loop rule is live for this agent. A failed lookup means NOT exempt, the restrictive reading
+        (the agent may be flagged or throttled that it should not be) instead of failing the whole lookup for a side question."""
+        try:
+            res = await (
+                supabase.table("radar_suppressions").select("revoked_at")
+                .eq("organization_id", str(organization_id)).eq("agent_id", str(agent_id)).eq("rule_id", LOOP_RULE_ID)
+                .gt("expires_at", utcnow().isoformat()).execute()
+            )
+            return any(r.get("revoked_at") is None for r in (res.data or []))
+        except Exception as exc:  # noqa: BLE001  see the docstring
+            logger.warning("Loop exemption lookup failed: %s", type(exc).__name__)
+            return False
+
+    agent, (server_row, pin_mode, approved_tools), org_row, (honeytokens, honey_tools), loop_exempt = await asyncio.gather(
+        load_agent(), load_server(), load_org(), load_honey(), load_loop_exempt()
     )
     if not agent:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Agent not found.")
+
+    destination_mode, allowed_destinations = await load_allowed_destinations(agent)
 
     now = utcnow()
     try:
@@ -408,6 +462,12 @@ async def gateway_context(
     output_check_mode: Literal["off", "observe"] = (
         "observe" if org_row is not None and org_row.get("output_check_mode") == "observe" else "off"
     )
+    # Loop detection only runs for an explicit "observe" or "throttle". Anything else (a missing row, null, an unknown value) is off, and
+    # a limit or window that is not a plain in-range integer falls back to the defaults (20 calls in 60 seconds, decision F-D4).
+    raw_loop_mode = org_row.get("loop_mode") if org_row is not None else None
+    loop_mode: Literal["off", "observe", "throttle"] = raw_loop_mode if raw_loop_mode in ("observe", "throttle") else "off"
+    loop_limit = _bounded_int(org_row.get("loop_limit") if org_row else None, 3, 1000, 20)
+    loop_window_seconds = _bounded_int(org_row.get("loop_window_seconds") if org_row else None, 10, 600, 60)
     offset = budget_rules.normalize_offset(org_row.get("utc_offset_minutes") if org_row else None)
     raw_limit = agent.get("daily_call_limit")
     if raw_limit is None:
@@ -461,6 +521,12 @@ async def gateway_context(
             honey_tools=honey_tools,
             radar_mode=radar_mode,
             output_check_mode=output_check_mode,
+            loop_mode=loop_mode,
+            loop_limit=loop_limit,
+            loop_window_seconds=loop_window_seconds,
+            loop_exempt=loop_exempt,
+            destination_mode=destination_mode,
+            allowed_destinations=allowed_destinations,
         ),
         server=GatewayServerContext(
             slug=server_row["slug"], url=server_row["url"], pin_mode=pin_mode, approved_tools=approved_tools

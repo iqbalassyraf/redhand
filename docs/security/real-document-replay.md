@@ -7,6 +7,9 @@ gate** (see Limits), but it is the first measurement on real long text.
 **How it was made.** `scripts/radar_real_documents.py` (rules version below; command in the Re-run section). Every document is scanned as if a tool had returned it, by the same
 `radar.scan_result` the gateway runs, reading at most 16 KiB from each end. Only paths and counts are recorded, never document text.
 
+> **Update 2026-11-13 (M4.7b):** the rules changed after this record was made; the numbers below are history for the old rules. The new measurement, on
+> a tuning set and a once-only frozen set, is in `docs/security/m4-7b-results.md`.
+
 ## What this tells us
 
 1. **The script check flags every real web page.** All 10 built pages of our own dashboard (ordinary Next.js pages with `<script>` tags) raise a strong `RAD-OUT-001`. The check is
