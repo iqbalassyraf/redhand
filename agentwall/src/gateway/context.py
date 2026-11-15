@@ -14,11 +14,11 @@ from collections import OrderedDict
 from dataclasses import dataclass
 from datetime import datetime
 import time
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 from uuid import UUID
 
 import httpx
-from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictInt, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictInt, StringConstraints, ValidationError
 import structlog
 
 from .budget import BudgetState
@@ -106,6 +106,18 @@ class _AgentPayload(BaseModel):
     # and the call is denied. Deploy core before the gateway. "block" does not exist and is not accepted.
     radar_mode: Literal["off", "observe"]
     output_check_mode: Literal["off", "observe"]
+    # Required, with no default, like the fields above: an older core that does not send loop detection's settings makes the lookup
+    # fail and the call is denied, rather than running with no loop checks. Deploy core before the gateway. `loop_exempt` is true while
+    # a suppression of the loop rule is live for this agent.
+    loop_mode: Literal["off", "observe", "throttle"]
+    loop_limit: StrictInt = Field(ge=3, le=1000)
+    loop_window_seconds: StrictInt = Field(ge=10, le=600)
+    loop_exempt: StrictBool
+    # Required, with no default, like the fields above: an older core that does not send the destination allowlist makes the lookup fail and
+    # the call is denied, rather than running with no destination check. Deploy core before the gateway. The list holds normalized hosts and
+    # is empty while the mode is "off".
+    destination_mode: Literal["off", "observe", "enforce"]
+    allowed_destinations: list[Annotated[str, StringConstraints(pattern=r"^[a-z0-9_.:-]{1,253}$")]] = Field(max_length=100)
 
 
 class _ApprovedToolPayload(BaseModel):
@@ -151,6 +163,12 @@ class GatewayContext:
     approved_tools: frozenset[tuple[str, str]] = frozenset()
     radar_mode: str = "off"
     output_check_mode: str = "off"
+    loop_mode: str = "off"
+    loop_limit: int = 20
+    loop_window_seconds: int = 60
+    loop_exempt: bool = False
+    destination_mode: str = "off"
+    allowed_destinations: frozenset[str] = frozenset()
 
     def honey_tool(self, name: str) -> HoneyTool | None:
         return next((t for t in self.honey_tools if t.name == name), None)
@@ -354,4 +372,10 @@ class CoreContextClient:
             honey_tools=tuple(HoneyTool(id=t.id, name=t.name, description=t.description) for t in payload.agent.honey_tools),
             radar_mode=payload.agent.radar_mode,
             output_check_mode=payload.agent.output_check_mode,
+            loop_mode=payload.agent.loop_mode,
+            loop_limit=payload.agent.loop_limit,
+            loop_window_seconds=payload.agent.loop_window_seconds,
+            loop_exempt=payload.agent.loop_exempt,
+            destination_mode=payload.agent.destination_mode,
+            allowed_destinations=frozenset(payload.agent.allowed_destinations),
         )

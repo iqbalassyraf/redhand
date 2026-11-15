@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import asyncio
 from collections import OrderedDict
+from collections.abc import Callable
 from dataclasses import dataclass
 import time
 from typing import Any, Protocol
@@ -45,6 +46,7 @@ MAX_ITEMS = 20
 COUNTS_FLUSH_SECONDS = 60.0
 COUNTS_ITEMS_PER_REPORT = 50  # core accepts at most 50 items per report
 MAX_COUNT_PER_REPORT = 1_000_000  # core refuses a whole report with a larger number, so a larger count is sent in pieces
+LOOP_RULE_ID = "RAD-LOOP-001"
 MAX_COUNTED_ORGANIZATIONS = 5_000  # beyond this, a new organization is not counted (and so can never look ready); counted in metrics
 
 __all__ = [
@@ -295,6 +297,55 @@ class RadarScanner:
         if self._counters is not None and (self._flusher is None or self._flusher.done()):
             self._flusher = loop.create_task(self._flush_loop())
         return self._queue
+
+    def report_loop(self, *, organization_id: UUID, agent_id: UUID, server: str, tool: str) -> bool:
+        """Reports that an agent repeated one call more often than its organization's loop limit (Phase 4 M6). See `report_finding`."""
+        metrics = self._metrics
+
+        def throttled() -> None:
+            if metrics is not None:
+                metrics.record_loop("report_throttled")
+
+        return self.report_finding(
+            organization_id=organization_id, agent_id=agent_id, server=server, tool=tool,
+            rule_id=LOOP_RULE_ID, kind="loop", family="loop", severity="medium", on_throttled=throttled,
+        )
+
+    def report_finding(
+        self, *, organization_id: UUID, agent_id: UUID, server: str, tool: str, rule_id: str, kind: str, family: str, severity: str,
+        detail: str | None = None, on_throttled: Callable[[], None] | None = None,
+    ) -> bool:
+        """
+        Reports a finding the gateway raised itself, from a call and not from a scanned result (a repeated call, an address outside an agent's
+        list). Uses the same reporter, retry and bounded backlog as the Radar's findings, and the same repeat limit: one report per agent, rule,
+        tool and server every THROTTLE_SECONDS (core also coalesces), so a count in a finding is "at least". Only counts, names and a coarse
+        host go out: never arguments. Synchronous, no I/O, never raises or waits; such a finding changes no decision. False when not queued.
+        """
+        try:
+            now = self._clock()
+            key = (agent_id, rule_id, tool, "call", server)
+            last = self._throttle.get(key)
+            if last is not None and now - last < THROTTLE_SECONDS:
+                if on_throttled is not None:
+                    on_throttled()
+                return False
+            self._throttle[key] = now
+            self._throttle.move_to_end(key)
+            while len(self._throttle) > MAX_THROTTLE_KEYS:
+                self._throttle.popitem(last=False)
+            item: dict[str, Any] = {
+                "rule_id": rule_id, "kind": kind, "family": family, "severity": severity, "confidence": "high", "place": "call",
+                "evasion": [], "tool_name": tool[:128], "server": server[:63], "would_block": False, "occurrences": 1,
+            }
+            if detail is not None:
+                item["detail"] = detail
+            sent = self._dispatcher.submit(FindingsReport(organization_id, agent_id, (item,)))
+            if not sent:
+                self._throttle.pop(key, None)  # not queued: the next occurrence is reported
+            return sent
+        except Exception as exc:  # noqa: BLE001  a finding raised from a call is a side effect and must never affect it
+            logger.warning("Finding could not be queued", error_type=type(exc).__name__)
+            return False
 
     # -- the worker -----------------------------------------------------------------------------------------
     async def _run(self, queue: asyncio.Queue[_Job]) -> None:
