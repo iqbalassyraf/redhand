@@ -73,8 +73,10 @@ async def test_a_refresh_is_requested_when_the_forward_raises_something_unexpect
         raise RuntimeError("unexpected")
 
     h.gateway.forwarder._http = httpx.AsyncClient(transport=httpx.MockTransport(boom))
-    with pytest.raises(Exception):
-        await h.call(token, params=tool("list_invoices"))
+    response = await h.call(token, params=tool("list_invoices"))
+    # Changed with the gateway's catch-all: the unexpected error used to escape handle() as an exception (an HTTP 500); it is now a generic
+    # deny (CLAUDE.md 6.2). What this test is about is unchanged: the refresh is still requested.
+    assert response.status_code == 503
     await settle(h)
     assert h.core.calls == 2
 

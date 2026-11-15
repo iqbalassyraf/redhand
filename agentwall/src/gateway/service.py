@@ -31,7 +31,9 @@ from .identity import AgentAuthError, AgentIdentity, AgentTokenVerifier, KeyUnav
 from .budget import BudgetMeter
 from .metrics import GatewayMetrics
 from .capture import build_excerpt
+from ..firewall.destinations import disallowed, scan_arguments
 from .honeytokens import scan as scan_honeytokens
+from .loops import LoopDecision, LoopMeter
 from .pins import PinCoordinator
 from .radar_scan import RadarScanner, kinds_for
 from .recorder import EventRecorder, GatewayEvent
@@ -95,6 +97,9 @@ class McpGateway:
         trips: TripDispatcher,
         pins: PinCoordinator,
         radar: RadarScanner,
+        loops: LoopMeter | None = None,
+        loop_detection_enabled: bool = True,
+        destination_check_enabled: bool = True,
     ) -> None:
         self.verifier = verifier
         self.contexts = contexts
@@ -110,6 +115,14 @@ class McpGateway:
         contexts.attach_metrics(metrics)
         verifier.attach_metrics(metrics)
         self._budget_refusal_logged: dict[UUID, float] = {}
+        # Loop detection (Phase 4 M6). `loop_detection_enabled` is the operator's kill switch: False skips the meter whatever core says.
+        self.loops = loops if loops is not None else LoopMeter()
+        self.loop_detection_enabled = loop_detection_enabled
+        self._loop_refusal_logged: dict[UUID, float] = {}
+        self._loop_evictions_seen = 0
+        # Destination allowlist (Phase 4 M7). `destination_check_enabled` is the operator's kill switch: False skips the check whatever core says.
+        self.destination_check_enabled = destination_check_enabled
+        self._destination_refusal_logged: dict[UUID, float] = {}
 
     def _record_budget_refusal(
         self, identity: AgentIdentity, context: GatewayContext, method: str | None, message: Any,
@@ -122,15 +135,105 @@ class McpGateway:
         `self.recorder`, uncoalesced): the ledger's once-a-minute throttle is only about keeping the
         gateway's own forensic log short, not about the durable record owners see on the dashboard.
         """
+        self._record_repeat_refusal(
+            self._budget_refusal_logged, identity, context, method, message, reasons, tool_name, arguments, started,
+        )
+
+    def _record_repeat_refusal(
+        self, logged: dict[UUID, float], identity: AgentIdentity, context: GatewayContext, method: str | None, message: Any,
+        reasons: list[str], tool_name: str, arguments: dict[str, Any], started: float,
+    ) -> None:
+        """The once-a-minute ledger limit shared by every refusal an agent can repeat (budget, loop). `logged` is that refusal's own
+        table, so one kind of refusal cannot silence the ledger record of another."""
         now = time.monotonic()
-        last = self._budget_refusal_logged.get(identity.agent_id)
+        last = logged.get(identity.agent_id)
         if last is None or now - last >= BUDGET_REFUSAL_LOG_INTERVAL_SECONDS:
-            self._budget_refusal_logged[identity.agent_id] = now
+            logged[identity.agent_id] = now
             self._record(identity, context, method, message, "BLOCK", reasons, 403, tool_name, arguments, started)
         else:
             self.recorder.record(self._event(identity, context, method, "BLOCK", reasons, 403, tool_name, started))
 
+    def _destination_check(
+        self, identity: AgentIdentity, context: GatewayContext, tool_name: str, arguments: dict[str, Any],
+    ) -> tuple[tuple[str, ...], bool] | None:
+        """
+        The addresses in this call's arguments that are not on the agent's list (as coarse names) and whether part of the call was past the
+        scan budget. None when the check itself failed (counted and logged without values): the caller decides what that means. Never raises.
+        Raises no DNS or other I/O: it only reads what the agent wrote.
+        """
+        try:
+            scan = scan_arguments(arguments)
+            offending = disallowed(scan, context.allowed_destinations)
+        except Exception as exc:  # noqa: BLE001  the caller decides what an error means
+            logger.error("Destination check failed", error_type=type(exc).__name__)
+            self.metrics.record_destination("error")
+            return None
+        if offending:
+            self.metrics.record_destination("flagged")
+            self.radar.report_finding(
+                organization_id=identity.organization_id, agent_id=identity.agent_id, server=context.server_slug, tool=tool_name,
+                rule_id="RAD-DST-001", kind="destination", family="destination", severity="high", detail=offending[0],
+                on_throttled=lambda: self.metrics.record_destination("report_throttled"),
+            )
+        elif scan.untracked:
+            self.metrics.record_destination("untracked")
+        else:
+            self.metrics.record_destination("ok")
+        return offending, scan.untracked
+
+    def _loop_check(
+        self, identity: AgentIdentity, context: GatewayContext, tool_name: str, arguments: dict[str, Any], throttle: bool,
+    ) -> LoopDecision | None:
+        """
+        Counts this call. Returns the decision, or None when the meter raised (counted and logged without values). Never raises:
+        the caller decides what an error means (observe: carry on; throttle: deny).
+        """
+        try:
+            decision = self.loops.check(
+                identity.agent_id, tool_name, arguments, limit=context.loop_limit, window_seconds=float(context.loop_window_seconds),
+                throttle=throttle,
+            )
+        except Exception as exc:  # noqa: BLE001  the caller decides what an error means
+            logger.error("Loop check failed", error_type=type(exc).__name__)
+            self.metrics.record_loop("error")
+            return None
+        evicted = self.loops.evictions - self._loop_evictions_seen
+        if evicted:
+            self._loop_evictions_seen = self.loops.evictions
+            self.metrics.record_loop("evicted", evicted)
+        self.metrics.record_loop(decision.outcome)
+        if decision.flagged:
+            self.radar.report_loop(
+                organization_id=identity.organization_id, agent_id=identity.agent_id, server=context.server_slug, tool=tool_name,
+            )
+        return decision
+
     async def handle(
+        self,
+        *,
+        server: str,
+        message: Any,
+        bearer_token: str | None,
+        client_headers: dict[str, str],
+        upstream_authorization: str | None,
+    ) -> GatewayResponse:
+        """
+        Decides one message and forwards it if allowed. On the enforcement path any unexpected error is a deny (CLAUDE.md 6.2): whatever
+        goes wrong inside, the caller gets a generic JSON-RPC error (no type, no text, no stack), never an unhandled exception and an
+        HTTP 500, and the failure is logged by type only and counted.
+        """
+        try:
+            return await self._handle(
+                server=server, message=message, bearer_token=bearer_token, client_headers=client_headers,
+                upstream_authorization=upstream_authorization,
+            )
+        except Exception as exc:  # noqa: BLE001  enforcement path: an unexpected error denies
+            logger.error("Gateway request failed unexpectedly", error_type=type(exc).__name__)
+            self.metrics.record(method="other", outcome="error", reason="internal_error", overhead_ms=0.0)
+            request_id = message.get("id") if isinstance(message, dict) else None
+            return GatewayResponse(503, _error(request_id, JSONRPC_GATEWAY_UNAVAILABLE, "The gateway could not process this request."))
+
+    async def _handle(
         self,
         *,
         server: str,
@@ -259,6 +362,59 @@ class McpGateway:
                 self._record(identity, context, method, message, "BLOCK", violations, 403, tool_name, arguments, started)
                 return deny(200, JSONRPC_POLICY_VIOLATION, f"PolicyViolation: tool '{tool_name}' blocked by guardrails.",
                             "guardrail", {"tool_name": tool_name, "violations": violations})
+
+            # 4a. Destination allowlist (Phase 4 M7): the web and email addresses the agent wrote into this call, against its list. Observe records
+            # a finding and carries on; enforce also refuses the call, and refuses what it could not check (arguments past the scan budget), so a
+            # call is never allowed on the strength of text that was not read. A check error denies in enforce and changes nothing in observe. Off
+            # for everyone with the kill switch, and for an agent whose mode is off. Refused before the loop check and Budget Guard, so it uses neither.
+            if self.destination_check_enabled and context.destination_mode != "off":
+                enforce = context.destination_mode == "enforce"
+                dest_timer = time.perf_counter()
+                verdict = self._destination_check(identity, context, tool_name, arguments)
+                self.metrics.record_stage("destination_check", (time.perf_counter() - dest_timer) * 1000)
+                if verdict is None and enforce:  # enforcement path: a check error denies
+                    self._record(identity, context, method, message, "BLOCK", ["destination check failed"], 403, tool_name, arguments, started)
+                    return deny(200, JSONRPC_POLICY_VIOLATION, "PolicyViolation: request could not be checked.", "destination_check_error")
+                if verdict is not None and enforce and (verdict[0] or verdict[1]):
+                    offending, untracked = verdict
+                    self.metrics.record_destination("refused")
+                    if offending:
+                        reasons = [f"An address in this call is not on this agent's allowed list: {', '.join(offending)}."]
+                        text, why = "PolicyViolation: this call contains an address that is not on this agent's allowed list.", "destination_not_allowed"
+                    else:
+                        reasons = ["Part of this call was too large to check against this agent's allowed list, so it was refused."]
+                        text, why = "PolicyViolation: this call is too large to check against this agent's allowed list.", "destination_untracked"
+                    self._record_repeat_refusal(
+                        self._destination_refusal_logged, identity, context, method, message, reasons, tool_name, arguments, started,
+                    )
+                    return deny(200, JSONRPC_POLICY_VIOLATION, text, why, {"tool_name": tool_name})
+
+            # 4a'. Loop detection (Phase 4 M6): the same agent, tool and arguments again and again. Only calls that would be forwarded
+            # are counted, and a refused repeat is refused before it can use budget. Off for the whole gateway with the kill switch, off
+            # for an organization in its settings, and skipped for an agent with a live suppression of the loop rule.
+            if self.loop_detection_enabled and context.loop_mode != "off" and not context.loop_exempt:
+                throttle = context.loop_mode == "throttle"
+                loop_timer = time.perf_counter()
+                loop = self._loop_check(identity, context, tool_name, arguments, throttle)
+                self.metrics.record_stage("loop_check", (time.perf_counter() - loop_timer) * 1000)
+                if loop is None and throttle:  # enforcement path: a meter error denies
+                    self._record(identity, context, method, message, "BLOCK", ["loop check failed"], 403, tool_name, arguments, started)
+                    return deny(200, JSONRPC_POLICY_VIOLATION, "PolicyViolation: request could not be checked.", "loop_check_error")
+                if loop is not None and loop.flagged and throttle:
+                    self.metrics.record_loop("throttled")
+                    reasons = [
+                        f"This exact call was repeated {loop.count} times within {context.loop_window_seconds} seconds "
+                        f"(limit {context.loop_limit}); further repeats are paused for now."
+                    ]
+                    self._record_repeat_refusal(
+                        self._loop_refusal_logged, identity, context, method, message, reasons, tool_name, arguments, started,
+                    )
+                    return deny(
+                        200, JSONRPC_POLICY_VIOLATION,
+                        f"PolicyViolation: this exact call was repeated too often (limit {context.loop_limit} in {context.loop_window_seconds} seconds) and is paused for now.",
+                        "loop_throttled",
+                        {"tool_name": tool_name, "loop_limit": context.loop_limit, "loop_window_seconds": context.loop_window_seconds},
+                    )
 
             # 4b. Budget Guard: a call that is otherwise allowed consumes one unit of the agent's daily
             # limit, or is refused. Refused calls above never reach this point, so they never consume.

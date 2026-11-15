@@ -273,6 +273,8 @@ class Harness:
         limit: int | None = None, used_by_others: int = 0, payload_capture: bool = False,
         honeytokens: list[dict[str, str]] | None = None, honey_tools: list[dict[str, str]] | None = None,
         radar_mode: str = "off", output_check_mode: str = "off",
+        loop_mode: str = "off", loop_limit: int = 20, loop_window_seconds: int = 60, loop_exempt: bool = False,
+        destination_mode: str = "off", allowed_destinations: tuple[str, ...] = (),
     ) -> UUID:
         agent_id = uuid4()
         self.core.agents[str(agent_id)] = {
@@ -281,6 +283,8 @@ class Harness:
             "payload_capture": payload_capture,
             "honeytokens": honeytokens or [], "honey_tools": honey_tools or [],
             "radar_mode": radar_mode, "output_check_mode": output_check_mode,
+            "loop_mode": loop_mode, "loop_limit": loop_limit, "loop_window_seconds": loop_window_seconds, "loop_exempt": loop_exempt,
+            "destination_mode": destination_mode, "allowed_destinations": list(allowed_destinations),
             "budget": {
                 "daily_call_limit": limit, "used_by_other_instances": used_by_others, "day_key": "2026-11-04",
                 "resets_at": "2026-11-04T16:00:00+00:00", "action": "deny",

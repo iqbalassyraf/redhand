@@ -12,14 +12,17 @@ from datetime import datetime
 from typing import Any, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, StrictBool
+from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictInt
 
 from redhand_core.passports.models import MAX_REASON_LENGTH
 
-RULE_ID_PATTERN = r"^RAD-(INJ|OUT)-[0-9]{3}$"
+RULE_ID_PATTERN = r"^RAD-(INJ|OUT)-[0-9]{3}$"  # the injection and output rules: scan counts and readiness only know these
+FINDING_RULE_PATTERN = r"^RAD-(INJ|OUT|LOOP|DST)-[0-9]{3}$"  # every rule a finding or a suppression may name
 Level = Literal["low", "medium", "high"]
-FindingKind = Literal["injection", "output"]
-Place = Literal["text", "hidden", "decoded"]
+FindingKind = Literal["injection", "output", "loop", "destination"]
+RadarKind = Literal["injection", "output"]  # the Radar's own two checks: scan counts and readiness never include loops
+Place = Literal["text", "hidden", "decoded", "call"]
+LoopMode = Literal["off", "observe", "throttle"]
 Evasion = Literal["invisible", "lookalike", "leet", "encoded", "hidden"]
 ReviewStatus = Literal["open", "confirmed", "false_alarm"]
 SettableMode = Literal["off", "observe"]
@@ -33,7 +36,7 @@ class FindingItem(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    rule_id: str = Field(pattern=RULE_ID_PATTERN)
+    rule_id: str = Field(pattern=FINDING_RULE_PATTERN)
     kind: FindingKind
     family: str = Field(pattern=r"^[a-z][a-z-]{1,23}$")
     severity: Level
@@ -44,6 +47,8 @@ class FindingItem(BaseModel):
     server: str = Field(default="", max_length=63)
     would_block: bool = False
     occurrences: int = Field(default=1, ge=1, le=1000)
+    # Destination findings only: the last two labels of the address, never a subdomain (a subdomain can carry the stolen data).
+    detail: str | None = Field(default=None, max_length=64, pattern=r"^[a-z0-9_.:-]+$")
 
 
 class FindingReport(BaseModel):
@@ -78,6 +83,7 @@ class FindingView(BaseModel):
     server_slug: str
     would_block: bool
     occurrences: int
+    detail: str | None = None
     first_seen_at: datetime
     last_seen_at: datetime
     review_status: ReviewStatus
@@ -129,11 +135,33 @@ class RadarSettingsRequest(BaseModel):
     confirm: StrictBool = Field(default=False, description="Required when a check is turned off.")
 
 
+class LoopSettingsResponse(BaseModel):
+    """Loop detection (Phase 4 M6): how many identical calls in how many seconds count as a loop, and what happens then."""
+
+    loop_mode: LoopMode
+    loop_limit: int
+    loop_window_seconds: int
+    loop_mode_changed_at: datetime | None = None
+    last_7_days: dict[str, Any]
+    capabilities: RadarCapabilities
+
+
+class LoopSettingsRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    loop_mode: LoopMode
+    loop_limit: StrictInt = Field(ge=3, le=1000, description="Identical calls in one window that count as a loop (the limit-th call is flagged).")
+    loop_window_seconds: StrictInt = Field(ge=10, le=600)
+    expected_mode: LoopMode | None = Field(default=None, description="The mode the caller saw; a different current mode is a conflict.")
+    reason: str | None = Field(default=None, max_length=MAX_REASON_LENGTH)
+    confirm: StrictBool = Field(default=False, description="Required to turn throttling on (it refuses calls) or to turn detection off.")
+
+
 class SuppressionCreateRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     agent_id: UUID
-    rule_id: str = Field(pattern=RULE_ID_PATTERN)
+    rule_id: str = Field(pattern=FINDING_RULE_PATTERN)
     days: int = Field(default=30, ge=1, le=90)
     reason: str = Field(min_length=3, max_length=MAX_NOTE_LENGTH)
     confirm: StrictBool = Field(default=False, description="Required: a suppression stops a check from recording findings for this agent.")
@@ -228,7 +256,7 @@ class ScanCountItem(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     organization_id: UUID
-    kind: FindingKind
+    kind: RadarKind
     scanned: int = Field(ge=0, le=MAX_SCAN_COUNT)
     dropped: int = Field(ge=0, le=MAX_SCAN_COUNT)
     errors: int = Field(ge=0, le=MAX_SCAN_COUNT)
@@ -284,7 +312,7 @@ class ReadinessInputs(BaseModel):
 
     now: datetime
     window_start: datetime
-    kinds: dict[FindingKind, KindInputs]
+    kinds: dict[RadarKind, KindInputs]
 
 
 class ReadinessCondition(BaseModel):
@@ -295,7 +323,7 @@ class ReadinessCondition(BaseModel):
 
 
 class ReadinessCheck(BaseModel):
-    kind: FindingKind
+    kind: RadarKind
     label: str
     ready: bool
     scanned: int

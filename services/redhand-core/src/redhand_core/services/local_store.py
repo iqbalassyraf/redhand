@@ -285,12 +285,16 @@ def apply_insert_defaults(table: str, row: dict[str, Any]) -> None:
         row.setdefault("safe_mode", False)
         row.setdefault("daily_call_limit", None)
         row.setdefault("budget_action", "deny")
+        row.setdefault("destination_mode", "off")
     elif table == "organizations":
         row.setdefault("blackbox_retention_days", 30)
         row.setdefault("payload_capture_enabled", False)
         row.setdefault("payload_retention_days", 7)
         row.setdefault("radar_mode", "observe")
         row.setdefault("output_check_mode", "observe")
+        row.setdefault("loop_mode", "observe")
+        row.setdefault("loop_limit", 20)
+        row.setdefault("loop_window_seconds", 60)
 
 
 def _apply_update_triggers(table: str, before: dict[str, Any], after: dict[str, Any]) -> None:
@@ -364,6 +368,10 @@ class LocalSupabaseAdapter:
                 "output_check_mode": "observe",
                 "radar_mode_changed_at": now.isoformat(),
                 "output_check_mode_changed_at": now.isoformat(),
+                "loop_mode": "observe",
+                "loop_limit": 20,
+                "loop_window_seconds": 60,
+                "loop_mode_changed_at": now.isoformat(),
             }
         ]
 

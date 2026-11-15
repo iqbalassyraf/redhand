@@ -3,6 +3,8 @@ Prompt Injection Radar and output checks, data and control API (Phase 4 M4.2). S
 
 GET    /v1/radar/settings               modes, the last 7 days at a glance, and what you may do (security operator)
 PUT    /v1/radar/settings               off or observe per kind (admin; turning a check off needs confirmation; block is not offered)
+GET    /v1/radar/loop-settings          loop detection: mode, limit, window, the last 7 days (security operator)
+PUT    /v1/radar/loop-settings          off, observe or throttle, limit and window (admin; throttle and off need confirmation)
 GET    /v1/findings                     findings, newest first, filterable (security operator)
 POST   /v1/findings/{id}/review         confirm a finding or mark it a false alarm (security operator, audited)
 GET    /v1/radar/suppressions           live suppressions (security operator)
@@ -36,6 +38,8 @@ from redhand_core.radar.models import (
     FindingReviewResponse,
     FindingsResponse,
     GatewaySelfTest,
+    LoopSettingsRequest,
+    LoopSettingsResponse,
     RadarSettingsRequest,
     RadarSettingsResponse,
     ReadinessResponse,
@@ -85,6 +89,19 @@ async def put_radar_settings(payload: RadarSettingsRequest, operator: AdminDep, 
     """off: no checks of that kind and nothing stored. observe (default): findings are recorded and alerted; nothing is
     changed or blocked. Block mode is not available yet. Turning a check off needs confirm: true."""
     return await service.set_settings(supabase, operator, payload)
+
+
+@router.get("/v1/radar/loop-settings", response_model=LoopSettingsResponse)
+async def get_loop_settings(operator: SecurityOperatorDep, supabase: SupabaseDep) -> LoopSettingsResponse:
+    return await service.get_loop_settings(supabase, operator)
+
+
+@router.put("/v1/radar/loop-settings", response_model=LoopSettingsResponse)
+async def put_loop_settings(payload: LoopSettingsRequest, operator: AdminDep, supabase: SupabaseDep) -> LoopSettingsResponse:
+    """observe (default): a call repeated `loop_limit` times inside `loop_window_seconds` is recorded and alerted; nothing is refused.
+    throttle: the repeat is also refused until the window moves on (needs confirm: true). off: nothing is counted (needs confirm: true).
+    A live suppression of RAD-LOOP-001 for an agent exempts that agent."""
+    return await service.set_loop_settings(supabase, operator, payload)
 
 
 @router.post("/v1/radar/self-test", response_model=SelfTestResponse)
@@ -146,8 +163,8 @@ async def get_findings(
     supabase: SupabaseDep,
     agent_id: UUID | None = None,
     review_status: str | None = Query(default=None, pattern="^(open|confirmed|false_alarm)$"),
-    kind: str | None = Query(default=None, pattern="^(injection|output)$"),
-    rule_id: str | None = Query(default=None, pattern=r"^RAD-(INJ|OUT)-[0-9]{3}$"),
+    kind: str | None = Query(default=None, pattern="^(injection|output|loop|destination)$"),
+    rule_id: str | None = Query(default=None, pattern=r"^RAD-(INJ|OUT|LOOP|DST)-[0-9]{3}$"),
     would_block: bool | None = None,
     before: datetime | None = None,
     limit: int = Query(default=50, ge=1, le=service.MAX_FINDINGS_RETURNED),
