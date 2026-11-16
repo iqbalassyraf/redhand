@@ -36,7 +36,7 @@ RedHand is a security product. Our customers trust us to stop their AI agents fr
 | 5 | Prove it | Compliance reports (PDPA, ISO/IEC 42001, questionnaires), Trust Score |
 | Parked | Higher tiers | Red Team service, Shadow Agent Finder, Cross-agent firewall, Policy marketplace |
 
-**Current phase:** Phase 4 (Check inputs) is next. Phases 1 to 3 are built and deployed to a staging environment (Supabase Postgres, Cloud Run, a Vercel dashboard); Phase 3's last done tests await staging verification (`docs/plans/phase3-plan.md`). Do not build features from later phases unless explicitly asked. Design each phase so later ones can plug in (e.g., the gateway already emits the events Phase 3 records), but don't implement them.
+**Current phase:** Phase 4.5 (decision layer). Phases 1 to 4 are built and on `main`; Phase 4's Radar stays Watch only until its false-alarm goal and blind round 4 pass (`docs/plans/phase4-finish-plan.md`). Phase 4.5 B1, B2 and B3 are merged, B4a (model spend) is in review, B4b (approved models) is next; the model proxy (B5, B6) is gated on a measured prototype. Everything runs on a staging environment (Supabase Postgres, Cloud Run, a Vercel dashboard); production hosting is not decided. Do not build Phase 5 features unless explicitly asked. Design each phase so later ones can plug in, but don't implement them.
 
 **Product truth we must never violate in code or copy:** RedHand only controls what flows through RedHand. Never imply protection over agents or credentials outside the gateway.
 

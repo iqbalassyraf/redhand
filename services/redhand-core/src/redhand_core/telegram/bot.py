@@ -30,7 +30,7 @@ from fastapi import HTTPException
 from postgrest.exceptions import APIError
 
 from redhand_core.auth.operator import OperatorContext, Role
-from redhand_core.config import Settings
+from redhand_core.config import Settings, get_settings
 from redhand_core.passports import budget as budget_rules
 from redhand_core.passports import service
 from redhand_core.passports.models import PassportView, utcnow
@@ -272,6 +272,21 @@ async def notify_organization(
 MAX_ALERT_CHARS = 4000  # Telegram refuses a message over 4096 characters
 
 
+def _dashboard_url() -> str | None:
+    return get_settings().DASHBOARD_URL
+
+
+def _with_timeline_link(body: str, agent_id: UUID | None) -> str:
+    """Cuts the message to Telegram's limit and, for an alert about one agent, ends it with a link to that agent's incident view (Phase 4.5
+    B3) when the dashboard's address is configured. The link is kept whole: the text is cut to make room for it."""
+    dashboard = _dashboard_url() if agent_id is not None else None
+    tail = f"\n\nTimeline: {dashboard}/passports/{agent_id}/timeline" if dashboard else ""
+    room = MAX_ALERT_CHARS - len(tail)
+    if len(body) > room:
+        body = body[: room - 1] + "…"
+    return body + tail
+
+
 class AlertBatch:
     """The alerts one request raises, sent as ONE message per organization and agent (paragraphs joined) when the request ends, so a single
     event (a trip that also moves that agent's risk score) does not buzz the owner's phone twice, while alerts about different agents stay
@@ -288,11 +303,8 @@ class AlertBatch:
     async def flush(self, supabase: Any, client: TelegramClient | None) -> None:
         """Sends and empties. Never raises (notify_organization is best effort)."""
         pending, self._texts = self._texts, {}
-        for (organization_id, _agent), texts in pending.items():
-            body = "\n\n".join(texts)
-            if len(body) > MAX_ALERT_CHARS:
-                body = body[: MAX_ALERT_CHARS - 1] + "…"
-            await notify_organization(supabase, client, organization_id, body)
+        for (organization_id, agent_id), texts in pending.items():
+            await notify_organization(supabase, client, organization_id, _with_timeline_link("\n\n".join(texts), agent_id))
 
 
 async def send_alert(
@@ -301,7 +313,7 @@ async def send_alert(
 ) -> None:
     """Adds to the request's batch when there is one, otherwise sends at once (the behaviour before batches existed)."""
     if batch is None:
-        await notify_organization(supabase, client, organization_id, text)
+        await notify_organization(supabase, client, organization_id, _with_timeline_link(text, agent_id))
     else:
         batch.add(organization_id, text, agent_id)
 

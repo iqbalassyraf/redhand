@@ -88,6 +88,13 @@ files = [
     "services/redhand-core/src/redhand_core/middleware/security_headers.py",
     "services/redhand-core/src/redhand_core/services/rate_limit.py",
     "services/redhand-core/src/redhand_core/net/source.py",
+    "services/redhand-core/src/redhand_core/spend/prices.py",
+    "services/redhand-core/src/redhand_core/spend/models.py",
+    "services/redhand-core/src/redhand_core/spend/service.py",
+    "services/redhand-core/src/redhand_core/routers/spend.py",
+    "services/redhand-core/src/redhand_core/timeline/models.py",
+    "services/redhand-core/src/redhand_core/timeline/service.py",
+    "services/redhand-core/src/redhand_core/routers/timeline.py",
     "services/redhand-core/src/redhand_core/services/safe_log.py",
     "agentwall/src/gateway",
     "agentwall/src/bench",
@@ -99,6 +106,8 @@ files = [
     "agentwall/src/telemetry/audit_logger.py",
     "agentwall/config/settings.py",
     "packages/redhand-sdk/src/redhand_sdk/scanner/secrets.py",
+    "packages/redhand-sdk/src/redhand_sdk/adapters/usage.py",
+    "packages/redhand-sdk/src/redhand_sdk/adapters/langchain.py",
 ]
 
 [[tool.mypy.overrides]]

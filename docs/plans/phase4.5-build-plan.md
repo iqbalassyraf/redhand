@@ -1,7 +1,8 @@
 # Phase 4.5 build plan: the "brain" (decision layer and Model Gateway)
 
 **Status:** Approved by the owner as recommended (2026-11-06). Part 1 (B1 to B3) and B4 may be built after Phase 4's
-M4; B5 and B6 (the proxy) are gated on a measured prototype and a key-custody review (B-D3). Nothing here is built yet.
+M4; B5 and B6 (the proxy) are gated on a measured prototype and a key-custody review (B-D3).
+**Built (2026-11-16):** B1 Risk Engine (ADR 0019) and B2 behaviour baseline, watch only (ADR 0020), merged to `main`; B3 incident view (ADR 0022) built on `feat/phase45-b3-incident-view` (PR 76). B4 is next and starts with its own plan for the owner's approval. CTI pieces A, B and C (Part 3) are not built.
 Supersedes the open decisions in `phase4.5-model-proxy.md` (the original go/no-go evaluation).
 
 **Goal:** RedHand turns the signals it already has into one explainable picture per agent and a configurable response

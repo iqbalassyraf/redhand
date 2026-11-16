@@ -344,6 +344,158 @@
         "title": "AgentSafeModeResponse",
         "type": "object"
       },
+      "AgentSpendDetailResponse": {
+        "properties": {
+          "agent": {
+            "$ref": "#/components/schemas/AgentSpendView"
+          },
+          "basis": {
+            "title": "Basis",
+            "type": "string"
+          },
+          "currency": {
+            "const": "USD",
+            "default": "USD",
+            "title": "Currency",
+            "type": "string"
+          },
+          "days": {
+            "items": {
+              "$ref": "#/components/schemas/DaySpendView"
+            },
+            "title": "Days",
+            "type": "array"
+          },
+          "prices_as_of": {
+            "title": "Prices As Of",
+            "type": "string"
+          }
+        },
+        "required": [
+          "prices_as_of",
+          "basis",
+          "agent",
+          "days"
+        ],
+        "title": "AgentSpendDetailResponse",
+        "type": "object"
+      },
+      "AgentSpendView": {
+        "properties": {
+          "agent_id": {
+            "format": "uuid",
+            "title": "Agent Id",
+            "type": "string"
+          },
+          "calls": {
+            "title": "Calls",
+            "type": "integer"
+          },
+          "completion_tokens": {
+            "title": "Completion Tokens",
+            "type": "integer"
+          },
+          "estimated_micro_usd": {
+            "title": "Estimated Micro Usd",
+            "type": "integer"
+          },
+          "estimated_text": {
+            "title": "Estimated Text",
+            "type": "string"
+          },
+          "lower_bound": {
+            "title": "Lower Bound",
+            "type": "boolean"
+          },
+          "models": {
+            "items": {
+              "$ref": "#/components/schemas/ModelUseView"
+            },
+            "title": "Models",
+            "type": "array"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "percent_of_limit": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Percent Of Limit"
+          },
+          "prompt_tokens": {
+            "title": "Prompt Tokens",
+            "type": "integer"
+          },
+          "spend_limit_micro_usd": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Spend Limit Micro Usd"
+          },
+          "spend_limit_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Spend Limit Text"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "unpriced_models": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Unpriced Models",
+            "type": "array"
+          },
+          "unpriced_tokens": {
+            "title": "Unpriced Tokens",
+            "type": "integer"
+          },
+          "usage_reported": {
+            "title": "Usage Reported",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "agent_id",
+          "name",
+          "status",
+          "usage_reported",
+          "calls",
+          "prompt_tokens",
+          "completion_tokens",
+          "estimated_micro_usd",
+          "estimated_text",
+          "lower_bound",
+          "unpriced_tokens",
+          "unpriced_models",
+          "spend_limit_micro_usd",
+          "spend_limit_text",
+          "percent_of_limit",
+          "models"
+        ],
+        "title": "AgentSpendView",
+        "type": "object"
+      },
       "AgentTokenResponse": {
         "properties": {
           "access_token": {
@@ -1099,6 +1251,58 @@
           "created_at"
         ],
         "title": "ControlAuditEntry",
+        "type": "object"
+      },
+      "DaySpendView": {
+        "properties": {
+          "calls": {
+            "title": "Calls",
+            "type": "integer"
+          },
+          "day": {
+            "format": "date",
+            "title": "Day",
+            "type": "string"
+          },
+          "estimated_micro_usd": {
+            "title": "Estimated Micro Usd",
+            "type": "integer"
+          },
+          "estimated_text": {
+            "title": "Estimated Text",
+            "type": "string"
+          },
+          "lower_bound": {
+            "title": "Lower Bound",
+            "type": "boolean"
+          },
+          "models": {
+            "items": {
+              "$ref": "#/components/schemas/ModelUseView"
+            },
+            "title": "Models",
+            "type": "array"
+          },
+          "unpriced_tokens": {
+            "title": "Unpriced Tokens",
+            "type": "integer"
+          },
+          "usage_reported": {
+            "title": "Usage Reported",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "day",
+          "usage_reported",
+          "calls",
+          "estimated_micro_usd",
+          "estimated_text",
+          "lower_bound",
+          "unpriced_tokens",
+          "models"
+        ],
+        "title": "DaySpendView",
         "type": "object"
       },
       "DestinationAddRequest": {
@@ -2843,6 +3047,74 @@
         "title": "McpServerView",
         "type": "object"
       },
+      "ModelUseView": {
+        "description": "One model's reported use. `provider` and `model` are what the SDK sent (untrusted text, at most 64 and 128 characters).",
+        "properties": {
+          "calls": {
+            "title": "Calls",
+            "type": "integer"
+          },
+          "completion_tokens": {
+            "title": "Completion Tokens",
+            "type": "integer"
+          },
+          "estimated_micro_usd": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Estimated Micro Usd"
+          },
+          "estimated_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Estimated Text"
+          },
+          "lower_bound": {
+            "title": "Lower Bound",
+            "type": "boolean"
+          },
+          "model": {
+            "title": "Model",
+            "type": "string"
+          },
+          "price_known": {
+            "title": "Price Known",
+            "type": "boolean"
+          },
+          "prompt_tokens": {
+            "title": "Prompt Tokens",
+            "type": "integer"
+          },
+          "provider": {
+            "title": "Provider",
+            "type": "string"
+          }
+        },
+        "required": [
+          "provider",
+          "model",
+          "calls",
+          "prompt_tokens",
+          "completion_tokens",
+          "price_known",
+          "estimated_micro_usd",
+          "estimated_text",
+          "lower_bound"
+        ],
+        "title": "ModelUseView",
+        "type": "object"
+      },
       "OrgBudgetDefaultRequest": {
         "additionalProperties": false,
         "description": "The daily limit new agents of the organization start with (null: no default).",
@@ -4425,6 +4697,125 @@
         "title": "SeverityLevel",
         "type": "string"
       },
+      "SpendLimitRequest": {
+        "additionalProperties": false,
+        "description": "Set an agent's daily estimated-spend limit in micro-dollars (1 = $0.000001); null removes it. It only raises an alert.",
+        "properties": {
+          "confirm": {
+            "default": false,
+            "description": "Required to raise or remove a limit.",
+            "title": "Confirm",
+            "type": "boolean"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "spend_limit_micro_usd": {
+            "anyOf": [
+              {
+                "maximum": 1000000000000.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Spend Limit Micro Usd"
+          }
+        },
+        "title": "SpendLimitRequest",
+        "type": "object"
+      },
+      "SpendLimitResponse": {
+        "properties": {
+          "agent_id": {
+            "format": "uuid",
+            "title": "Agent Id",
+            "type": "string"
+          },
+          "changed": {
+            "title": "Changed",
+            "type": "boolean"
+          },
+          "spend_limit_micro_usd": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Spend Limit Micro Usd"
+          }
+        },
+        "required": [
+          "agent_id",
+          "spend_limit_micro_usd",
+          "changed"
+        ],
+        "title": "SpendLimitResponse",
+        "type": "object"
+      },
+      "SpendTodayResponse": {
+        "properties": {
+          "agents": {
+            "items": {
+              "$ref": "#/components/schemas/AgentSpendView"
+            },
+            "title": "Agents",
+            "type": "array"
+          },
+          "basis": {
+            "title": "Basis",
+            "type": "string"
+          },
+          "currency": {
+            "const": "USD",
+            "default": "USD",
+            "title": "Currency",
+            "type": "string"
+          },
+          "day": {
+            "format": "date",
+            "title": "Day",
+            "type": "string"
+          },
+          "prices_as_of": {
+            "title": "Prices As Of",
+            "type": "string"
+          },
+          "resets_at": {
+            "format": "date-time",
+            "title": "Resets At",
+            "type": "string"
+          },
+          "utc_offset_minutes": {
+            "title": "Utc Offset Minutes",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "day",
+          "resets_at",
+          "utc_offset_minutes",
+          "prices_as_of",
+          "basis",
+          "agents"
+        ],
+        "title": "SpendTodayResponse",
+        "type": "object"
+      },
       "StepType": {
         "enum": [
           "observation",
@@ -4725,6 +5116,231 @@
           "recorded_security_events_count"
         ],
         "title": "TelemetryIngestResponse",
+        "type": "object"
+      },
+      "TimelineAgent": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "status"
+        ],
+        "title": "TimelineAgent",
+        "type": "object"
+      },
+      "TimelineItem": {
+        "additionalProperties": false,
+        "description": "One moment in the agent's story. Which fields are set depends on `kind`; the others stay empty.",
+        "properties": {
+          "action": {
+            "default": "",
+            "title": "Action",
+            "type": "string"
+          },
+          "at": {
+            "format": "date-time",
+            "title": "At",
+            "type": "string"
+          },
+          "automatic": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "True when RedHand acted by itself (the fixed system actor).",
+            "title": "Automatic"
+          },
+          "calls": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Calls"
+          },
+          "confidence": {
+            "default": "",
+            "title": "Confidence",
+            "type": "string"
+          },
+          "finding_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finding Id"
+          },
+          "finding_kind": {
+            "default": "",
+            "title": "Finding Kind",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "refusal",
+              "error",
+              "activity",
+              "finding",
+              "trip",
+              "action"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "occurrences": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Occurrences"
+          },
+          "organization_wide": {
+            "default": false,
+            "description": "An action on every agent of the organization (freeze all, Safe Mode for all).",
+            "title": "Organization Wide",
+            "type": "boolean"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "reasons": {
+            "description": "The gateway's own fixed wording, as on the Black Box page.",
+            "items": {
+              "type": "string"
+            },
+            "title": "Reasons",
+            "type": "array"
+          },
+          "refused": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Refused"
+          },
+          "review_status": {
+            "default": "",
+            "title": "Review Status",
+            "type": "string"
+          },
+          "rule_id": {
+            "default": "",
+            "title": "Rule Id",
+            "type": "string"
+          },
+          "seen_in": {
+            "default": "",
+            "title": "Seen In",
+            "type": "string"
+          },
+          "seq": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Seq"
+          },
+          "server": {
+            "default": "",
+            "title": "Server",
+            "type": "string"
+          },
+          "tool_name": {
+            "default": "",
+            "title": "Tool Name",
+            "type": "string"
+          },
+          "trip_kind": {
+            "default": "",
+            "title": "Trip Kind",
+            "type": "string"
+          }
+        },
+        "required": [
+          "at",
+          "kind"
+        ],
+        "title": "TimelineItem",
+        "type": "object"
+      },
+      "TimelineResponse": {
+        "properties": {
+          "agent": {
+            "$ref": "#/components/schemas/TimelineAgent"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/TimelineItem"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_before": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Pass as `before` to read the next (older) page.",
+            "title": "Next Before"
+          }
+        },
+        "required": [
+          "agent",
+          "items"
+        ],
+        "title": "TimelineResponse",
         "type": "object"
       },
       "ToolPinView": {
@@ -5741,6 +6357,195 @@
         "summary": "Exchange Agent Key",
         "tags": [
           "Agent Authentication"
+        ]
+      }
+    },
+    "/v1/agents/{agent_id}/timeline": {
+      "get": {
+        "operationId": "agent_timeline_v1_agents__agent_id__timeline_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "agent_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Agent Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "before",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Before"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-RedHand-Org",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Redhand-Org"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TimelineResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Agent Timeline",
+        "tags": [
+          "Incident view"
+        ]
+      }
+    },
+    "/v1/agents/{agent_id}/timeline/export": {
+      "get": {
+        "description": "The incident summary: the agent's whole timeline (newest first, at most 5,000 items) as a download, for a report or a ticket. The same\nfields as the page, never a payload. Audited before anything is read; 10 per hour per operator.",
+        "operationId": "export_agent_timeline_v1_agents__agent_id__timeline_export_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "agent_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Agent Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "format",
+            "required": false,
+            "schema": {
+              "default": "json",
+              "pattern": "^(json|csv)$",
+              "title": "Format",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-RedHand-Org",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Redhand-Org"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Export Agent Timeline",
+        "tags": [
+          "Incident view"
         ]
       }
     },
@@ -9639,6 +10444,91 @@
         ]
       }
     },
+    "/v1/passports/{agent_id}/spend-limit": {
+      "put": {
+        "operationId": "set_spend_limit_v1_passports__agent_id__spend_limit_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "agent_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Agent Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-RedHand-Org",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Redhand-Org"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SpendLimitRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SpendLimitResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Set Spend Limit",
+        "tags": [
+          "Model spend"
+        ]
+      }
+    },
     "/v1/passports/{agent_id}/unfreeze": {
       "post": {
         "operationId": "unfreeze_agent_v1_passports__agent_id__unfreeze_post",
@@ -10707,6 +11597,146 @@
         "summary": "Put Ladder",
         "tags": [
           "Risk Engine"
+        ]
+      }
+    },
+    "/v1/spend/agents": {
+      "get": {
+        "operationId": "get_spend_v1_spend_agents_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-RedHand-Org",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Redhand-Org"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SpendTodayResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Spend",
+        "tags": [
+          "Model spend"
+        ]
+      }
+    },
+    "/v1/spend/agents/{agent_id}": {
+      "get": {
+        "operationId": "get_agent_spend_v1_spend_agents__agent_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "agent_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Agent Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-RedHand-Org",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Redhand-Org"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentSpendDetailResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Agent Spend",
+        "tags": [
+          "Model spend"
         ]
       }
     },
