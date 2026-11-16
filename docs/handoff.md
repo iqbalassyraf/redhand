@@ -13,6 +13,12 @@ Both tools work on RedHand and its demo projects. This file is how each learns w
 
 ---
 
+## 2026-11-16, Claude Code: Parts N, O, P result checked against staging (branch docs/night-1-nop-db-check)
+- **Read-only checks done** (section 7a of `docs/testing/results/2026-11-16-night-1-parts-nop.md`): N10, O10, P10 PASS; P5 and P6 PASS in the database (the model finding exists and adds 0 Risk points), UI not seen; roll-ups match; the stray agent in "F1 Second Org" is gone with nothing left behind and the unfiltered delete removed no audited agent.
+- **Report corrected:** the test SDK key is already inactive; `pin-test`, `night-radar`, `night-dest` are still active (revoke them).
+- **Fixed (my mistakes):** the Part O command lacked `sdk_version` (HTTP 422), now fixed with a test that validates the brief's JSON against core; the approved-model alert named a non-existent filter ("Unapproved model"), now "Model not on the approved list" (needs a core deploy); O6 wording "ends with" changed to "contains".
+- **Not checked:** Cloud Run settings (no access).
+
 ## 2026-11-16, Antigravity: B3/B4a/B4b deployed to staging and night Parts N, O, P run (main 7340432)
 - **Report:** `docs/testing/results/2026-11-16-night-1-parts-nop.md`. Not yet checked against the database; section 7 has the read-only queries.
 - **Deployed by the owner:** migrations `20261124000000_incident_view`, `20261125000000_model_spend`, `20261126000000_approved_models`; core `redhand-core-00033-xv2` (image `7340432`, `DASHBOARD_ORIGIN` set to both dashboard origins); gateway unchanged (`redhand-gateway-00029-njd`); Vercel dashboard from `main`. `smoke.sh` 13/13, `staging_agent.py run` 6/6. #84 and #85 are on `main` but were **not** deployed or tested.

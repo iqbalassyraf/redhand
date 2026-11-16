@@ -101,7 +101,7 @@ def models_in_batch(trace_rows: Iterable[Mapping[str, Any]]) -> list[tuple[str, 
 def alert_text(agent_name: str, model: str) -> str:
     return (
         f"Model alert: {agent_name} used a model that is not on the approved list: {model}. Recorded only: nothing was refused. "
-        "Open the dashboard, Radar, Unapproved model."
+        "Open the dashboard, Radar, findings filter: Model not on the approved list."
     )
 
 

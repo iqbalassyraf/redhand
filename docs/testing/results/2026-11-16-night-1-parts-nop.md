@@ -6,7 +6,7 @@ Run by: Antigravity with the owner at the keyboard (owner ran every command, dep
 Rule used: **NOT RUN is not PASS.** A step without evidence is marked NOT RUN or "owner-reported", never PASS by assumption.
 
 > [!IMPORTANT]
-> This report has **not** been checked against the staging database yet. Claude Code should run the read-only checks in section 7 before any verdict is final.
+> **Checked against the staging database by Claude Code on 2026-11-16** (read-only transactions; results in section 7a). Corrections are marked "Corrected by Claude Code".
 
 ---
 
@@ -76,7 +76,7 @@ No product defect was found in anything that ran. One **brief defect** (Part O c
 | N7 | **NOT RUN** | Viewer sign-in was not done |
 | N8 | PASS | `/passports/00000000-0000-0000-0000-00000000dead/timeline` shows "This agent was not found in your organization." |
 | N9 | **NOT RUN** | Honeytoken trip with timeline link not done |
-| N10 | For Claude Code | See section 7 |
+| N10 | **PASS** (database) | One `passport.timeline_exported` row for `night-incident`, 12:10:07 UTC, organization RedHand Staging (section 7a) |
 | N11 | PASS | "night-incident revoked."; Telegram "night-incident was permanently revoked" (20:43). No honeytoken was created, so none to retire |
 
 **Observation (not a defect, worth a look):** the `night-incident` timeline also shows organization-wide items from 04/11/2026 ("Safe Mode turned on for every agent by a person", reasons "testing", "via Telegram", "testing finish m2") that predate the agent's registration. That is probably by design (global Safe Mode affects every agent), but on a fresh agent it reads as history the agent did not have. Consider limiting org-wide items to the agent's lifetime.
@@ -94,7 +94,7 @@ No product defect was found in anything that ran. One **brief defect** (Part O c
 | O7 | PASS | Fourth span sent (HTTP 202); **no** second Telegram message. Box: "$6.00 · 3,001,000 tokens ... 4 calls", "200% of the $3.00 daily limit · alert sent, nothing was refused" |
 | O8 | **NOT RUN** | Operator and viewer attempts not done |
 | O9 | PASS (dialog text not captured) | Box cleared, "Limit saved.", field back to "blank = no limit". The confirm dialog wording was not quoted |
-| O10 | For Claude Code | See section 7 |
+| O10 | **PASS** (database) | Exactly two `passport.spend_limit_changed` rows for `night-spend`: none to $3.00 (13:29:16 UTC), $3.00 to none (13:33:14 UTC), no others (section 7a) |
 | O11 | PASS | `night-spend` shown "revoked"; Telegram "night-spend was permanently revoked" (21:34) |
 
 Note on wording: the O6 message ends with an extra sentence after "Nothing was refused: RedHand does not stop model calls." The brief says the message "ends with" that sentence. The extra sentence is accurate and useful; the brief, not the product, should be updated.
@@ -107,15 +107,15 @@ Note on wording: the O6 message ends with an extra sentence after "Nothing was r
 | P2 | PASS | `night-model` with `openai/gpt-mystery`: HTTP 202, no "Model alert:" message |
 | P3 | PASS | "Approved models saved." and "Check is on: 1 approved model." |
 | P4 | PASS | Telegram (21:38): "Model alert: night-model used a model that is not on the approved list: openai/gpt-mystery. Recorded only: nothing was refused. Open the dashboard, Radar, Unapproved model." Agent stayed active |
-| P5 | **NOT RUN** | Radar findings filter not checked; no screenshot |
-| P6 | **NOT RUN** | Risk box not checked; no screenshot |
+| P5 | **PASS in the database, UI not seen** (corrected by Claude Code) | One `RAD-MDL-001` finding, kind `model`, tool `openai/gpt-mystery`, review status open, for `night-model` (first seen 13:38:34 UTC). The Radar page filter itself was not looked at |
+| P6 | **PASS in the database, UI not seen** (corrected by Claude Code) | `agent_risk_signals` for `night-model` returns **no signal at all**, so the model finding added 0 Risk points. The Risk box was not looked at |
 | P7 | **NOT RUN** | Extending the list and resending was skipped |
 | P8 | **NOT RUN** | Operator attempt not done |
 | P9 | Owner-reported, no screenshot | Owner cleared the list and saved. Dialog wording and "Check is off" not captured |
-| P10 | For Claude Code | See section 7. Expect **two** rows (set, cleared), not three, because P7 did not run |
+| P10 | **PASS** (database) | Two `organization.approved_models_changed` rows: 0 to 1 entries (13:36:58 UTC), 1 to 0 (13:39:36 UTC), as expected without P7. The list is empty now |
 | P11 | Owner-reported, no screenshot | Owner revoked `night-model` and ran `unset RH_SDK_KEY RH_CORE` |
 
-Note on wording: the P4 alert says "Open the dashboard, Radar, Unapproved model." while the brief calls the filter "Model not on the approved list". Check the two names match on the Radar page (it was not checked because P5 did not run).
+Note on wording: the P4 alert says "Open the dashboard, Radar, Unapproved model." while the brief calls the filter "Model not on the approved list". **Confirmed by Claude Code from the code: the alert named a filter that does not exist.** Fixed on branch `docs/night-1-nop-db-check`: the alert now says "Open the dashboard, Radar, findings filter: Model not on the approved list." (needs a core deploy to reach staging).
 
 ---
 
@@ -175,6 +175,20 @@ select count(*) from public.execution_traces where agent_id = 'b5132363-dc35-443
 select status, count(*) from public.agents where name like 'night-%' or name = 'pin-test' group by status;
 ```
 
+### 7a. Results of the checks (Claude Code, 2026-11-16, read-only transactions on staging `qxxiksevqfmkqstrdkxi`)
+
+| Check | Result |
+|---|---|
+| N10 | 1 `passport.timeline_exported` for `night-incident` (12:10:07 UTC) |
+| O10 | 2 `passport.spend_limit_changed` for `night-spend` (none to 3,000,000 micro-dollars, then back to none); nothing else |
+| P10 | 2 `organization.approved_models_changed` (0 to 1, 1 to 0); `approved_models` is empty now |
+| P5 / P6 (data) | 1 `RAD-MDL-001` finding (kind `model`, `openai/gpt-mystery`, open) for `night-model`; `agent_risk_signals` returns no signal for it |
+| Spend roll-up | `night-spend`: `anthropic/claude-sonnet-5-5` 3 calls, 3,000,000 input tokens ($6.00) and `openai/gpt-mystery` 1 call, 1,000 tokens. `night-model`: `openai/gpt-mystery` 2 calls (P2 and P4). Matches the screenshots |
+| Section 5, stray agent | Agent `b5132363-...` in "F1 Second Org" no longer exists; 0 `execution_traces` and 0 roll-up rows remain for it; that organization has 0 agents. No `control_audit_log` row points at a missing agent, so the unfiltered `DELETE` removed no audited agent. The live `night-spend` (`a637e024-...`, RedHand Staging) was created after the delete |
+| Test key | `rh_test_spen` belongs to RedHand Staging and is **already inactive** |
+| Still active | `pin-test`, `night-radar`, `night-dest` |
+| Not checked | Cloud Run settings (`AGENTWALL_*_ENABLED`, minimum instances): Claude Code has no Cloud Run access in this session |
+
 Cloud Run (read-only): confirm no `AGENTWALL_*_ENABLED` variables on the gateway and minimum instances 0 on both services. **Not re-checked in this session.**
 
 ---
@@ -190,9 +204,9 @@ Cloud Run (read-only): confirm no `AGENTWALL_*_ENABLED` variables on the gateway
 | `night-spend` limit | Cleared (screenshot) |
 | `night-incident`, `night-stale`, `night-spend` | Revoked (screenshots) |
 | `night-model` | Revoked (owner-reported) |
-| `night-radar`, `night-dest` | **Still active in the 21:14 screenshot. Revoke them.** |
-| `pin-test`, mistyped-name agent | Not checked this session |
-| Test SDK key `rh_test_spen...` | **Still active. Deactivate:** `update public.sdk_api_keys set is_active = false where key_prefix = 'rh_test_spen';` |
+| `night-radar`, `night-dest` | **Confirmed still ACTIVE in the database by Claude Code. Revoke them.** |
+| `pin-test`, mistyped-name agent | **Corrected by Claude Code: `pin-test` is still ACTIVE.** No agent named like a mistyped `night-*` was found; the owner should name the agent if it still exists |
+| Test SDK key `rh_test_spen...` | **Corrected by Claude Code: already deactivated** (`is_active = false` in the database at check time; who deactivated it is not recorded, keys have no audit trail). Its plaintext was typed into chat, so keep it inactive or delete the row |
 | `AGENTWALL_*_ENABLED` unset, min instances 0 | Not re-checked |
 | Shell variables | `RH_SDK_KEY`, `RH_CORE` unset (owner-reported). `RH_AGENT_KEY` from Part N: unset not confirmed |
 
@@ -202,7 +216,7 @@ Cloud Run (read-only): confirm no `AGENTWALL_*_ENABLED` variables on the gateway
 
 - **B3 incident view (#76): GOOD on staging** for everything run. Gaps: viewer refusal (N7), honeytoken alert link (N9).
 - **B4a model spend (#79): GOOD on staging** for everything run. Gap: role refusals (O8). Cannot be used by a customer until G1 is fixed.
-- **B4b approved models (#83): PARTLY VERIFIED.** The alert path works (P2 to P4). The Radar finding, the zero-risk rule, list extension and role refusal (P5 to P8) are NOT RUN, so "adds 0 Risk points" is **not** verified on staging.
+- **B4b approved models (#83): VERIFIED in the database, partly in the UI.** The alert path works (P2 to P4). The finding exists and adds 0 Risk points **in the staging database** (P5, P6, checked by Claude Code). Still NOT RUN: the Radar filter and Risk box on screen, list extension (P7) and role refusal (P8).
 
 Remaining manual steps to close the gaps (about 15 minutes, owner plus an operator and a viewer account): N7, N9, O8, P5 to P8, then P10 again.
 
