@@ -13,6 +13,11 @@ Both tools work on RedHand and its demo projects. This file is how each learns w
 
 ---
 
+## 2026-11-16, Claude Code: status catch-up (docs only, branch docs/status-catch-up)
+- `docs/briefing.md`: the Phase 4 and Phase 4.5 rows say what is built, merged, proven on staging and still open (Radar false-alarm goal not met, blind round 4 not scored, B3 in PR 76, B4 next).
+- `docs/plans/phase4.5-build-plan.md`: the status line no longer says "nothing here is built".
+- **Proposed CLAUDE.md change (not applied; CLAUDE.md section 15 says to propose, not edit):** section 1, "Current phase", currently says "Phase 4 (Check inputs) is next. Phases 1 to 3 are built...". Proposed wording: "**Current phase:** Phase 4.5 (decision layer). Phases 1 to 4 are built and on `main`; Phase 4's Radar stays Watch only until its false-alarm goal and blind round 4 pass (`docs/plans/phase4-finish-plan.md`). Phase 4.5 B1 and B2 are merged, B3 is in review, B4 is next; the model proxy (B5, B6) is gated on a measured prototype. Do not build Phase 5 features unless explicitly asked." The owner applies it or says to.
+
 ## 2026-11-13, Claude Code: night 1 test brief written (branch docs/phase4-night-1-brief, stacked on M7, nothing deployed)
 - **Built:** `docs/testing/briefs/2026-11-13-night-1.md` (Parts 0 deploy and smoke, A F1b tool pinning, B loops, C destinations, D M4.7b, E latency, F regression, cleanup, report format, and how I will check the report against the database), `scripts/staging_agent.py repeat` (same call N times, `--tool --args --times --delay --vary`, prints counts and the first refusal only), and two tests: `agentwall/tests/test_staging_agent_repeat.py` (against a fake stack, including that no key, token or argument is printed) and `agentwall/tests/test_night_brief_strings.py` (every sentence the brief promises must be in the brief and in the source file that produces it).
 - **Part D is NOT READY and the brief says to skip it:** M4.7b step (b) (the rule edits) cannot start because the sandbox cannot reach the public DeepWiki server (HTTP 403 from the proxy). Options for the owner are in the M4.7b entry and PR 63.
