@@ -109,6 +109,7 @@ files = [
     "agentwall/src/telemetry/audit_logger.py",
     "agentwall/config/settings.py",
     "packages/redhand-sdk/src/redhand_sdk/scanner/secrets.py",
+    "packages/redhand-sdk/src/redhand_sdk/scanner/baseline.py",
     "packages/redhand-sdk/src/redhand_sdk/adapters/usage.py",
     "packages/redhand-sdk/src/redhand_sdk/adapters/langchain.py",
 ]

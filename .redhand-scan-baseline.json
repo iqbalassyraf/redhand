@@ -1,0 +1,138 @@
+{
+  "version": 1,
+  "entries": [
+    {
+      "file": "agentwall/src/broker/providers/gcp_sts.py",
+      "rule": "RH-SEC-004",
+      "line_sha256": "f046eb19089b7f2b020d6859e99e9ebb67dfc2ae726590b0cdfcc2545a94bb58",
+      "count": 1,
+      "reason": "The simulated Google token returned by the local STS provider stub: a prefix plus a hash, not a real credential."
+    },
+    {
+      "file": "agentwall/tests/test_ast_guardrails.py",
+      "rule": "RH-SEC-004",
+      "line_sha256": "08787325e265d42ae663ddd0b6374e0bc984e8aa3de5d49ad9ae928a596f807b",
+      "count": 1,
+      "reason": "Fake keys in tests that prove the guardrail redacts secrets in model output; not real credentials."
+    },
+    {
+      "file": "agentwall/tests/test_ast_guardrails.py",
+      "rule": "RH-SEC-004",
+      "line_sha256": "1809df4b507801dddf60738794bd9e6c86a33f228336124c6f9e392088553a47",
+      "count": 1,
+      "reason": "Fake keys in tests that prove the guardrail redacts secrets in model output; not real credentials."
+    },
+    {
+      "file": "agentwall/tests/test_ast_guardrails.py",
+      "rule": "RH-SEC-004",
+      "line_sha256": "6f01b03273fac9a1728d6a091dcb4721e0468dd6b20a6169a48bd05c17e5056e",
+      "count": 1,
+      "reason": "Fake keys in tests that prove the guardrail redacts secrets in model output; not real credentials."
+    },
+    {
+      "file": "agentwall/tests/test_ast_guardrails.py",
+      "rule": "RH-SEC-004",
+      "line_sha256": "d6be09f9c58dbea4afdf11ea14c13603130ce104d76caa49b61e7635f3d0f077",
+      "count": 1,
+      "reason": "Fake keys in tests that prove the guardrail redacts secrets in model output; not real credentials."
+    },
+    {
+      "file": "agentwall/tests/test_capture.py",
+      "rule": "RH-SEC-004",
+      "line_sha256": "424dea8a22ed3b618f51bb92a4f357f03a0293f792263844a15e32d2a2642e78",
+      "count": 1,
+      "reason": "Fake keys that the secret-redaction tests feed to the capture code to prove it redacts them; not real credentials."
+    },
+    {
+      "file": "agentwall/tests/test_capture.py",
+      "rule": "RH-SEC-004",
+      "line_sha256": "58518fd4144d190965b26090ef77f8f55bdae9d939761e6b312ef562c09d259c",
+      "count": 1,
+      "reason": "Fake keys that the secret-redaction tests feed to the capture code to prove it redacts them; not real credentials."
+    },
+    {
+      "file": "agentwall/tests/test_capture.py",
+      "rule": "RH-SEC-004",
+      "line_sha256": "5becff4843b49b6efa1fd96e53c9c70663d316271d5612f7cd5305c63ee9f9cb",
+      "count": 1,
+      "reason": "Fake keys that the secret-redaction tests feed to the capture code to prove it redacts them; not real credentials."
+    },
+    {
+      "file": "agentwall/tests/test_capture.py",
+      "rule": "RH-SEC-004",
+      "line_sha256": "5e177fd7082a25b79c2f39837d30752426ad1dc8bf4b7a4425459680aed81a66",
+      "count": 1,
+      "reason": "Fake keys that the secret-redaction tests feed to the capture code to prove it redacts them; not real credentials."
+    },
+    {
+      "file": "agentwall/tests/test_capture.py",
+      "rule": "RH-SEC-004",
+      "line_sha256": "5e6585cbf295f039f823e2ece6dfee5fe3d12e4dd2c03e4f0ff93f79acd2e44a",
+      "count": 1,
+      "reason": "Fake keys that the secret-redaction tests feed to the capture code to prove it redacts them; not real credentials."
+    },
+    {
+      "file": "agentwall/tests/test_capture.py",
+      "rule": "RH-SEC-004",
+      "line_sha256": "be906e39b535799c087f01ede2c6eebbd82e24e46cea29989c51d8d825f48917",
+      "count": 1,
+      "reason": "Fake keys that the secret-redaction tests feed to the capture code to prove it redacts them; not real credentials."
+    },
+    {
+      "file": "agentwall/tests/test_firewall_engine.py",
+      "rule": "RH-SEC-004",
+      "line_sha256": "b0578088601ed595267e084ac6ad25471c3254f66b8a9475b0c66bfc66e93bb1",
+      "count": 1,
+      "reason": "A fake key inside a deliberately risky sample MCP manifest in a test of the vetting endpoint; not a real credential."
+    },
+    {
+      "file": "examples/simulate_enterprise_workloads.py",
+      "rule": "RH-SEC-004",
+      "line_sha256": "6206fbca012362b51ca2967891fc61b5ae33f74e6dec3982ab9c8655d66a61fb",
+      "count": 1,
+      "reason": "A fake token inside the demo simulation that the DLP scrubber is shown redacting; not a real credential."
+    },
+    {
+      "file": "packages/redhand-sdk/src/redhand_sdk/cache.py",
+      "rule": "RH-SEC-003",
+      "line_sha256": "e44cca513345ff4107f0da0b270b05ed753f815dc8aab39f59f6cc5ea59f478f",
+      "count": 1,
+      "reason": "A token cache method named purge_expired; the Python rule mistakes the name for a destructive agent tool."
+    },
+    {
+      "file": "packages/redhand-sdk/tests/test_guard_e2e.py",
+      "rule": "RH-SEC-004",
+      "line_sha256": "f0b05ef37d993f5595ce537366be374f2217c27fd1ee68a054995b1cdfe22704",
+      "count": 1,
+      "reason": "A fake token inside a sample token response in a test of the SDK token cache; not a real credential."
+    },
+    {
+      "file": "services/redhand-core/src/redhand_core/routers/radar.py",
+      "rule": "RH-SEC-003",
+      "line_sha256": "0633ffea8feb987cac9a746b9de7baa678171b834b30d8031dc39d8fcde670aa",
+      "count": 1,
+      "reason": "An authenticated DELETE route that revokes a suppression (admin, audited); the Python rule mistakes it for an unguarded destructive agent tool."
+    },
+    {
+      "file": "services/redhand-core/src/redhand_core/routers/scim.py",
+      "rule": "RH-SEC-003",
+      "line_sha256": "e0a5810371d23da6c5cf22d86c8294f5120ff5239d28f887ca38483cc9f4e356",
+      "count": 1,
+      "reason": "A SCIM DELETE route (deprovision a user) that the Python rule mistakes for an unguarded destructive agent tool; it is an authenticated API route, not an agent tool."
+    },
+    {
+      "file": "services/redhand-core/src/redhand_core/services/sts_downscoper.py",
+      "rule": "RH-SEC-004",
+      "line_sha256": "5933a244e27d03ec9b37dfeb69fb58a30e9418afcef4581ff13b8804cfee9844",
+      "count": 1,
+      "reason": "The simulated Google token returned by the local STS downscoper stub: a prefix plus random hex, not a real credential."
+    },
+    {
+      "file": "services/redhand-core/tests/test_core_routers.py",
+      "rule": "RH-SEC-004",
+      "line_sha256": "5e86b9fcdd12dad9a26283bc69e59144231c79220c20b3f78068ea5c491f6ad8",
+      "count": 1,
+      "reason": "A fake token in a test that proves the DLP scrubber redacts it before storage; not a real credential."
+    }
+  ]
+}

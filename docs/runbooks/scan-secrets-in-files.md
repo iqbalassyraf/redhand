@@ -31,3 +31,15 @@ It says nothing about secrets anywhere else (chat, a database, a running agent, 
 ## If it flags something that is not a secret
 A test fixture, a mock token generator or a demo seed will be flagged if its value looks like a real format. Check the line. If it is a fake, build it from
 pieces (`"sk-" + "x" * 24`) so the file no longer holds a literal key, or keep that file out of the scanned folder. Do not paste the value into a ticket or chat.
+
+## The baseline and the CI gate
+CI runs `redhand scan . --strict --baseline .redhand-scan-baseline.json` on every push and pull request. The repository holds deliberate fake keys (test fixtures, demos),
+and the scanner has no inline "ignore" marker, so the accepted findings live in one reviewed file instead.
+- **An entry** is a file, a rule (`RH-SEC-004` secrets, `RH-SEC-003` Python tool rule), the SHA-256 of the offending line (trimmed), a count and a **reason** (10 to 300
+  characters, never a TODO). It never holds the secret text. The line number is not part of it, so moving code is fine; changing the line is not.
+- **A new finding fails the job.** So does an entry that no longer matches anything (the code changed or was deleted): remove or reduce it, so the list only shrinks.
+- **A missing, oversized or invalid baseline exits 2** (fail closed). `redhand scan` run from the repository root with path `.` is what the entries are written for.
+- **Adding an entry** is a reviewed change: `redhand scan . --emit-baseline new.json` writes entries (never overwriting a file) with a TODO reason the loader refuses; replace each
+  reason with why the value is safe, then merge them into `.redhand-scan-baseline.json`. **Never baseline a real secret: rotate it.**
+- **Limits:** the scan finds only the formats listed above, in the file types listed above. The baseline hash proves a line is unchanged, not that it is harmless: the reason is
+  a person's statement. A clean gate is not proof that no secret exists, and git history is not scanned here (see `docs/release-readiness.md`, section 3.1).
