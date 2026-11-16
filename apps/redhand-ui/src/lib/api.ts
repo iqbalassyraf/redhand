@@ -3,6 +3,8 @@
  * UI is never a security boundary (all authorization happens in redhand-core).
  */
 
+import type { AgentSpendDetail, SpendLimitResult, SpendToday } from "./spend";
+
 export const CORE_API_BASE =
   process.env.NEXT_PUBLIC_REDHAND_CORE_URL || "http://localhost:8000";
 
@@ -814,4 +816,12 @@ export const riskApi = {
     t: string,
     body: { alert_at: number | null; safe_mode_at: number | null; freeze_at: number | null; confirm: boolean; reason?: string }
   ) => apiFetch<RiskLadder>("/v1/risk/ladder", t, { method: "PUT", body }),
+};
+
+// Model spend (Phase 4.5 B4a): numbers are estimates from what each agent's SDK reported. See src/lib/spend.ts.
+export const spendApi = {
+  list: (t: string) => apiFetch<SpendToday>("/v1/spend/agents", t),
+  detail: (t: string, agentId: string) => apiFetch<AgentSpendDetail>(`/v1/spend/agents/${agentId}`, t),
+  setLimit: (t: string, agentId: string, body: { spend_limit_micro_usd: number | null; confirm: boolean; reason?: string }) =>
+    apiFetch<SpendLimitResult>(`/v1/passports/${agentId}/spend-limit`, t, { method: "PUT", body }),
 };
