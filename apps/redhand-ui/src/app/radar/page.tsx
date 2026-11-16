@@ -25,6 +25,7 @@ import {
   selfTestApi,
 } from "@/lib/api";
 import { useAuth, useRequiredSession } from "@/lib/auth";
+import { ApprovedModelsCard } from "./ApprovedModelsCard";
 import { type BlockGate, isCoverageData } from "@/lib/coverage";
 import { DESTINATION_RULE_ID, EVASION_LABEL, LOOP_RULE_ID, describeRule } from "@/lib/radarRules";
 import {
@@ -462,6 +463,17 @@ export default function RadarPage() {
               </div>
             </section>
 
+            {token && (
+              <ApprovedModelsCard
+                token={token}
+                onSaved={() => loadFindings(false)}
+                onUnauthorized={() => {
+                  signOut();
+                  window.location.href = "/login";
+                }}
+              />
+            )}
+
             <section className="mb-6 rounded-[10px] border border-[#E5E5E5] bg-[#FFFFFF] p-4 text-[12px]" aria-label="Repeated calls">
               <h2 className="mb-3 text-[14px] font-semibold">Repeated calls</h2>
               {loopUnavailable || !loop ? (
@@ -650,6 +662,7 @@ export default function RadarPage() {
                     <option value="output">Risky output</option>
                     <option value="loop">Repeated calls</option>
                     <option value="destination">Address outside the list</option>
+                    <option value="model">Model not on the approved list</option>
                   </select>
                 </div>
               </div>

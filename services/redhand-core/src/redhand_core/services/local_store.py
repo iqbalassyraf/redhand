@@ -316,6 +316,7 @@ def apply_insert_defaults(table: str, row: dict[str, Any]) -> None:
         row.setdefault("risk_released_at", None)
         row.setdefault("spend_limit_micro_usd", None)
         row.setdefault("spend_alerted_day", None)
+        row.setdefault("model_last_alert_at", None)
     elif table == "organizations":
         row.setdefault("blackbox_retention_days", 30)
         row.setdefault("payload_capture_enabled", False)

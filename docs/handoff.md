@@ -13,6 +13,12 @@ Both tools work on RedHand and its demo projects. This file is how each learns w
 
 ---
 
+## 2026-11-16, Claude Code: B4b approved models built (branch feat/phase45-b4b-approved-models, from main, nothing deployed)
+- **Built:** migration `20261126000000_approved_models` (list table, version, `record_model_findings`, finding kind `model` / rule `RAD-MDL-001`, suppression regex, risk signals ignore model findings), core `approved/` + `/v1/organization/approved-models` + bounded background check after ingest, local twin, Radar "Approved models" card, kind filter and rule sentence, ADR 0023 amendment, runbook, threat-model rows, OpenAPI, night Part P.
+- **Verified locally:** full Python suite, ruff, mypy, SQL suite with rollback and re-apply (13 mutants killed in SQL, 15 in core and twin), dashboard node tests, `tsc`, `next build`, real browser as admin and operator at 1280 and 375 px (31 checks).
+- **Not verified:** staging; a real SDK reporting a model; Telegram on a phone.
+- **Deviations:** a separate writer function instead of extending `record_security_findings`; the model name lives in `tool_name`.
+- **Deploy order:** migration `20261126000000_approved_models`, core, dashboard. **Brief:** night-1 brief Part P.
 ## 2026-11-16, Claude Code: release-readiness checklist, battleground decoys, close-out (branch chore/release-readiness-secret-scan)
 - **Owner decisions:** Claude Code may merge its own PRs when all CI checks are green (not Dependabot or others' PRs, nothing touching production); heavy testing moves to milestones and one comprehensive pre-release pass (`docs/release-readiness.md`); CI stays on every PR.
 - **Done:** #75, #76, #77, #79, #80 merged; #81 (night 1 result record) conflict resolved by keeping both handoff entries; `docs/release-readiness.md` written; `battleground/database/db.py` decoy values that looked like a live Stripe key and an OpenAI key replaced with obvious fakes (same prefixes, built from pieces).

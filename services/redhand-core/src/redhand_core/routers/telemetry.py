@@ -632,6 +632,12 @@ async def ingest_telemetry_batch(
     spend_service.note_unpriced_models(unpriced_models)
     if reported_usage:
         background_tasks.add_task(spend_service.check_spend, supabase, telegram, auth_ctx.organization_id, agent_id, utcnow())
+    # Approved models (B4b): models the batch named that are outside a non-empty approved list become findings, also after the reply.
+    from redhand_core.approved import service as approved_service  # late, for the same reason
+
+    named_models = approved_service.models_in_batch(trace_rows)
+    if named_models:
+        background_tasks.add_task(approved_service.check_models, supabase, telegram, auth_ctx.organization_id, agent_id, named_models, utcnow())
 
     return TelemetryIngestResponse(
         organization_id=auth_ctx.organization_id,

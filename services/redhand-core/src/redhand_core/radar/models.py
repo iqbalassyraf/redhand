@@ -17,9 +17,9 @@ from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictInt
 from redhand_core.passports.models import MAX_REASON_LENGTH
 
 RULE_ID_PATTERN = r"^RAD-(INJ|OUT)-[0-9]{3}$"  # the injection and output rules: scan counts and readiness only know these
-FINDING_RULE_PATTERN = r"^RAD-(INJ|OUT|LOOP|DST)-[0-9]{3}$"  # every rule a finding or a suppression may name
+FINDING_RULE_PATTERN = r"^RAD-(INJ|OUT|LOOP|DST|MDL)-[0-9]{3}$"  # every rule a finding or a suppression may name
 Level = Literal["low", "medium", "high"]
-FindingKind = Literal["injection", "output", "loop", "destination"]
+FindingKind = Literal["injection", "output", "loop", "destination", "model"]
 RadarKind = Literal["injection", "output"]  # the Radar's own two checks: scan counts and readiness never include loops
 Place = Literal["text", "hidden", "decoded", "call"]
 LoopMode = Literal["off", "observe", "throttle"]

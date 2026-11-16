@@ -39,6 +39,9 @@ export const RADAR_RULES: Readonly<Record<string, RadarRule>> = {
 /** The loop rule is not one of the Radar's text rules (radar.py), so it is kept apart from RADAR_RULES, which a test compares with radar.py. */
 export const LOOP_RULE_ID = "RAD-LOOP-001";
 export const DESTINATION_RULE_ID = "RAD-DST-001";
+export const MODEL_RULE_ID = "RAD-MDL-001";
+export const MODEL_RULE_REASON =
+  "An agent's SDK reported a model that is not on the approved list. Recorded only: nothing was refused, and it does not change the Risk score.";
 export const DESTINATION_RULE_REASON =
   "The agent put a web or email address that is not on its allowed list into a call. Only the last two parts of the address are shown.";
 export const LOOP_RULE_REASON = "The agent sent the same tool call, with the same arguments, more often than the limit in a short time: it may be stuck in a loop.";
@@ -47,6 +50,7 @@ export const LOOP_RULE_REASON = "The agent sent the same tool call, with the sam
 export function describeRule(ruleId: string): string {
   if (ruleId === LOOP_RULE_ID) return LOOP_RULE_REASON;
   if (ruleId === DESTINATION_RULE_ID) return DESTINATION_RULE_REASON;
+  if (ruleId === MODEL_RULE_ID) return MODEL_RULE_REASON;
   return RADAR_RULES[ruleId]?.reason ?? `Rule ${ruleId} (newer than this page).`;
 }
 
