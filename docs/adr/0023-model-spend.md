@@ -1,6 +1,6 @@
 # ADR 0023: Model spend (detective, from what the agent's SDK reports)
 
-**Status:** Proposed (2026-11-16), awaiting the owner's review with the pull request. Phase 4.5 B4a, decision B-D2. Plan:
+**Status:** Accepted (owner, 2026-11-16, including the first price table in `spend/prices.py`: Anthropic rows only, read 2026-11-16; the table stays subject to the 90-day review test). Phase 4.5 B4a, decision B-D2. Plan:
 `docs/plans/phase45-b4-spend.md` (approved, D1 to D5 as recommended). Builds on ADR 0019 (alert batching, Risk Engine) and ADR 0010 (Budget Guard's day).
 
 ## Context
