@@ -326,7 +326,7 @@ def test_the_csv_export_has_a_header_and_defuses_spreadsheet_formulas(env: Env) 
     resp = export(env, "csv")
     assert resp.status_code == 200 and resp.headers["content-type"].startswith("text/csv")
     lines = resp.text.splitlines()
-    assert lines[0].startswith("at,kind,")
+    assert lines[0].startswith("at,kind,tool_name,server,reasons")  # the night brief promises this header
     assert formula not in resp.text.replace("'" + formula, ""), "a formula cell is prefixed so a spreadsheet shows it as text"
     assert ("'" + formula).replace('"', '""') in resp.text
 
