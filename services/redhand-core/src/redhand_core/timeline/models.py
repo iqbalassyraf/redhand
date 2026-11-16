@@ -51,6 +51,7 @@ class TimelineItem(BaseModel):
     action: str = ""
     reason: str | None = None
     automatic: bool | None = Field(default=None, description="True when RedHand acted by itself (the fixed system actor).")
+    organization_wide: bool = Field(default=False, description="An action on every agent of the organization (freeze all, Safe Mode for all).")
 
 
 class TimelineResponse(BaseModel):

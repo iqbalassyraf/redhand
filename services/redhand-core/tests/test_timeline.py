@@ -263,3 +263,33 @@ def test_an_action_redhand_took_by_itself_is_marked_automatic(env: Env) -> None:
     env.trip(str(resp.json()["id"]))
     frozen = [i for i in env.timeline().json()["items"] if i["kind"] == "action" and i["action"] == "passport.frozen"]
     assert frozen and frozen[0]["automatic"] is True
+
+
+def test_a_trip_appears_once_not_again_as_an_audit_action(env: Env) -> None:
+    env.trip(env.honeytoken())
+    items = env.timeline().json()["items"]
+    assert len([i for i in items if i["kind"] == "trip"]) == 1
+    assert not [i for i in items if i["kind"] == "action" and i["action"] in ("honeytoken.tripped", "honey_tool.tripped")]
+
+
+def test_freeze_all_and_organization_safe_mode_appear_in_every_agents_timeline(env: Env) -> None:
+    """They are recorded against the organization, not the agent, but they change what the agent may do: the timeline must show them."""
+    resp = env.client.post("/v1/passports/freeze-all", json={"reason": "Incident drill", "confirm": True}, headers=env.h("owner"))
+    assert resp.status_code == 200, resp.text
+    resp = env.client.post("/v1/organization/safe-mode", json={"enabled": True, "reason": "Drill"}, headers=env.h("admin"))
+    assert resp.status_code == 200, resp.text
+    items = env.timeline().json()["items"]
+    safe = [i for i in items if i["kind"] == "action" and i["action"] == "organization.safe_mode_enabled"]
+    assert safe and safe[0]["organization_wide"] is True and safe[0]["reason"] == "Drill"
+    frozen_all = [i for i in items if i["kind"] == "action" and i["action"] == "organization.frozen_all"]
+    assert frozen_all and frozen_all[0]["organization_wide"] is True and frozen_all[0]["reason"] == "Incident drill"
+    per_agent = [i for i in items if i["kind"] == "action" and i["action"] == "passport.created"]
+    assert per_agent and per_agent[0]["organization_wide"] is False
+
+
+def test_another_organizations_freeze_all_never_appears(env: Env) -> None:
+    from uuid import UUID
+
+    other = operator_headers(settings=env.settings, user_id=UUID(OTHER_OWNER))
+    assert env.client.post("/v1/passports/freeze-all", json={"reason": "Other org drill", "confirm": True}, headers=other).status_code == 200
+    assert "Other org drill" not in json.dumps(env.timeline().json())

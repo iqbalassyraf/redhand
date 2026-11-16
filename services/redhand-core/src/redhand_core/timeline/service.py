@@ -1,9 +1,10 @@
 """
 The incident view (Phase 4.5 B3, docs/adr/0022-incident-view.md): one timeline per agent from what RedHand already records. No new data.
 
-Six reads, run together, each scoped by organization AND agent and bounded to one page:
+Reads run together, each scoped by organization (and by agent where the record names one) and bounded to one page:
   refused calls and failed calls (Black Box), allowed activity per hour (the B2 roll-up, so thousands of calls are a few rows),
-  findings (Radar), trips (honeytokens and decoy tools), control actions (audit rows whose target is this agent).
+  findings (Radar), trips (honeytokens and decoy tools), control actions on this agent, and the organization-wide actions that change
+  what every agent may do (freeze all, Safe Mode for all). Audit rows that only repeat a trip are not shown twice.
 They are merged newest first and cut to the page size. The cursor is a time: the next page is everything strictly older than the last
 item kept, so items that share the cut-off moment are kept together on one page (never split, never repeated).
 If any read fails the whole answer is refused: a timeline with a missing part would read as "nothing happened".
@@ -32,6 +33,11 @@ MAX_PAGE = 200
 MAX_HOURLY_ROWS = 2000
 TIE_LIMIT = 1000  # items of one source at one exact moment; beyond this a page can still split them (logged)  # one row per agent, hour and tool: enough for a busy page; aggregated per hour below
 FAILED = "The timeline could not be read. Try again shortly."
+
+# Recorded against the organization, but they change what every agent may do: shown in each agent's timeline.
+ORGANIZATION_WIDE_ACTIONS = ("organization.frozen_all", "organization.safe_mode_enabled", "organization.safe_mode_disabled")
+# Audit rows the timeline already shows from their own source (the trip itself): not shown twice.
+SHOWN_ELSEWHERE = frozenset({"honeytoken.tripped", "honey_tool.tripped"})
 
 Row = dict[str, Any]
 
@@ -96,6 +102,20 @@ async def _actions(
     return list((await query.order("created_at", desc=True).limit(limit).execute()).data or [])
 
 
+async def _organization_actions(
+    supabase: Any, org: UUID, before: datetime | None, limit: int, exactly: datetime | None = None
+) -> list[Row]:
+    """Freeze all and organization-wide Safe Mode, newest first. One read per action (the in-memory twin has no IN filter)."""
+    rows: list[Row] = []
+    for action in ORGANIZATION_WIDE_ACTIONS:
+        query = (supabase.table("control_audit_log").select("action, actor_user_id, reason, created_at")
+                 .eq("organization_id", str(org)).eq("target_type", "organization").eq("action", action))
+        query = _window(query, "created_at", before, exactly)
+        rows.extend((await query.order("created_at", desc=True).limit(limit).execute()).data or [])
+    rows.sort(key=lambda r: _time(r["created_at"]), reverse=True)
+    return rows[:limit]
+
+
 def _activity(rows: list[Row]) -> list[TimelineItem]:
     """Allowed and refused tool calls added up per hour (all tools). An hour with no calls is not shown."""
     per_hour: dict[datetime, list[int]] = {}
@@ -111,7 +131,10 @@ def _event_fields(r: Row) -> dict[str, Any]:
             "reasons": [str(x) for x in (r.get("reasons") or [])]}
 
 
-def _items(blocks: list[Row], errors: list[Row], hourly: list[Row], findings: list[Row], trips: list[Row], actions: list[Row]) -> list[TimelineItem]:
+def _items(
+    blocks: list[Row], errors: list[Row], hourly: list[Row], findings: list[Row], trips: list[Row], actions: list[Row],
+    org_actions: list[Row],
+) -> list[TimelineItem]:
     items: list[TimelineItem] = []
     for r in blocks:
         items.append(TimelineItem(at=_time(r["occurred_at"]), kind="refusal", **_event_fields(r)))
@@ -132,7 +155,12 @@ def _items(blocks: list[Row], errors: list[Row], hourly: list[Row], findings: li
     items.extend(
         TimelineItem(at=_time(r["created_at"]), kind="action", action=str(r["action"]), reason=r.get("reason"),
                      automatic=str(r.get("actor_user_id")) == str(SYSTEM_ACTOR_ID))
-        for r in actions
+        for r in actions if str(r["action"]) not in SHOWN_ELSEWHERE
+    )
+    items.extend(
+        TimelineItem(at=_time(r["created_at"]), kind="action", action=str(r["action"]), reason=r.get("reason"),
+                     automatic=str(r.get("actor_user_id")) == str(SYSTEM_ACTOR_ID), organization_wide=True)
+        for r in org_actions
     )
     return items
 
@@ -165,15 +193,16 @@ async def agent_timeline(
         if not agent_rows:
             raise HTTPException(status.HTTP_404_NOT_FOUND, "Agent not found.")
         fetch = limit + 1  # one more than a page tells whether an older page exists
-        blocks, errors, hourly, findings, trips, actions = await asyncio.gather(
+        blocks, errors, hourly, findings, trips, actions, org_actions = await asyncio.gather(
             _events(supabase, org, agent_id, "BLOCK", before, fetch),
             _events(supabase, org, agent_id, "ERROR", before, fetch),
             _hourly(supabase, org, agent_id, before),
             _findings(supabase, org, agent_id, before, fetch),
             _trips(supabase, org, agent_id, before, fetch),
             _actions(supabase, org, agent_id, before, fetch),
+            _organization_actions(supabase, org, before, fetch),
         )
-        cut = _cut(_items(blocks, errors, [], findings, trips, actions), limit)
+        cut = _cut(_items(blocks, errors, [], findings, trips, actions, org_actions), limit)
         if cut is not None:
             # A source that filled its fetch may hold more rows at exactly the cut-off moment; read that moment in full, so the page keeps
             # every item of it and the next page (strictly older) misses none.
@@ -183,6 +212,7 @@ async def agent_timeline(
                 "findings": (findings, "first_seen_at", lambda: _findings(supabase, org, agent_id, None, TIE_LIMIT, cut)),
                 "trips": (trips, "occurred_at", lambda: _trips(supabase, org, agent_id, None, TIE_LIMIT, cut)),
                 "actions": (actions, "created_at", lambda: _actions(supabase, org, agent_id, None, TIE_LIMIT, cut)),
+                "org_actions": (org_actions, "created_at", lambda: _organization_actions(supabase, org, None, TIE_LIMIT, cut)),
             }
             completed: dict[str, list[Row]] = {}
             for name, (rows, column, read_moment) in sources.items():
@@ -196,11 +226,14 @@ async def agent_timeline(
             findings = completed.get("findings", findings)
             trips = completed.get("trips", trips)
             actions = completed.get("actions", actions)
+            org_actions = completed.get("org_actions", org_actions)
     except APIError as exc:
         logger.error("Timeline could not be read: sqlstate=%s", exc.code)
         raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, FAILED) from None
-    more_possible = any(len(rows) >= fetch for rows in (blocks, errors, findings, trips, actions)) or len(hourly) >= MAX_HOURLY_ROWS
-    items, next_before = _page(_items(blocks, errors, hourly, findings, trips, actions), limit, more_possible)
+    more_possible = (
+        any(len(rows) >= fetch for rows in (blocks, errors, findings, trips, actions, org_actions)) or len(hourly) >= MAX_HOURLY_ROWS
+    )
+    items, next_before = _page(_items(blocks, errors, hourly, findings, trips, actions, org_actions), limit, more_possible)
     row = agent_rows[0]
     return TimelineResponse(
         agent=TimelineAgent(id=UUID(str(row["id"])), name=str(row["name"]), status=str(row["status"])),

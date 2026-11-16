@@ -3,6 +3,8 @@
  * UI is never a security boundary (all authorization happens in redhand-core).
  */
 
+import type { TimelineResponse } from "@/lib/timeline";
+
 export const CORE_API_BASE =
   process.env.NEXT_PUBLIC_REDHAND_CORE_URL || "http://localhost:8000";
 
@@ -814,4 +816,16 @@ export const riskApi = {
     t: string,
     body: { alert_at: number | null; safe_mode_at: number | null; freeze_at: number | null; confirm: boolean; reason?: string }
   ) => apiFetch<RiskLadder>("/v1/risk/ladder", t, { method: "PUT", body }),
+};
+
+// ---------------------------------------------------------------------------
+// Incident view (Phase 4.5 B3): one timeline per agent. Security operator and above.
+// ---------------------------------------------------------------------------
+
+export const timelineApi = {
+  get: (t: string, agentId: string, before: string | null = null, limit = 50) => {
+    const query = new URLSearchParams({ limit: String(limit) });
+    if (before) query.set("before", before);
+    return apiFetch<TimelineResponse>(`/v1/agents/${agentId}/timeline?${query.toString()}`, t);
+  },
 };
