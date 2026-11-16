@@ -39,6 +39,7 @@ ALTER TABLE public.control_audit_log ADD CONSTRAINT control_audit_log_action_che
     'organization.loop_settings_changed',
     'passport.destination_added', 'passport.destination_removed', 'passport.destination_mode_changed',
     'organization.risk_ladder_changed',
+    'passport.timeline_exported',
     'passport.spend_limit_changed'
 ));
 

@@ -1,4 +1,4 @@
--- Rollback for 20261125000000_model_spend.sql: unschedules the purge (when pg_cron is present), drops the trigger, the functions, the
+-- Rollback for 20261125000000_model_spend.sql (the audit list it restores includes passport.timeline_exported from 20261124): unschedules the purge (when pg_cron is present), drops the trigger, the functions, the
 -- roll-up table and the two agent columns (the daily model-use roll-up and every agent's dollar limit and alert day are lost: stated data
 -- loss; the spans it was built from are untouched), and restores the previous audit CHECK list without the new action (NOT VALID:
 -- control_audit_log is append-only, so existing passport.spend_limit_changed rows stay).
@@ -46,7 +46,8 @@ ALTER TABLE public.control_audit_log ADD CONSTRAINT control_audit_log_action_che
     'radar_suppression.created', 'radar_suppression.revoked',
     'organization.loop_settings_changed',
     'passport.destination_added', 'passport.destination_removed', 'passport.destination_mode_changed',
-    'organization.risk_ladder_changed'
+    'organization.risk_ladder_changed',
+    'passport.timeline_exported'
 )) NOT VALID;
 
 COMMIT;

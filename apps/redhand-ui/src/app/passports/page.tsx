@@ -625,6 +625,12 @@ function PassportTable(props: {
                 <td className="p-3 text-[12px] text-[#606060]">{formatTime(p.last_seen_at)}</td>
                 <td className="p-3">
                   <div className="flex flex-wrap justify-end gap-1">
+                    <Link
+                      href={`/passports/${p.id}/timeline`}
+                      className="rounded-full border border-[#E5E5E5] px-2.5 py-1 text-[12px] font-medium hover:bg-[#F2F2F2]"
+                    >
+                      Timeline
+                    </Link>
                     {p.status === "active" && (
                       <ActionButton disabled={busy} onClick={() => props.onFreeze(p)} label="Freeze" />
                     )}

@@ -82,3 +82,19 @@ The Risk panel also shows **Behaviour (watch only, not part of the score)**. It 
 - **Rollback:** `supabase/rollbacks/20261122000000_risk_engine.down.sql`. The ladder settings and the alert and release stamps are lost;
   audit rows stay.
 - **Turn it off without a deploy:** an admin clears every rung on the card. Scores are still shown, and nothing is sent or done.
+
+## Incident view (Phase 4.5 B3)
+Passports, **Timeline** on any agent: one ordered story of what RedHand recorded for it (refused and failed calls, activity per hour,
+findings, trips, actions on its passport, and freeze all or Safe Mode for all). Security operators and above; viewers see
+"Your role cannot see the incident view."
+- **Freeze and review** freezes the agent from the page, with the reason "Frozen from the incident view" (editable). Unfreeze it on Passports
+  after the review.
+- **Export JSON / CSV** downloads the same story (at most 5,000 items) for a report or ticket. Each export is recorded as
+  "Timeline exported by a person"; 10 per hour per operator ("Too many exports; try again later." after that).
+- **Telegram alerts** about one agent end with a "Timeline:" link when core has `DASHBOARD_URL` (deploy.sh sets it from the first dashboard
+  origin). No link: check the variable on the core service.
+- **"The timeline could not be read. Try again shortly."** One of its reads failed; nothing partial is shown. Check the database; a retry is safe.
+- **Limits:** only what flowed through RedHand; no call contents; items are listed newest first and a page keeps items of the same moment
+  together (more than 1,000 of one kind at one exact moment is logged and may split).
+- **Deploy:** migration `20261124000000_incident_view.sql` (an index and one audit action), then core, then the dashboard. Rollback:
+  `supabase/rollbacks/20261124000000_incident_view.down.sql`.

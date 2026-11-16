@@ -28,3 +28,19 @@ def test_no_other_hop_count_is_ever_set() -> None:
 def test_the_forgeable_uvicorn_wildcard_is_not_used() -> None:
     for text in (DEPLOY, *DOCKERFILES):
         assert "forwarded-allow-ips" not in text.lower() and "FORWARDED_ALLOW_IPS" not in text
+
+
+def test_core_is_given_the_first_dashboard_origin_for_alert_links() -> None:
+    """Phase 4.5 B3: alerts link to the incident view at DASHBOARD_URL, taken from the already-checked dashboard origins."""
+    import subprocess
+
+    assert "$(dashboard_env_args)" in DEPLOY
+    script = (
+        '. deploy/cloudrun/origins.sh; eval "$(sed -n "/^dashboard_env_args()/,/^}/p" deploy/cloudrun/deploy.sh)"; '
+        'DASHBOARD_ORIGIN="https://Redhand.Example.com/, https://other.example.com" dashboard_env_args'
+    )
+    out = subprocess.run(["bash", "-c", script], cwd=Path(__file__).resolve().parents[2], capture_output=True, text=True, check=True).stdout
+    assert out == "@DASHBOARD_URL=https://redhand.example.com"
+    empty = subprocess.run(["bash", "-c", script.replace('DASHBOARD_ORIGIN="https://Redhand.Example.com/, https://other.example.com" ', 'DASHBOARD_ORIGIN="" ')],
+                           cwd=Path(__file__).resolve().parents[2], capture_output=True, text=True, check=True).stdout
+    assert empty == ""
