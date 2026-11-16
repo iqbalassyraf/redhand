@@ -1,6 +1,6 @@
 # ADR 0021: Hardening round (H1 to H4)
 
-**Status:** Proposed (2026-11-14), amended by each H PR. Owner approval 2026-11-14 for all four rounds, including the changes CLAUDE.md puts
+**Status:** Accepted (owner, 2026-11-16; merged), amended by each H PR. Owner approval 2026-11-14 for all four rounds, including the changes CLAUDE.md puts
 behind explicit approval (token logic, enforcement behaviour, CI, deploy settings). Plan: `docs/plans/hardening-round.md`.
 
 ## Context

@@ -1,6 +1,6 @@
 # ADR 0020: Behaviour baseline (watch-only, hourly roll-up by trigger, built-in back-test)
 
-**Status:** Proposed (2026-11-14), awaiting the owner's review with the pull request. Phase 4.5 B2, decision B-D1. Plan:
+**Status:** Accepted (owner, 2026-11-16; merged). Phase 4.5 B2, decision B-D1. Plan:
 `docs/plans/phase45-b2-behaviour-baseline.md`. Builds on ADR 0019 (Risk Engine), whose Risk panel shows it.
 
 ## Context
