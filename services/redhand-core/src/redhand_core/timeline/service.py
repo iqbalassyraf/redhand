@@ -240,3 +240,54 @@ async def agent_timeline(
         items=items,
         next_before=next_before,
     )
+
+
+# --- the incident summary export -------------------------------------------------------------------------------------------------------
+
+MAX_EXPORT_ITEMS = 5000
+EXPORT_PAGE = MAX_PAGE
+EXPORT_FAILED = "The export could not be started."
+
+CSV_COLUMNS = (
+    "at", "kind", "tool_name", "server", "reasons", "seq", "calls", "refused", "rule_id", "finding_kind", "confidence", "review_status",
+    "occurrences", "trip_kind", "seen_in", "action", "reason", "automatic", "organization_wide",
+)
+
+
+async def audit_export(supabase: Any, operator: OperatorContext, agent_id: UUID, details: dict[str, Any]) -> None:
+    """Records that a timeline export is starting, BEFORE anything is read: if this fails, nothing is exported."""
+    await supabase.table("control_audit_log").insert({
+        "organization_id": str(operator.organization_id), "actor_user_id": str(operator.user_id), "action": "passport.timeline_exported",
+        "target_type": "agent", "target_id": str(agent_id), "reason": None, "details": details,
+    }).execute()
+
+
+async def export_timeline(
+    supabase: Any, operator: OperatorContext, agent_id: UUID, fmt: str
+) -> tuple[TimelineResponse, bool]:
+    """The agent's timeline, newest first, at most MAX_EXPORT_ITEMS items, and whether it was cut. The agent must exist in the operator's
+    organization (404 otherwise, and no audit row is written for it); the export is audited before the first read."""
+    first = await agent_timeline(supabase, operator, agent_id, None, EXPORT_PAGE)  # also the 404 for another organization's agent
+    try:
+        await audit_export(supabase, operator, agent_id, {"format": fmt, "max_items": MAX_EXPORT_ITEMS})
+    except APIError as exc:
+        logger.error("Timeline export audit failed: sqlstate=%s", exc.code)
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, EXPORT_FAILED) from None
+    items = list(first.items)
+    cursor = first.next_before
+    while cursor is not None and len(items) <= MAX_EXPORT_ITEMS:
+        page = await agent_timeline(supabase, operator, agent_id, cursor, EXPORT_PAGE)
+        items.extend(page.items)
+        cursor = page.next_before
+    truncated = len(items) > MAX_EXPORT_ITEMS or cursor is not None
+    return TimelineResponse(agent=first.agent, items=items[:MAX_EXPORT_ITEMS], next_before=None), truncated
+
+
+def csv_rows(items: list[TimelineItem]) -> list[list[Any]]:
+    """One row per item in CSV_COLUMNS order. Formula-looking text is defused by the caller (blackbox.service.csv_cell)."""
+    rows: list[list[Any]] = []
+    for item in items:
+        data = item.model_dump(mode="json")
+        data["reasons"] = "; ".join(item.reasons)
+        rows.append([data.get(column) if data.get(column) is not None else "" for column in CSV_COLUMNS])
+    return rows

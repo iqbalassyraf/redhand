@@ -102,5 +102,6 @@ test("organization-wide actions say they covered every agent", () => {
     "Safe Mode turned on for every agent by a person");
   assert.equal(actionLabel("organization.safe_mode_disabled"), "Safe Mode turned off for every agent");
   assert.equal(actionLabel("radar_suppression.created"), "A Radar rule silenced for this agent");
+  assert.equal(actionLabel("passport.timeline_exported"), "Timeline exported");
   assert.equal(actionLabel("radar_suppression.revoked"), "Radar silence removed");
 });

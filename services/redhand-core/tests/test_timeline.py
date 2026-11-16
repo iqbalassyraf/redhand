@@ -293,3 +293,96 @@ def test_another_organizations_freeze_all_never_appears(env: Env) -> None:
     other = operator_headers(settings=env.settings, user_id=UUID(OTHER_OWNER))
     assert env.client.post("/v1/passports/freeze-all", json={"reason": "Other org drill", "confirm": True}, headers=other).status_code == 200
     assert "Other org drill" not in json.dumps(env.timeline().json())
+
+
+# --- the incident summary export -------------------------------------------------------------------------------------------------------
+
+def export(env: Env, fmt: str = "json", user: str = "operator", agent: str | None = None, headers: dict[str, str] | None = None) -> Any:
+    return env.client.get(f"/v1/agents/{agent or env.agent}/timeline/export", params={"format": fmt}, headers=headers or env.h(user))
+
+
+@pytest.fixture(autouse=True)
+def _fresh_export_limit() -> None:
+    from redhand_core.routers import timeline as timeline_router
+
+    timeline_router._export_limiter._events.clear()  # noqa: SLF001
+
+
+def test_the_json_export_is_the_whole_timeline_as_a_download(env: Env) -> None:
+    env.events([event(env.agent, datetime.now(timezone.utc), "BLOCK", "delete_invoice", ["refused"])])
+    env.report([finding()])
+    resp = export(env, "json")
+    assert resp.status_code == 200, resp.text
+    assert resp.headers["content-disposition"].startswith('attachment; filename="redhand-timeline-')
+    assert resp.headers["cache-control"] == "no-store"
+    body = resp.json()
+    assert body["agent"]["name"] == "Risky bot" and body["truncated"] is False and body["exported_at"]
+    assert {"refusal", "finding", "action"} <= {i["kind"] for i in body["items"]}
+
+
+def test_the_csv_export_has_a_header_and_defuses_spreadsheet_formulas(env: Env) -> None:
+    formula = '=HYPERLINK("http://evil.example/x","click")'
+    env.client.post(f"/v1/passports/{env.agent}/freeze", json={"reason": formula}, headers=env.h("operator"))
+    resp = export(env, "csv")
+    assert resp.status_code == 200 and resp.headers["content-type"].startswith("text/csv")
+    lines = resp.text.splitlines()
+    assert lines[0].startswith("at,kind,")
+    assert formula not in resp.text.replace("'" + formula, ""), "a formula cell is prefixed so a spreadsheet shows it as text"
+    assert ("'" + formula).replace('"', '""') in resp.text
+
+
+def test_an_export_is_audited_before_anything_is_read(env: Env) -> None:
+    export(env, "json")
+    rows = [r for r in env.store.tables["control_audit_log"] if r["action"] == "passport.timeline_exported"]
+    assert len(rows) == 1 and rows[0]["target_id"] == env.agent and rows[0]["details"]["format"] == "json"
+    shown = [i for i in env.timeline().json()["items"] if i.get("action") == "passport.timeline_exported"]
+    assert shown, "the export itself appears in the timeline"
+
+
+def test_when_the_audit_cannot_be_written_nothing_is_exported(env: Env, monkeypatch: pytest.MonkeyPatch) -> None:
+    from postgrest.exceptions import APIError
+
+    from redhand_core.timeline import service
+
+    async def broken(*_: Any, **__: Any) -> None:
+        raise APIError({"message": "boom", "code": "XX000", "details": "", "hint": ""})
+
+    monkeypatch.setattr(service, "audit_export", broken)
+    resp = export(env, "json")
+    assert resp.status_code == 503 and resp.json() == {"detail": "The export could not be started."}
+
+
+@pytest.mark.parametrize(("user", "expected"), [("viewer", 403), ("operator", 200)])
+def test_export_roles(env: Env, user: str, expected: int) -> None:
+    assert export(env, user=user).status_code == expected
+
+
+def test_another_organization_cannot_export_and_leaves_no_audit_row(env: Env) -> None:
+    from uuid import UUID
+
+    other = operator_headers(settings=env.settings, user_id=UUID(OTHER_OWNER))
+    assert export(env, headers=other).status_code == 404
+    assert not [r for r in env.store.tables["control_audit_log"] if r["action"] == "passport.timeline_exported"]
+
+
+def test_exports_are_rate_limited_per_operator(env: Env) -> None:
+    statuses = [export(env).status_code for _ in range(11)]
+    assert statuses[:10] == [200] * 10 and statuses[10] == 429
+
+
+def test_a_long_history_is_cut_and_says_so(env: Env, monkeypatch: pytest.MonkeyPatch) -> None:
+    from redhand_core.timeline import service
+
+    monkeypatch.setattr(service, "MAX_EXPORT_ITEMS", 5)
+    start = datetime.now(timezone.utc) - timedelta(hours=1)
+    env.events([event(env.agent, start + timedelta(minutes=n), "BLOCK", f"t{n}", ["refused"]) for n in range(12)])
+    body = export(env).json()
+    assert body["truncated"] is True and len(body["items"]) == 5
+
+
+def test_the_export_holds_no_payload_or_secret(env: Env) -> None:
+    env.events([event(env.agent, datetime.now(timezone.utc), "BLOCK", "send_report", ["refused"])])
+    for row in env.store.tables["agent_events"]:
+        row["arguments_redacted"] = {"text": SECRET, "truncated": False, "original_bytes": 40}
+    for fmt in ("json", "csv"):
+        assert SECRET not in export(env, fmt).text

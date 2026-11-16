@@ -91,6 +91,7 @@ const ACTIONS: Readonly<Record<string, string>> = {
   "passport.destination_added": "Allowed address added",
   "passport.destination_removed": "Allowed address removed",
   "passport.destination_mode_changed": "Destination check changed",
+  "passport.timeline_exported": "Timeline exported",
   "radar_suppression.created": "A Radar rule silenced for this agent",
   "radar_suppression.revoked": "Radar silence removed",
   "organization.frozen_all": "Every agent frozen (freeze all)",

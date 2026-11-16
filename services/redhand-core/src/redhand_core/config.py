@@ -199,6 +199,12 @@ class Settings(BaseSettings):
         description="The larger cap for the batched ingest routes (gateway event reports, trace ingest): up to 500 events or 250 spans a call.",
     )
 
+    DASHBOARD_URL: str | None = Field(
+        default=None, max_length=200,
+        description="The dashboard's address, e.g. https://redhand.example.com. When set, Telegram alerts about one agent end with a link to "
+        "that agent's incident view. https only outside development; no credentials, query or fragment.",
+    )
+
     ALLOW_INSECURE_MCP_URLS: bool = Field(
         default=False,
         description="Development only: allow http:// and localhost MCP server URLs.",
@@ -237,6 +243,22 @@ class Settings(BaseSettings):
                     "OPERATOR_JWT_ISSUER) or OPERATOR_JWT_SECRET."
                 )
             self.OPERATOR_JWT_SECRET = SecretStr(secrets.token_urlsafe(32))
+        return self
+
+    @model_validator(mode="after")
+    def _dashboard_url_shape(self) -> Settings:
+        """A plain origin (optionally a path) the alerts can link to. It ends up in messages on owners' phones, so nothing that could carry
+        a secret or run as script: no credentials, query, fragment or non-http scheme, and https outside development."""
+        if self.DASHBOARD_URL is None:
+            return self
+        from urllib.parse import urlsplit
+
+        parts = urlsplit(self.DASHBOARD_URL)
+        local = self.ENVIRONMENT in ("development", "test")
+        allowed = ("https", "http") if local else ("https",)
+        if parts.scheme not in allowed or not parts.hostname or parts.username or parts.password or parts.query or parts.fragment:
+            raise ValueError("DASHBOARD_URL must be a plain https address (http only in development), with no credentials, query or fragment.")
+        self.DASHBOARD_URL = self.DASHBOARD_URL.rstrip("/")
         return self
 
     @model_validator(mode="after")

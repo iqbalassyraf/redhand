@@ -9,9 +9,9 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { ArrowLeft, OctagonX } from "lucide-react";
+import { ArrowLeft, Download, OctagonX } from "lucide-react";
 
-import { ApiError, passportsApi, riskApi, timelineApi, type AgentRiskSummary } from "@/lib/api";
+import { ApiError, downloadTimelineExport, passportsApi, riskApi, timelineApi, type AgentRiskSummary } from "@/lib/api";
 import { useRequiredSession } from "@/lib/auth";
 import { LEVEL_LABEL, LEVEL_STYLE } from "@/lib/riskForm";
 import {
@@ -106,6 +106,18 @@ export default function AgentTimelinePage() {
     }
   };
 
+  const exportAs = async (format: "json" | "csv") => {
+    if (!session) return;
+    setError(null);
+    try {
+      await downloadTimelineExport(session.token, agentId, format);
+      setNotice(`Incident summary downloaded (${format.toUpperCase()}). The export is recorded in this timeline.`);
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "The export could not be downloaded.");
+    }
+  };
+
   const shown = useMemo(() => (data ? data.items.filter((i) => matchesFilter(i, filter)) : []), [data, filter]);
   const days = useMemo(() => {
     const groups: { day: string; items: TimelineItem[] }[] = [];
@@ -160,6 +172,16 @@ export default function AgentTimelinePage() {
                 )}
               </div>
             </div>
+            <div className="flex flex-wrap items-center gap-2">
+              {(["json", "csv"] as const).map((format) => (
+                <button
+                  key={format}
+                  onClick={() => void exportAs(format)}
+                  className="inline-flex items-center gap-1 rounded-full border border-[#E5E5E5] px-2.5 py-1 text-[12px] hover:bg-[#F2F2F2]"
+                >
+                  <Download className="h-3.5 w-3.5" /> Export {format.toUpperCase()}
+                </button>
+              ))}
             {data.agent.status === "active" && !freezing && (
               <button
                 onClick={() => setFreezing(true)}
@@ -168,6 +190,7 @@ export default function AgentTimelinePage() {
                 <OctagonX className="h-4 w-4" /> Freeze and review
               </button>
             )}
+            </div>
           </header>
 
           {freezing && (
