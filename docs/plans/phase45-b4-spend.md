@@ -1,6 +1,6 @@
 # Plan: Phase 4.5 B4, model spend and approved models (detective)
 
-**Status:** Draft for the owner's approval (2026-11-16). B4 is approved in principle (`docs/plans/phase4.5-build-plan.md`, decision B-D2);
+**Status:** Approved (2026-11-16, D1 to D5 as recommended; first price table approved by the owner 2026-11-16). B4a (spend) built on branch `feat/phase45-b4a-spend` (ADR 0023); B4b (approved models) not built yet. Originally: draft for the owner's approval (2026-11-16). B4 is approved in principle (`docs/plans/phase4.5-build-plan.md`, decision B-D2);
 this plan needs approval before code because it adds a price table that must be kept current and a recurring roll-up.
 
 ## 1. Goal

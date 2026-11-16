@@ -163,6 +163,13 @@ class LocalTableQueryBuilder:
         self._limit = size
         return self
 
+    def _after_insert_statement(self, inserted: list[dict[str, Any]]) -> None:
+        """Statement-level AFTER INSERT triggers of the real schema (the spend roll-up on execution_traces)."""
+        if self._table_name == "execution_traces" and inserted:
+            from redhand_core.services.local_rpc import spend_rollup_statement
+
+            spend_rollup_statement(self._store, inserted)
+
     async def execute(self) -> QueryResult:
         rows = self._store.tables.setdefault(self._table_name, [])
 
@@ -190,6 +197,7 @@ class LocalTableQueryBuilder:
                 apply_insert_defaults(self._table_name, row)
                 rows.insert(0, row)
                 inserted.append(dict(row))
+            self._after_insert_statement(inserted)
             self._store.publish_event(
                 event_type=f"{self._table_name}.inserted",
                 payload=inserted,
@@ -203,6 +211,7 @@ class LocalTableQueryBuilder:
                 else ["id"]
             )
             upserted: list[dict[str, Any]] = []
+            created: list[dict[str, Any]] = []  # rows that were inserted, not updated: what an AFTER INSERT trigger sees
             for item in self._payload:
                 row = dict(item)
                 existing = next(
@@ -227,7 +236,9 @@ class LocalTableQueryBuilder:
                     apply_insert_defaults(self._table_name, row)
                     rows.insert(0, row)
                     upserted.append(dict(row))
+                    created.append(dict(row))
 
+            self._after_insert_statement(created)
             self._store.publish_event(
                 event_type=f"{self._table_name}.upserted",
                 payload=upserted,
@@ -303,6 +314,8 @@ def apply_insert_defaults(table: str, row: dict[str, Any]) -> None:
         row.setdefault("destination_mode", "off")
         row.setdefault("risk_last_alert_at", None)
         row.setdefault("risk_released_at", None)
+        row.setdefault("spend_limit_micro_usd", None)
+        row.setdefault("spend_alerted_day", None)
     elif table == "organizations":
         row.setdefault("blackbox_retention_days", 30)
         row.setdefault("payload_capture_enabled", False)

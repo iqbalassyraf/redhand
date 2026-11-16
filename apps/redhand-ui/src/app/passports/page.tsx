@@ -25,13 +25,16 @@ import {
   type AgentRiskSummary,
   type RiskList,
   riskApi,
+  spendApi,
   telegramApi,
 } from "@/lib/api";
 import { useAuth, useRequiredSession } from "@/lib/auth";
 import { LEVEL_LABEL, LEVEL_STYLE, automaticActorLabel } from "@/lib/riskForm";
+import { type AgentSpend, type SpendToday, spendCell } from "@/lib/spend";
 import { DestinationsPanel } from "./DestinationsPanel";
 import { RiskLadderCard } from "./RiskLadderCard";
 import { RiskPanel } from "./RiskPanel";
+import { SpendPanel } from "./SpendPanel";
 
 // RedHand's own automatic actions (Budget Guard, honeytokens, the Risk Engine) are recorded under this fixed actor (not a person).
 const SYSTEM_ACTOR_ID = "00000000-0000-0000-0000-000000000000";
@@ -72,6 +75,8 @@ export default function PassportsPage() {
   const [destinationsFor, setDestinationsFor] = useState<Passport | null>(null);
   const [risk, setRisk] = useState<RiskList | null>(null);
   const [riskFor, setRiskFor] = useState<Passport | null>(null);
+  const [spend, setSpend] = useState<SpendToday | null>(null);
+  const [spendFor, setSpendFor] = useState<Passport | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [revealedKey, setRevealedKey] = useState<{ name: string; key: string } | null>(null);
@@ -123,6 +128,8 @@ export default function PassportsPage() {
         if (err instanceof ApiError && (err.status === 403 || err.status === 404)) return null;
         throw err;
       }));
+      // Model use: an older core has no such route (404). A read that fails shows no figure (never a zero) and must not break the page.
+      setSpend(await spendApi.list(token).catch(() => null));
     } catch (err) {
       handleError(err);
     }
@@ -352,6 +359,8 @@ export default function PassportsPage() {
           onDestinations={(p) => setDestinationsFor(destinationsFor?.id === p.id ? null : p)}
           risk={risk}
           onRisk={(p) => setRiskFor(riskFor?.id === p.id ? null : p)}
+          spend={spend}
+          onSpend={(p) => setSpendFor(spendFor?.id === p.id ? null : p)}
           orgSafeMode={orgSafeMode}
           onSafeMode={(p) => {
             if (!p.safe_mode) {
@@ -371,6 +380,21 @@ export default function PassportsPage() {
             agentId={destinationsFor.id}
             agentName={destinationsFor.name}
             onClose={() => setDestinationsFor(null)}
+            onUnauthorized={() => {
+              signOut();
+              window.location.href = "/login";
+            }}
+          />
+        )}
+
+        {spendFor && token && (
+          <SpendPanel
+            key={spendFor.id}
+            token={token}
+            agentId={spendFor.id}
+            agentName={spendFor.name}
+            onClose={() => setSpendFor(null)}
+            onChanged={refresh}
             onUnauthorized={() => {
               signOut();
               window.location.href = "/login";
@@ -478,10 +502,13 @@ function PassportTable(props: {
   onDestinations: (p: Passport) => void;
   risk: RiskList | null;
   onRisk: (p: Passport) => void;
+  spend: SpendToday | null;
+  onSpend: (p: Passport) => void;
 }) {
   const { passports, busy } = props;
   const riskByAgent = new Map<string, AgentRiskSummary>((props.risk?.agents ?? []).map((r) => [r.agent_id, r]));
   const usageByAgent = new Map<string, AgentUsage>((props.usage?.agents ?? []).map((u) => [u.agent_id, u]));
+  const spendByAgent = new Map<string, AgentSpend>((props.spend?.agents ?? []).map((s) => [s.agent_id, s]));
   return (
     <section className="overflow-x-auto rounded-[12px] border border-[#E5E5E5] bg-[#FFFFFF]">
       <table className="w-full min-w-[900px] text-left text-[13px]">
@@ -492,6 +519,7 @@ function PassportTable(props: {
             <th className="p-3">Owner</th>
             <th className="p-3">Scopes</th>
             <th className="p-3">Calls today</th>
+            <th className="p-3">Model use today</th>
             <th className="p-3">Expires</th>
             <th className="p-3">Last seen</th>
             <th className="p-3 text-right">Actions</th>
@@ -500,7 +528,7 @@ function PassportTable(props: {
         <tbody>
           {passports.length === 0 && (
             <tr>
-              <td colSpan={8} className="p-6 text-center text-[#606060]">
+              <td colSpan={9} className="p-6 text-center text-[#606060]">
                 No agents yet. Register one below.
               </td>
             </tr>
@@ -571,6 +599,22 @@ function PassportTable(props: {
                 </td>
                 <td className="p-3 text-[12px]">
                   <CallsCell passport={p} usage={usageByAgent.get(p.id)} />
+                </td>
+                <td className="p-3 text-[12px]">
+                  {p.status === "revoked" || props.spend === null ? (
+                    <span className="text-[#606060]">-</span>
+                  ) : (
+                    (() => {
+                      const cell = spendCell(spendByAgent.get(p.id));
+                      const color = cell.tone === "alert" ? "text-[#B42318]" : cell.tone === "warn" ? "text-[#8A5A00]" : "";
+                      return (
+                        <button onClick={() => props.onSpend(p)} className="text-left hover:underline" title="Estimated from what the agent's SDK reported. Click for detail.">
+                          <div className={`font-semibold ${color}`}>{cell.headline}</div>
+                          {cell.detail && <div className="max-w-[180px] text-[11px] text-[#606060]">{cell.detail}</div>}
+                        </button>
+                      );
+                    })()
+                  )}
                 </td>
                 <td className="p-3 text-[12px]">
                   <div>{new Date(p.expires_at).toLocaleDateString()}</div>

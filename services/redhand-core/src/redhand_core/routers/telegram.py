@@ -36,6 +36,8 @@ from redhand_core.telegram.bot import (
     hash_link_code,
 )
 from redhand_core.telegram.client import TelegramClient, get_telegram_client_for
+from redhand_core.telegram.deps import OptionalClientDep as OptionalClientDep  # re-exported: routers and tests import it from here
+from redhand_core.telegram.deps import get_optional_telegram_client as get_optional_telegram_client
 from redhand_core.telegram.models import TelegramUpdate
 
 logger = logging.getLogger("redhand.core.telegram")
@@ -48,14 +50,6 @@ SettingsDep = Annotated[Settings, Depends(get_settings)]
 MAX_WEBHOOK_BYTES = 64 * 1024
 LINK_CODES_PER_HOUR = 5
 _code_limiter = SlidingWindowLimiter(window_seconds=3600.0)
-
-
-def get_optional_telegram_client(settings: SettingsDep) -> TelegramClient | None:
-    """None when Telegram is not configured; alerts then silently do nothing."""
-    return get_telegram_client_for(settings)
-
-
-OptionalClientDep = Annotated[TelegramClient | None, Depends(get_optional_telegram_client)]
 
 
 def _require_configured(settings: Settings) -> TelegramClient:

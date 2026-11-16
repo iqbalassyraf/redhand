@@ -1710,6 +1710,108 @@ def _agent_behaviour_hours(store: LocalSupabaseAdapter, p: dict[str, Any]) -> li
     return [{"agent_id": r["agent_id"], "hour": r["hour"].isoformat(), "tool_name": r["tool_name"], "calls": r["calls"]} for r in rows]
 
 
+# --- Model spend (Phase 4.5 B4a): emulation of supabase/migrations/20261125000000_model_spend.sql ----------------------------------------
+
+SPEND_WINDOW = timedelta(days=35)  # spans older than this are not counted; the same 35 days the migration uses
+SPEND_MAX_TOKENS = 1_000_000_000  # a believable count for one call; anything else on that side is "not reported"
+SPEND_MAX_MODELS_PER_DAY = 50
+SPEND_READ_CAP = 10**15
+SPEND_LIMIT_MAX_MICRO_USD = 10**12
+
+
+def _believable_tokens(value: Any) -> int:
+    return value if isinstance(value, int) and not isinstance(value, bool) and 1 <= value <= SPEND_MAX_TOKENS else 0
+
+
+def spend_rollup_statement(store: LocalSupabaseAdapter, new_rows: list[dict[str, Any]]) -> None:
+    """The trigger trg_execution_traces_model_spend: called once per INSERT statement with the rows that were actually inserted (a span sent
+    again is an update, not an insert, so it never reaches here). Same rules as the SQL: a model and a believable token count, 35-day
+    window, future spans count as now, the organization's offset sets the day, 50 models per agent and day, the groups written in a fixed
+    order."""
+    now = datetime.now(timezone.utc)
+    offsets = {str(o["id"]): int(o.get("utc_offset_minutes", 480)) for o in store.tables.get("organizations", [])}
+    groups: dict[tuple[str, str, date, str, str], list[int]] = {}
+    for row in new_rows:
+        name = row.get("model_name")
+        if not isinstance(name, str) or not name.strip(" "):
+            continue
+        occurred = _parse_ts(row["occurred_at"])
+        if occurred <= now - SPEND_WINDOW:
+            continue
+        prompt, completion = _believable_tokens(row.get("prompt_tokens")), _believable_tokens(row.get("completion_tokens"))
+        if not prompt and not completion:
+            continue
+        org = str(row["organization_id"])
+        day = (min(occurred, now).astimezone(timezone.utc) + timedelta(minutes=offsets.get(org, 480))).date()
+        provider = str(row.get("model_provider") or "").strip(" ")[:64].lower()
+        key = (org, str(row["agent_id"]), day, provider, name.strip(" ")[:128].lower())
+        total = groups.setdefault(key, [0, 0, 0])
+        total[0] += 1
+        total[1] += prompt
+        total[2] += completion
+    table = store.tables.setdefault("agent_model_daily", [])
+    for (org, agent, day, provider, model), (calls, prompt, completion) in sorted(groups.items(), key=lambda kv: kv[0][1:]):
+        def find(p: str, m: str) -> dict[str, Any] | None:
+            return next((r for r in table if r["agent_id"] == agent and r["day"] == day.isoformat() and r["provider"] == p and r["model"] == m), None)
+
+        target = find(provider, model)
+        if target is None and sum(1 for r in table if r["agent_id"] == agent and r["day"] == day.isoformat() and r["model"] != "(other)") >= SPEND_MAX_MODELS_PER_DAY:
+            provider, model = "", "(other)"
+            target = find(provider, model)
+        if target is None:
+            target = {"organization_id": org, "agent_id": agent, "day": day.isoformat(), "provider": provider, "model": model,
+                      "calls": 0, "prompt_tokens": 0, "completion_tokens": 0}
+            table.append(target)
+        target["calls"] += calls
+        target["prompt_tokens"] += prompt
+        target["completion_tokens"] += completion
+
+
+def _agent_model_usage(store: LocalSupabaseAdapter, p: dict[str, Any]) -> list[dict[str, Any]]:
+    org, only = str(p["p_org"]), (str(p["p_agent"]) if p.get("p_agent") else None)
+    since, until = date.fromisoformat(str(p["p_since"])), date.fromisoformat(str(p["p_until"]))
+    rows = [
+        r for r in store.tables.get("agent_model_daily", [])
+        if r["organization_id"] == org and (only is None or r["agent_id"] == only) and since <= date.fromisoformat(r["day"]) <= until
+    ]
+    rows.sort(key=lambda r: (r["agent_id"], r["day"], r["provider"], r["model"]))
+    return [
+        {"agent_id": r["agent_id"], "day": r["day"], "provider": r["provider"], "model": r["model"], "calls": r["calls"],
+         "prompt_tokens": min(r["prompt_tokens"], SPEND_READ_CAP), "completion_tokens": min(r["completion_tokens"], SPEND_READ_CAP)}
+        for r in rows
+    ]
+
+
+def _control_agent_spend_limit(store: LocalSupabaseAdapter, p: dict[str, Any]) -> dict[str, Any]:
+    org, agent_id, actor, limit = str(p["p_org"]), str(p["p_agent"]), str(p["p_actor"]), p["p_limit"]
+    agent = _find(store, "agents", org, agent_id)
+    if agent is None:
+        raise _error("P0002", "agent not found")
+    old = agent.get("spend_limit_micro_usd")
+    if old != p.get("p_expected_limit"):
+        return {"conflict": True}  # the caller decided against a state that has since changed
+    if old == limit:
+        return {"changed": False, "agent_id": agent_id, "spend_limit_micro_usd": old}
+    if limit is not None and (isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= SPEND_LIMIT_MAX_MICRO_USD):
+        raise _error("23514", "spend_limit_micro_usd violates check constraint")
+    agent["spend_limit_micro_usd"], agent["spend_alerted_day"] = limit, None
+    _append_audit(store, org=org, actor=actor, action="passport.spend_limit_changed", target_type="agent", target_id=agent_id,
+                  reason=p.get("p_reason"), details={"old_limit": old, "new_limit": limit})
+    return {"changed": True, "agent_id": agent_id, "spend_limit_micro_usd": limit}
+
+
+def _spend_mark_alerted(store: LocalSupabaseAdapter, p: dict[str, Any]) -> bool:
+    agent = _find(store, "agents", str(p["p_org"]), str(p["p_agent"]))
+    if agent is None:
+        return False
+    day = str(p["p_day"])
+    last = agent.get("spend_alerted_day")
+    if last is not None and str(last) >= day:
+        return False
+    agent["spend_alerted_day"] = day
+    return True
+
+
 HANDLERS: dict[str, RpcHandler] = {
     "control_agent_change": _control_agent_change,
     "control_freeze_all": _control_freeze_all,
@@ -1760,6 +1862,9 @@ HANDLERS: dict[str, RpcHandler] = {
     "control_risk_ladder": _control_risk_ladder,
     "risk_mark_alerted": _risk_mark_alerted,
     "agent_behaviour_hours": _agent_behaviour_hours,
+    "agent_model_usage": _agent_model_usage,
+    "control_agent_spend_limit": _control_agent_spend_limit,
+    "spend_mark_alerted": _spend_mark_alerted,
 }
 
 

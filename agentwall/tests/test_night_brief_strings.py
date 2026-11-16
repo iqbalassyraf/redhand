@@ -175,6 +175,17 @@ PROMISES = [
     ("most recent records", "agentwall/src/main.py"),
     ("Black Box", "agentwall/src/main.py"),
     ("call refused (outside the passport)", "services/redhand-core/src/redhand_core/risk/scoring.py"),
+    # Part O (model spend)
+    ("Estimated from what the agent's SDK reported; prices as of", "apps/redhand-ui/src/lib/spend.ts"),
+    ("usage not reported", "apps/redhand-ui/src/lib/spend.ts"),
+    ("price unknown", "apps/redhand-ui/src/lib/spend.ts"),
+    ("tokens with no known price", "apps/redhand-ui/src/lib/spend.ts"),
+    ("Raising or removing the limit means RedHand will alert later, or never. Continue?", "apps/redhand-ui/src/lib/spend.ts"),
+    ("Model use for", "apps/redhand-ui/src/app/passports/SpendPanel.tsx"),
+    ("US dollars per day", "apps/redhand-ui/src/app/passports/SpendPanel.tsx"),
+    ("Limit saved.", "apps/redhand-ui/src/app/passports/SpendPanel.tsx"),
+    ("Spend alert:", "services/redhand-core/src/redhand_core/spend/service.py"),
+    ("Nothing was refused: RedHand does not stop model calls.", "services/redhand-core/src/redhand_core/spend/service.py"),
 ]
 
 

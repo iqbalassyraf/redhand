@@ -13,6 +13,13 @@ Both tools work on RedHand and its demo projects. This file is how each learns w
 
 ---
 
+## 2026-11-16, Claude Code: B4a model spend built (branch feat/phase45-b4a-spend, from main, nothing deployed or merged)
+- **Built:** SDK usage reporting (LangChain `on_llm_end`; the made-up default model removed: behaviour change), migration `20261125000000_model_spend` (roll-up, statement trigger, read fn, backfill/repair `model_spend_backfill`, purge, dollar limit, once-a-day alert mark), core `spend/` + `/v1/spend/...` + `PUT /v1/passports/{id}/spend-limit`, background check after ingest, local twin, dashboard "Model use today" column and panel, ADR 0023, runbook, threat-model rows, OpenAPI regenerated, night Part O (guarded strings).
+- **Verified locally:** full Python suite 3,000 passed (1 skipped), ruff 0.17.3 and mypy 2.4.1 clean, SQL suite on a throwaway PostgreSQL (apply, rollback, re-apply), dashboard 77 node tests, `tsc`, `next build`, real browser (admin, operator, viewer at 1280 and 375 px) against a local core seeded through the real ingest; mutation checks on the SDK helper, migration, twin, core service and dashboard helpers (survivors: the lock-order `ORDER BY` that prevents concurrent-batch deadlocks, and a redundant org filter that the RPC also enforces).
+- **Not verified:** staging (needs the migration, core, dashboard), a real agent's SDK reporting usage, the price table against the provider's page (owner must check), CrewAI and MCP adapters (they expose no usage and are unchanged).
+- **Deviations:** statement trigger instead of a row trigger; trigger errors are logged as WARNING and never fail the ingest; the alert's record is `agents.spend_alerted_day` + log + metric, not an audit row; any limit change needs an admin.
+- **Found, not fixed:** the Passports page overflows 43 px at 375 px wide (its header navigation); the first Anthropic price table was read by a subagent from the provider page on 2026-11-16 and has no OpenAI prices.
+- **Deploy order:** migration, core, dashboard. **Brief for Antigravity:** night-1 brief, Part O. **Next:** B4b approved models (stacked on this branch).
 ## 2026-11-16, Claude Code: status catch-up (docs only, branch docs/status-catch-up)
 - `docs/briefing.md`: the Phase 4 and Phase 4.5 rows say what is built, merged, proven on staging and still open (Radar false-alarm goal not met, blind round 4 not scored, B3 in PR 76, B4 next).
 - `docs/plans/phase4.5-build-plan.md`: the status line no longer says "nothing here is built".

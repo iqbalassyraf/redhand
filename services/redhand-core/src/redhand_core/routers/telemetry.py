@@ -20,12 +20,13 @@ from pydantic import BaseModel, ConfigDict, Field, HttpUrl, field_validator, mod
 from supabase import AsyncClient
 
 from redhand_core.net.outbound import OutboundBlockedError, check_url, insecure_webhooks_allowed
-from redhand_core.passports.models import effective_status
+from redhand_core.passports.models import effective_status, utcnow
 from redhand_core.services.dlp_scrubber import get_dlp_scrubber
 from redhand_core.services.metrics import get_metrics
 from redhand_core.services.notifications.slack import dispatch_slack_hitl_notification
 from redhand_core.services.policy_engine import get_policy_engine
 from redhand_core.services.siem_exporter import get_siem_exporter
+from redhand_core.telegram.deps import OptionalClientDep
 
 logger = logging.getLogger("redhand.core.telemetry")
 
@@ -396,6 +397,7 @@ async def ingest_telemetry_batch(
     background_tasks: BackgroundTasks,
     auth_ctx: Annotated[AuthenticatedOrgContext, Depends(verify_sdk_api_key)],
     supabase: Annotated[AsyncClient, Depends(get_supabase_service_client)],
+    telegram: OptionalClientDep,
 ) -> TelemetryIngestResponse:
     now_iso = datetime.now(timezone.utc).isoformat()
 
@@ -621,6 +623,15 @@ async def ingest_telemetry_batch(
             security_event_rows,
             supabase,
         )
+
+    # Model spend (B4a): count models with no known price (no names), and, when the batch reported model use, compare today's estimate with the
+    # agent's dollar limit AFTER the SDK has its reply. Detective only: nothing here can refuse or fail this batch.
+    from redhand_core.spend import service as spend_service  # late: spend.service -> passports.service -> auth.operator imports this module
+
+    reported_usage, unpriced_models = spend_service.summarize_batch(trace_rows)
+    spend_service.note_unpriced_models(unpriced_models)
+    if reported_usage:
+        background_tasks.add_task(spend_service.check_spend, supabase, telegram, auth_ctx.organization_id, agent_id, utcnow())
 
     return TelemetryIngestResponse(
         organization_id=auth_ctx.organization_id,
