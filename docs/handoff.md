@@ -30,6 +30,39 @@ Both tools work on RedHand and its demo projects. This file is how each learns w
 - `docs/briefing.md`: the Phase 4 and Phase 4.5 rows say what is built, merged, proven on staging and still open (Radar false-alarm goal not met, blind round 4 not scored, B3 in PR 76, B4 next).
 - `docs/plans/phase4.5-build-plan.md`: the status line no longer says "nothing here is built".
 - **Proposed CLAUDE.md change (not applied; CLAUDE.md section 15 says to propose, not edit):** section 1, "Current phase", currently says "Phase 4 (Check inputs) is next. Phases 1 to 3 are built...". Proposed wording: "**Current phase:** Phase 4.5 (decision layer). Phases 1 to 4 are built and on `main`; Phase 4's Radar stays Watch only until its false-alarm goal and blind round 4 pass (`docs/plans/phase4-finish-plan.md`). Phase 4.5 B1 and B2 are merged, B3 is in review, B4 is next; the model proxy (B5, B6) is gated on a measured prototype. Do not build Phase 5 features unless explicitly asked." The owner applies it or says to.
+## 2026-11-15, Antigravity: Night 1 test sweep executed on staging (PRs 57 through 72, commit b5c06df)
+- **Executed:** Full Night 1 Integration Sweep on live staging covering PRs 57 through 72 according to `docs/testing/briefs/2026-11-13-night-1.md` and `docs/testing/briefs/2026-11-14-antigravity-master.md`.
+- **Environment:**
+  - Branch: `feat/h4-enforcement-tightening` (`b5c06df`).
+  - Cloud Run Core: `https://redhand-core-825574069297.asia-southeast1.run.app` (`redhand-core-00032-c8j`).
+  - Cloud Run Gateway: `https://redhand-gateway-825574069297.asia-southeast1.run.app` (`redhand-gateway-00029-njd`).
+  - Dashboard: Production Vercel (`https://redhand.archtificial.com`, promoted to `b5c06df`).
+  - Database: Staging Supabase (`qxxiksevqfmkqstrdkxi.supabase.co`).
+  - Report written to: `docs/testing/results/2026-11-14-night-1.md`.
+- **Verified live on staging (Verdict: GOOD, all executed parts PASS):**
+  - **Part 0 (Deploy & Smoke):** All 4 SQL migrations applied (`loop_detection`, `destination_allowlist`, `risk_engine`, `behaviour_baseline`). `deploy/cloudrun/smoke.sh` passed 13 of 13 checks.
+  - **Part A (Tool Pinning / F1b):** Unapproved tools hidden in enforce mode; direct unapproved call refused with `PolicyViolation: tool 'read_wiki_contents' is not approved.`; operator approval blocked; owner approved.
+  - **Part B (Loop Detection / M6):** Default Watch 20 / 60 verified. Throttle mode refused repeats past 5 with `PolicyViolation: this exact call was repeated too often...`. Budget safety verified (0 calls consumed on refusal). Silence exemption allowed all 8 calls. Alert rate-limit (1 per 10m) verified.
+  - **Part C (Destination Allowlist / M7):** Canonical normalization `files.example.org` verified. Enforce mode refused unlisted destination. All 6 bypass attempts (userinfo, escaped, fragment, decimal IP, email, subdomain) refused.
+  - **Part D (Quieter Radar Rules / M4.7b):** Self-test passed: 23/28 (82%), 19/20 (95%), 20/20 (100%), 20/20 (100%), 0 false alarms. Real documentation calls (`django/django`, `prometheus/prometheus`, `encode/httpx`) allowed without false alarms. Block gate on `/coverage` verified.
+  - **Part F (Regression):** Rapid freeze detected within 1.17s (`>>> STOPPED`); unfreeze resumed immediately (`>>> RESUMED`); revocation verified (`HTTP 401: Invalid agent key.`).
+  - **Part H (Risk Engine / Phase 4.5 B1):** Trip scoring verified (40 elevated -> 80 critical). Telegram batching verified. Autonomous Risk Engine freeze verified when action score reached threshold (`"RedHand has frozen it."`, `passport.frozen` by `RedHand Risk Engine`). Human unfreeze release rule stamped (`risk_released_at`), action score reset to 0, safe call allowed.
+  - **Part I (Behaviour Baseline / Phase 4.5 B2):** Step I1 warm-up card verified (`"Warming up: 0 of 7 days of history. Nothing is judged yet."`).
+  - **Part J (Hardening H1):** Smoke test passed. Black Box tamper-evident audit chain verified (`Verified: 5272 event(s) from seq 1 to 5272, chain intact.`). Log hygiene clean (0 tokens or webhook URLs in Cloud Run logs).
+  - **Part K (Hardening H2):** 2 MB and chunked payloads refused on core and gateway with `HTTP 413: {"detail":"Request body too large."}`. Small payload refused with standard 401. Connection pinning & certificate check against real DeepWiki passed (`ALL CHECKS PASSED`). 0 unreachable errors in logs.
+  - **Part L (Hardening H3):** Dashboard security headers verified: dynamic CSP nonce, HSTS, `nosniff`, `frame-ancestors 'none'`, DENY. Core and gateway headers verified: `nosniff`, `no-store`, HSTS. Proxy hops configured to 1. `OPERATOR_JWT_SECRET` completely absent.
+  - **Cleanup completed:** Staging database returned to safe state (loops Watch 20 / 60, destinations Off, test silences cleared, ladder cleared, all test honeytokens retired, all `night-*` and `pin-test` agents revoked, min-instances at 0).
+- **What was NOT verified / deferred:**
+  - Part E (Latency speed runs deferred).
+  - Step M8 (20-minute cold gateway wait deferred; local test suites cover cold strict pinning).
+  - Steps L6–L7 (IP lock-out loop deferred to avoid blocking owner test IP; local test suite covers rate limits).
+  - Blind round 4: to be written in a separate, clean session per brief.
+- **Next for Claude Code:**
+  - Check `docs/testing/results/2026-11-14-night-1.md` against staging database and Cloud Run.
+  - Score blind round 4 when submitted.
+  - Propose final merge order for PRs 57 through 72 into `main`.
+
+---
 
 ## 2026-11-13, Claude Code: night 1 test brief written (branch docs/phase4-night-1-brief, stacked on M7, nothing deployed)
 - **Built:** `docs/testing/briefs/2026-11-13-night-1.md` (Parts 0 deploy and smoke, A F1b tool pinning, B loops, C destinations, D M4.7b, E latency, F regression, cleanup, report format, and how I will check the report against the database), `scripts/staging_agent.py repeat` (same call N times, `--tool --args --times --delay --vary`, prints counts and the first refusal only), and two tests: `agentwall/tests/test_staging_agent_repeat.py` (against a fake stack, including that no key, token or argument is printed) and `agentwall/tests/test_night_brief_strings.py` (every sentence the brief promises must be in the brief and in the source file that produces it).
