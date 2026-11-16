@@ -18,6 +18,12 @@ updates:
     groups:
       dashboard-dependencies:
         patterns: ["*"]
+    # Tailwind v4 is a migration, not an update (a new PostCSS plugin package, CSS and config changes, class renames that can change how pages look), and it
+    # broke the dashboard build in the grouped pull request. Held at v3 until it is done on purpose, with before/after screenshots of every page. Minor and
+    # patch updates still arrive.
+    ignore:
+      - dependency-name: "tailwindcss"
+        update-types: ["version-update:semver-major"]
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
