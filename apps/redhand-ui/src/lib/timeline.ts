@@ -69,6 +69,7 @@ const FINDING_KIND: Readonly<Record<string, string>> = {
   output: "risky content in a tool answer",
   loop: "repeated identical calls",
   destination: "an address outside the allowed list",
+  model: "a model that is not on the approved list",
 };
 
 const REVIEW: Readonly<Record<string, string>> = {

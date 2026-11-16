@@ -3,6 +3,7 @@
  * UI is never a security boundary (all authorization happens in redhand-core).
  */
 
+import type { ApprovedModel, ApprovedModelsList } from "./approvedModels";
 import type { AgentSpendDetail, SpendLimitResult, SpendToday } from "./spend";
 import type { TimelineResponse } from "@/lib/timeline";
 
@@ -577,7 +578,7 @@ export interface RadarFinding {
   agent_name: string | null;
   rule_id: string;
   family: string;
-  kind: "injection" | "output" | "loop" | "destination";
+  kind: "injection" | "output" | "loop" | "destination" | "model";
   severity: RadarLevel;
   confidence: RadarLevel;
   place: "text" | "hidden" | "decoded" | "call";
@@ -862,3 +863,10 @@ export async function downloadTimelineExport(token: string, agentId: string, for
   link.remove();
   URL.revokeObjectURL(url);
 }
+
+// Approved models (Phase 4.5 B4b): detective only. See src/lib/approvedModels.ts.
+export const approvedModelsApi = {
+  get: (t: string) => apiFetch<ApprovedModelsList>("/v1/organization/approved-models", t),
+  set: (t: string, body: { items: ApprovedModel[]; version: number; confirm: boolean; reason?: string }) =>
+    apiFetch<ApprovedModelsList>("/v1/organization/approved-models", t, { method: "PUT", body }),
+};
