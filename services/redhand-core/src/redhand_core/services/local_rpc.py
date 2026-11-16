@@ -1064,7 +1064,7 @@ def _telegram_claim_update(store: LocalSupabaseAdapter, p: dict[str, Any]) -> bo
 # --- Prompt Injection Radar (Phase 4 M4.2): emulation of supabase/migrations/20261117000000_radar_findings.sql -------------
 
 _RULE_ID = re.compile(r"^RAD-(INJ|OUT)-[0-9]{3}$")  # scan counts and readiness only know the injection and output rules
-_FINDING_RULE = re.compile(r"^RAD-(INJ|OUT|LOOP|DST)-[0-9]{3}$")
+_FINDING_RULE = re.compile(r"^RAD-(INJ|OUT|LOOP|DST|MDL)-[0-9]{3}$")
 _DETAIL = re.compile(r"^[a-z0-9_.:-]{1,64}$")
 _HOST = re.compile(r"^[a-z0-9_.:-]{1,253}$")  # every rule a finding or a suppression may name
 _LOOP_MODES = ("off", "observe", "throttle")
@@ -1627,6 +1627,8 @@ def _agent_risk_signals(store: LocalSupabaseAdapter, p: dict[str, Any]) -> list[
         agent = str(f["agent_id"])
         if str(f["organization_id"]) != org or agent not in agents or not week < at <= now:
             continue
+        if f["kind"] == "model":
+            continue  # approved-model findings add no points (owner decision D4), confirmed or not
         if f["review_status"] == "confirmed":
             events.append((agent, "confirmed_finding", at))
         elif f["review_status"] == "open" and f["confidence"] != "low" and (agent, f["rule_id"]) not in live:
@@ -1812,6 +1814,104 @@ def _spend_mark_alerted(store: LocalSupabaseAdapter, p: dict[str, Any]) -> bool:
     return True
 
 
+# --- Approved models (Phase 4.5 B4b): emulation of supabase/migrations/20261126000000_approved_models.sql ---------------------------------
+
+_APPROVED_PROVIDER = re.compile(r"^[a-z0-9][a-z0-9_.:/-]{0,63}$")
+_APPROVED_MODEL = re.compile(r"^[a-z0-9][a-z0-9_.:/-]{0,127}$")
+_DATED_MODEL = re.compile(r"^(?P<base>.+)-[0-9]{8}$")
+APPROVED_MODELS_MAX = 50
+
+
+def _approved_rows(store: LocalSupabaseAdapter, org: str) -> list[dict[str, Any]]:
+    return sorted((r for r in store.tables.get("approved_models", []) if str(r["organization_id"]) == org), key=lambda r: (r["provider"], r["model"]))
+
+
+def _approved_models_list(store: LocalSupabaseAdapter, p: dict[str, Any]) -> list[dict[str, Any]]:
+    return [{"provider": r["provider"], "model": r["model"]} for r in _approved_rows(store, str(p["p_org"]))]
+
+
+def _control_approved_models(store: LocalSupabaseAdapter, p: dict[str, Any]) -> dict[str, Any]:
+    org, actor, items = str(p["p_org"]), str(p["p_actor"]), p["p_items"]
+    if not isinstance(items, list) or len(items) > APPROVED_MODELS_MAX:
+        raise _error("22023", "items must be an array of at most 50")
+    clean: set[tuple[str, str]] = set()
+    for item in items:
+        if not isinstance(item, dict) or not isinstance(item.get("provider"), str) or not isinstance(item.get("model"), str):
+            raise _error("22023", "each item needs a plain provider and model name")
+        provider, model = item["provider"].strip(" ").lower(), item["model"].strip(" ").lower()
+        if not _APPROVED_PROVIDER.match(provider) or not _APPROVED_MODEL.match(model):
+            raise _error("22023", "each item needs a plain provider and model name")
+        clean.add((provider, model))
+    org_row = _org_row(store, org)
+    if org_row.get("approved_models_version", 0) != p.get("p_expected_version"):
+        return {"conflict": True}
+    old = [(r["provider"], r["model"]) for r in _approved_rows(store, org)]
+    if sorted(clean) == old:
+        return {"changed": False, "version": org_row.get("approved_models_version", 0), "count": len(old)}
+    rows = store.tables.setdefault("approved_models", [])
+    rows[:] = [r for r in rows if str(r["organization_id"]) != org]
+    rows.extend({"organization_id": org, "provider": a, "model": b} for a, b in sorted(clean))
+    org_row["approved_models_version"] = org_row.get("approved_models_version", 0) + 1
+    _append_audit(store, org=org, actor=actor, action="organization.approved_models_changed", target_type="organization", target_id=org,
+                  reason=p.get("p_reason"), details={"old_count": len(old), "new_count": len(clean)})
+    return {"changed": True, "version": org_row["approved_models_version"], "count": len(clean)}
+
+
+def _record_model_findings(store: LocalSupabaseAdapter, p: dict[str, Any]) -> dict[str, Any]:
+    org, agent_id, items = str(p["p_org"]), str(p["p_agent"]), p["p_items"]
+    if not isinstance(items, list) or len(items) > 20:
+        raise _error("22023", "items must be an array of at most 20")
+    agent = _agent_of(store, org, agent_id)
+    if agent is None:
+        raise _error("P0002", "agent not found")
+    approved = {(r["provider"], r["model"]) for r in _approved_rows(store, org)}
+    result: dict[str, Any] = {"new": 0, "coalesced": 0, "suppressed": 0, "skipped": 0, "alert": False, "agent": agent["name"], "model": None, "listed": bool(approved)}
+    if not approved:
+        return result
+    now = datetime.now(timezone.utc)
+    window = datetime.fromtimestamp((int(now.timestamp()) // 300) * 300, tz=timezone.utc).isoformat()
+    rows = store.tables.setdefault("security_findings", [])
+    live_silence = any(
+        str(s["agent_id"]) == agent_id and s["rule_id"] == "RAD-MDL-001" and s.get("revoked_at") is None and _parse_ts(s["expires_at"]) > now
+        for s in store.tables.get("radar_suppressions", [])
+    )
+    for item in items:
+        if not isinstance(item, dict) or not isinstance(item.get("provider"), str) or not isinstance(item.get("model"), str):
+            result["skipped"] += 1
+            continue
+        provider, model = item["provider"].strip(" ")[:64].lower(), item["model"].strip(" ")[:128].lower()
+        if not model:
+            result["skipped"] += 1
+            continue
+        dated = _DATED_MODEL.match(model)
+        if (provider, model) in approved or (dated is not None and (provider, dated.group("base")) in approved):
+            continue
+        name = re.sub(r"[^a-z0-9_.:/-]", "_", f"{provider}/{model}" if provider else model)[:128]
+        if live_silence:
+            result["suppressed"] += 1
+            continue
+        existing = next((r for r in rows if str(r["agent_id"]) == agent_id and r["rule_id"] == "RAD-MDL-001" and r["tool_name"] == name and r["place"] == "call"
+                         and r["window_start"] == window), None)
+        if existing is None:
+            rows.append({
+                "id": str(uuid4()), "organization_id": org, "agent_id": agent_id, "rule_id": "RAD-MDL-001", "family": "model", "kind": "model",
+                "severity": "medium", "confidence": "high", "place": "call", "evasion": [], "tool_name": name, "server_slug": "", "would_block": False,
+                "occurrences": 1, "window_start": window, "detail": None, "first_seen_at": now.isoformat(), "last_seen_at": now.isoformat(),
+                "review_status": "open", "reviewed_by": None, "reviewed_at": None, "review_note": None,
+            })
+            result["new"] += 1
+            result["model"] = result["model"] if result["model"] is not None else name
+        else:
+            existing["occurrences"] = min(existing["occurrences"] + 1, 1_000_000)
+            existing["last_seen_at"] = now.isoformat()
+            result["coalesced"] += 1
+    last = agent.get("model_last_alert_at")
+    if result["new"] > 0 and (last is None or now - _parse_ts(last) > timedelta(minutes=10)):
+        agent["model_last_alert_at"] = now.isoformat()
+        result["alert"] = True
+    return result
+
+
 HANDLERS: dict[str, RpcHandler] = {
     "control_agent_change": _control_agent_change,
     "control_freeze_all": _control_freeze_all,
@@ -1865,6 +1965,9 @@ HANDLERS: dict[str, RpcHandler] = {
     "agent_model_usage": _agent_model_usage,
     "control_agent_spend_limit": _control_agent_spend_limit,
     "spend_mark_alerted": _spend_mark_alerted,
+    "approved_models_list": _approved_models_list,
+    "control_approved_models": _control_approved_models,
+    "record_model_findings": _record_model_findings,
 }
 
 
