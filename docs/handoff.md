@@ -13,6 +13,16 @@ Both tools work on RedHand and its demo projects. This file is how each learns w
 
 ---
 
+## 2026-11-16, Antigravity: B3/B4a/B4b deployed to staging and night Parts N, O, P run (main 7340432)
+- **Report:** `docs/testing/results/2026-11-16-night-1-parts-nop.md`. Not yet checked against the database; section 7 has the read-only queries.
+- **Deployed by the owner:** migrations `20261124000000_incident_view`, `20261125000000_model_spend`, `20261126000000_approved_models`; core `redhand-core-00033-xv2` (image `7340432`, `DASHBOARD_ORIGIN` set to both dashboard origins); gateway unchanged (`redhand-gateway-00029-njd`); Vercel dashboard from `main`. `smoke.sh` 13/13, `staging_agent.py run` 6/6. #84 and #85 are on `main` but were **not** deployed or tested.
+- **Results:** Part N PASS on all run steps (N7, N9 NOT RUN). Part O PASS on all run steps (O8 NOT RUN). Part P: P1 to P4 PASS, P9 and P11 owner-reported, **P5 to P8 NOT RUN**, so the "0 Risk points" rule for `RAD-MDL-001` is not verified on staging.
+- **Brief defect:** the Part O/P curl commands omit the required `sdk_version` field and return HTTP 422. Add `"sdk_version":"0.1.0"`.
+- **Product gap:** no way to issue an organization SDK key except raw SQL. Telemetry ingest also creates active, owner-less, scope-less agent rows for any new `external_agent_id`.
+- **Shared-environment changes made by hand (no script manages these):** inserted an `sdk_api_keys` row (prefix `rh_test_spen`) via `organizations LIMIT 1`, which picked the wrong organization (`29613512-...`); one `night-spend` agent and one trace were created there. Then moved the key with an `UPDATE` and ran `DELETE FROM public.agents WHERE name = 'night-spend'` (**no organization filter**). The key's plaintext was typed into chat: **deactivate it**. Details in the report's section 5.
+- **Still to clean:** deactivate the test SDK key; revoke `night-radar` and `night-dest` (active in a 21:14 screenshot); check `pin-test` and the mistyped-name agent; confirm no `AGENTWALL_*_ENABLED` and min instances 0 (not re-checked).
+- **For Claude Code next:** run the report's section 7 queries and correct the report where staging disagrees; fix the brief defect; then see the recommendations in the owner's message.
+
 ## 2026-11-16, Claude Code: B4b approved models built (branch feat/phase45-b4b-approved-models, from main, nothing deployed)
 - **Built:** migration `20261126000000_approved_models` (list table, version, `record_model_findings`, finding kind `model` / rule `RAD-MDL-001`, suppression regex, risk signals ignore model findings), core `approved/` + `/v1/organization/approved-models` + bounded background check after ingest, local twin, Radar "Approved models" card, kind filter and rule sentence, ADR 0023 amendment, runbook, threat-model rows, OpenAPI, night Part P.
 - **Verified locally:** full Python suite, ruff, mypy, SQL suite with rollback and re-apply (13 mutants killed in SQL, 15 in core and twin), dashboard node tests, `tsc`, `next build`, real browser as admin and operator at 1280 and 375 px (31 checks).
