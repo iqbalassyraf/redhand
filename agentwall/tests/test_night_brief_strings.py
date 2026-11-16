@@ -59,6 +59,17 @@ PROMISES = [
     ("Agent access token is out of date. Request a new one.", GATEWAY),
     ("It will be able to call its tools again.", "apps/redhand-ui/src/app/passports/page.tsx"),
     ("PolicyViolation: tool 'ask_question' is out of scope.".replace("ask_question", "{tool_name}"), GATEWAY),
+    # incident view (Part N)
+    ("Your role cannot see the incident view. Ask an owner or admin to give you the security operator role.", "apps/redhand-ui/src/app/passports/[id]/timeline/page.tsx"),
+    ("This agent was not found in your organization.", "apps/redhand-ui/src/app/passports/[id]/timeline/page.tsx"),
+    ("Frozen from the incident view", "apps/redhand-ui/src/lib/timeline.ts"),
+    ("This timeline shows only what RedHand recorded", "apps/redhand-ui/src/lib/timeline.ts"),
+    ("Timeline exported", "apps/redhand-ui/src/lib/timeline.ts"),
+    ("Incident summary downloaded (", "apps/redhand-ui/src/app/passports/[id]/timeline/page.tsx"),
+    ("Timeline: ", "services/redhand-core/src/redhand_core/telegram/bot.py"),
+    ("Honeytoken used in a call to ", "apps/redhand-ui/src/lib/timeline.ts"),
+    ("tool calls in this hour", "apps/redhand-ui/tests/timeline.test.mjs"),  # built from a template; the test asserts the exact sentence
+    ("at,kind,tool_name,server,reasons", "services/redhand-core/tests/test_timeline.py"),
     # loop card
     ("Repeated-call settings saved. They reach the gateway within a few seconds.", RADAR_PAGE),
     ("Tick the box to confirm this change.", RADAR_PAGE),

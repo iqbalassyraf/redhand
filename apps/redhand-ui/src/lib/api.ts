@@ -3,6 +3,8 @@
  * UI is never a security boundary (all authorization happens in redhand-core).
  */
 
+import type { TimelineResponse } from "@/lib/timeline";
+
 export const CORE_API_BASE =
   process.env.NEXT_PUBLIC_REDHAND_CORE_URL || "http://localhost:8000";
 
@@ -815,3 +817,40 @@ export const riskApi = {
     body: { alert_at: number | null; safe_mode_at: number | null; freeze_at: number | null; confirm: boolean; reason?: string }
   ) => apiFetch<RiskLadder>("/v1/risk/ladder", t, { method: "PUT", body }),
 };
+
+// ---------------------------------------------------------------------------
+// Incident view (Phase 4.5 B3): one timeline per agent. Security operator and above.
+// ---------------------------------------------------------------------------
+
+export const timelineApi = {
+  get: (t: string, agentId: string, before: string | null = null, limit = 50) => {
+    const query = new URLSearchParams({ limit: String(limit) });
+    if (before) query.set("before", before);
+    return apiFetch<TimelineResponse>(`/v1/agents/${agentId}/timeline?${query.toString()}`, t);
+  },
+};
+
+/** The incident summary download (JSON or CSV), through fetch so the token stays in a header. Audited and rate-limited by core. */
+export async function downloadTimelineExport(token: string, agentId: string, format: "json" | "csv"): Promise<void> {
+  const resp = await fetch(`${CORE_API_BASE}/v1/agents/${agentId}/timeline/export?format=${format}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!resp.ok) {
+    let parsed: unknown = null;
+    try {
+      parsed = await resp.json();
+    } catch {
+      parsed = null;
+    }
+    throw new ApiError(resp.status, describeError(parsed, resp.status));
+  }
+  const blob = await resp.blob();
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `redhand-timeline-${agentId.slice(0, 8)}.${format}`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
