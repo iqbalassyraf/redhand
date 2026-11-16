@@ -43,6 +43,11 @@ jobs:
       - name: Tests (unit, integration and Phase 1 end-to-end)
         run: uv run --frozen pytest -q
 
+      # Secrets in the repository (RH-SEC-004) and the Python agent-tool rules. The reviewed baseline (.redhand-scan-baseline.json) lists the deliberate
+      # fake keys in tests and demos; a NEW finding, or a baseline entry that no longer matches, fails the job. No network, nothing is printed but paths.
+      - name: Secret scan (redhand scan with the reviewed baseline)
+        run: uv run --frozen redhand scan . --strict --baseline .redhand-scan-baseline.json
+
       # Fails on any known vulnerability in a locked dependency (CLAUDE.md section 13). It reads the public advisory database, so a new
       # advisory can turn this red without a code change: fix by upgrading the package, or record why it does not apply here.
       - name: Dependency audit (pip-audit, locked versions)
