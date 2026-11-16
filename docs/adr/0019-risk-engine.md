@@ -1,6 +1,6 @@
 # ADR 0019: Risk Engine (per-agent risk score and an opt-in response ladder)
 
-**Status:** Proposed (2026-11-14), awaiting the owner's review with the pull request. Phase 4.5 B1, decisions B-D1 (build Part 1) and B-D4
+**Status:** Accepted (owner, 2026-11-16; merged). Phase 4.5 B1, decisions B-D1 (build Part 1) and B-D4
 (auto-freeze off by default, opt-in per organization). Plan: `docs/plans/phase45-b1-risk-engine.md`. Builds on ADR 0010 (Budget Guard's
 automatic freeze), ADR 0015 (the Radar only observes) and the honeytoken trip path, which already act through a system actor.
 
