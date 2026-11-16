@@ -34,6 +34,7 @@ from redhand_core.routers.mcp_scan import router as mcp_scan_router
 from redhand_core.routers.radar import router as radar_router
 from redhand_core.routers.destinations import router as destinations_router
 from redhand_core.routers.risk import router as risk_router
+from redhand_core.routers.timeline import router as timeline_router
 from redhand_core.routers.tool_pins import router as tool_pins_router
 from redhand_core.routers.events import router as events_router
 from redhand_core.routers.telegram import router as telegram_router
@@ -160,6 +161,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(radar_router)
     app.include_router(destinations_router)
     app.include_router(risk_router)
+    app.include_router(timeline_router)
     if (
         active_settings.ENVIRONMENT == "development"
         and active_settings.uses_local_store
