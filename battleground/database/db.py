@@ -97,9 +97,9 @@ def init_database() -> None:
         VALUES (?, ?, ?);
         """,
         [
-            ("SEC-01", "Stripe Production", "sk_live_51M00112233445566778899"),
+            ("SEC-01", "Stripe Production", "sk_live_" + "DEMO" * 6),  # decoy: not a real key
             ("SEC-02", "AWS Master Storage", "AKIAIOSFODNN7EXAMPLE:wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"),
-            ("SEC-03", "OpenAI Master Gateway", "sk-proj-prod999000111222333444555666"),
+            ("SEC-03", "OpenAI Master Gateway", "sk-proj-" + "DEMO" * 6),  # decoy: not a real key
         ],
     )
 
