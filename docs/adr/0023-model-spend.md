@@ -47,3 +47,12 @@ the model provider directly. The only record of model use is what the agent's ow
 - A statement trigger instead of a row trigger (above).
 - The alert's record is `agents.spend_alerted_day`, a log line and the `spend_alerts_total` metric, not an audit row: audit is for control actions by a person.
 - Any limit change needs an admin (the plan said admin; Budget Guard lets operators tighten).
+
+## Amendment 2026-11-16: approved models (B4b)
+- **What:** an organization may keep a list of approved (provider, model) pairs, at most 50, replaced as a whole by an admin (audited, compare-and-set on a version, clearing it needs confirmation because that turns the check off). While the list is not empty, a model an agent's SDK reports that is not on it (exactly, or as a dated id `-YYYYMMDD` of an approved model) becomes one finding per agent, model and 5-minute window: rule `RAD-MDL-001`, kind `model`, place `call`, family `model`, severity medium, confidence high, with its own 10-minute alert cooldown. An empty list means no check (decision D5).
+- **No Risk points (decision D4):** `agent_risk_signals()` ignores kind `model`, open or confirmed.
+- **Detective only:** the finding and the Telegram alert say "Recorded only: nothing was refused". RedHand cannot stop a model call.
+- **Writer:** a small separate function `record_model_findings()` writes these findings, so the gateway's large `record_security_findings()` (replaced three times already) is **not** touched. The finding rule and kind checks and the suppression function accept the new rule, so silences work as for any rule.
+- **Safety:** the model name is reduced to `[a-z0-9_.:/-]` and 128 characters in the database before it is stored; alerts and the dashboard show it as plain text only.
+- **Differences from the plan:** a separate writer instead of extending `record_security_findings()`; the model name is kept in `tool_name` (no new column).
+- **Not covered:** an agent that does not report its model is never flagged; the list is the organization's, not per agent.

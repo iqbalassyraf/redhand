@@ -634,6 +634,107 @@
         "title": "ApproveAllResponse",
         "type": "object"
       },
+      "ApprovedModel": {
+        "additionalProperties": false,
+        "description": "One approved (provider, model). Trimmed and lower-cased, so spelling does not matter.",
+        "properties": {
+          "model": {
+            "pattern": "^[a-z0-9][a-z0-9_.:/-]{0,127}$",
+            "title": "Model",
+            "type": "string"
+          },
+          "provider": {
+            "pattern": "^[a-z0-9][a-z0-9_.:/-]{0,63}$",
+            "title": "Provider",
+            "type": "string"
+          }
+        },
+        "required": [
+          "provider",
+          "model"
+        ],
+        "title": "ApprovedModel",
+        "type": "object"
+      },
+      "ApprovedModelsRequest": {
+        "additionalProperties": false,
+        "description": "Replaces the organization's whole list. `version` is the version the caller read: a changed list is refused (409), not overwritten.",
+        "properties": {
+          "confirm": {
+            "default": false,
+            "description": "Required to clear the list, which turns the check off.",
+            "title": "Confirm",
+            "type": "boolean"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ApprovedModel"
+            },
+            "maxItems": 50,
+            "title": "Items",
+            "type": "array"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "version": {
+            "minimum": 0.0,
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "version"
+        ],
+        "title": "ApprovedModelsRequest",
+        "type": "object"
+      },
+      "ApprovedModelsResponse": {
+        "properties": {
+          "changed": {
+            "default": false,
+            "title": "Changed",
+            "type": "boolean"
+          },
+          "check_active": {
+            "title": "Check Active",
+            "type": "boolean"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ApprovedModel"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "max_items": {
+            "default": 50,
+            "title": "Max Items",
+            "type": "integer"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "version",
+          "check_active"
+        ],
+        "title": "ApprovedModelsResponse",
+        "type": "object"
+      },
       "BehaviourBacktestView": {
         "properties": {
           "flagged_hours": {
@@ -1845,7 +1946,8 @@
               "injection",
               "output",
               "loop",
-              "destination"
+              "destination",
+              "model"
             ],
             "title": "Kind",
             "type": "string"
@@ -4873,7 +4975,7 @@
             "type": "string"
           },
           "rule_id": {
-            "pattern": "^RAD-(INJ|OUT|LOOP|DST)-[0-9]{3}$",
+            "pattern": "^RAD-(INJ|OUT|LOOP|DST|MDL)-[0-9]{3}$",
             "title": "Rule Id",
             "type": "string"
           }
@@ -7451,7 +7553,7 @@
             "schema": {
               "anyOf": [
                 {
-                  "pattern": "^(injection|output|loop|destination)$",
+                  "pattern": "^(injection|output|loop|destination|model)$",
                   "type": "string"
                 },
                 {
@@ -7468,7 +7570,7 @@
             "schema": {
               "anyOf": [
                 {
-                  "pattern": "^RAD-(INJ|OUT|LOOP|DST)-[0-9]{3}$",
+                  "pattern": "^RAD-(INJ|OUT|LOOP|DST|MDL)-[0-9]{3}$",
                   "type": "string"
                 },
                 {
@@ -8927,6 +9029,144 @@
         "summary": "Approve All Tool Pins",
         "tags": [
           "Tool pinning"
+        ]
+      }
+    },
+    "/v1/organization/approved-models": {
+      "get": {
+        "operationId": "get_approved_models_v1_organization_approved_models_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-RedHand-Org",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Redhand-Org"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApprovedModelsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Approved Models",
+        "tags": [
+          "Approved models"
+        ]
+      },
+      "put": {
+        "operationId": "put_approved_models_v1_organization_approved_models_put",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-RedHand-Org",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Redhand-Org"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ApprovedModelsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApprovedModelsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Put Approved Models",
+        "tags": [
+          "Approved models"
         ]
       }
     },

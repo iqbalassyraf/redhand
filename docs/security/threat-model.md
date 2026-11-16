@@ -127,6 +127,8 @@
 | Agent or leaked SDK key reports false model use (hides spend, or floods the roll-up) (B4a) | Numbers are labelled "estimated from what the agent's SDK reported" and never used to refuse; per agent and day at most 50 distinct models (rest folded into "(other)"), 35-day window, future spans count as now, token counts above 1,000,000,000 per side ignored, sums capped on read; roll-up holds counts and model names only (no prompt, completion or thought text) | An SDK key can name any agent of its organization, and an SDK that under-reports shows less: spend is not authoritative until a proxy (B5) exists |
 | Model or provider names from an agent shown in the dashboard or chat (B4a) | Names are length-bounded (64 and 128) and shown as plain text only (control and bidirectional characters replaced, React escapes markup); alerts carry the agent's registered name and counts, never a model name | None known |
 | Spend limit relaxed to silence alerts (B4a) | Admin only, audited, confirmation to raise or remove, compare-and-set against the state the decision was made on | An admin can still turn the alert off |
+| Approved-model list weakened or cleared to hide an unapproved model (B4b) | Admin only, audited, compare-and-set on a version, clearing needs confirmation; at most 50 entries of plain names | An admin can still clear it |
+| A hostile model name reaches the dashboard or a chat through a RAD-MDL-001 finding (B4b) | The database reduces names to `[a-z0-9_.:/-]` and 128 characters before storing; the dashboard renders text only; alerts carry the stored name | None known |
 
 ## 3. Out of scope so far
 Local stdio MCP servers, non-MCP REST APIs, LLM API spend (Budget Guard, Phase 2), honeytokens and

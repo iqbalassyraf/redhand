@@ -26,3 +26,10 @@ refuses a call because of spend.
 - At most 50 distinct models per agent and day; extra ones appear as "(other)".
 - Metrics: `spend_checks_total{outcome}`, `spend_alerts_total`, `spend_unpriced_models_total` (no model names in labels).
 - Rollback: `supabase/rollbacks/20261125000000_model_spend.down.sql` (loses the roll-up and every dollar limit; spans are untouched).
+
+## Approved models (B4b)
+- **Radar page, "Approved models":** an admin lists models, one `provider/model` per line (at most 50). With a non-empty list, a model an agent's SDK reports that is not on it is a finding "Model not on the approved list" (rule `RAD-MDL-001`) and one Telegram message starting "Model alert:" per agent per 10 minutes. An empty list means no check. It never refuses a call and adds nothing to the Risk score.
+- **A dated id of an approved model is approved** (`claude-sonnet-5-5-20260301` for `claude-sonnet-5-5`). Spelling and case do not matter.
+- **Too many alerts?** Add the model to the list, or silence `RAD-MDL-001` for one agent (Radar, silences). Findings still list under kind "Model not on the approved list".
+- **No finding although a model is not listed?** The list may be empty (check off); the agent's SDK may not report a model; the agent may have a live silence; check `model_checks_total{outcome=...}` and the core log `Approved-model check failed`.
+- Metrics: `model_checks_total{outcome}`, `model_findings_total`, `model_alerts_total` (no model names in labels). Rollback: `supabase/rollbacks/20261126000000_approved_models.down.sql` (loses the lists and deletes model findings).

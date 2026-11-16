@@ -186,6 +186,15 @@ PROMISES = [
     ("Limit saved.", "apps/redhand-ui/src/app/passports/SpendPanel.tsx"),
     ("Spend alert:", "services/redhand-core/src/redhand_core/spend/service.py"),
     ("Nothing was refused: RedHand does not stop model calls.", "services/redhand-core/src/redhand_core/spend/service.py"),
+    # Part P (approved models)
+    ("Check is off: no list, nothing is flagged.", "apps/redhand-ui/src/app/radar/ApprovedModelsCard.tsx"),
+    ("Approved models saved.", "apps/redhand-ui/src/app/radar/ApprovedModelsCard.tsx"),
+    ("Save approved models", "apps/redhand-ui/src/app/radar/ApprovedModelsCard.tsx"),
+    ("Model not on the approved list", "apps/redhand-ui/src/app/radar/page.tsx"),
+    ("Clearing the list turns the check off: no model will be flagged. Continue?", "apps/redhand-ui/src/lib/approvedModels.ts"),
+    ("An agent's SDK reported a model that is not on the approved list.", "apps/redhand-ui/src/lib/radarRules.ts"),
+    ("Model alert:", "services/redhand-core/src/redhand_core/approved/service.py"),
+    ("Recorded only: nothing was refused.", "services/redhand-core/src/redhand_core/approved/service.py"),
 ]
 
 
