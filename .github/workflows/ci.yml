@@ -35,7 +35,7 @@ jobs:
       sql: ${{ steps.areas.outputs.sql }}
       dashboard: ${{ steps.areas.outputs.dashboard }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
@@ -60,7 +60,7 @@ jobs:
             git diff --name-only "$base" HEAD | python3 scripts/ci_changes.py | tee -a "$GITHUB_OUTPUT"
           fi
 
-      - uses: astral-sh/setup-uv@v5
+      - uses: astral-sh/setup-uv@v7
         with:
           version: "0.11.32"
           enable-cache: true
@@ -80,9 +80,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: astral-sh/setup-uv@v5
+      - uses: astral-sh/setup-uv@v7
         with:
           version: "0.11.32"
           enable-cache: true
@@ -134,7 +134,7 @@ jobs:
       PGUSER: postgres
       PGPASSWORD: postgres
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Apply migrations, run SQL tests, roll back and re-apply
         run: scripts/test_migrations.sh
@@ -149,9 +149,9 @@ jobs:
       run:
         working-directory: apps/redhand-ui
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: "22"
           cache: npm
@@ -168,7 +168,7 @@ jobs:
         run: npx tsc --noEmit
 
       # Next.js reuses compiled output between builds; the key changes with the lockfile and the sources, older caches are a fallback.
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         with:
           path: apps/redhand-ui/.next/cache
           key: next-${{ hashFiles('apps/redhand-ui/package-lock.json') }}-${{ hashFiles('apps/redhand-ui/src/**') }}
