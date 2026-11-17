@@ -110,17 +110,30 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         await downscoper.aclose()
 
 
+def api_docs_urls(environment: str) -> dict[str, str | None]:
+    """Where FastAPI serves /docs, /redoc and /openapi.json: nowhere in production, the defaults elsewhere."""
+    if environment == "production":
+        return {"docs_url": None, "redoc_url": None, "openapi_url": None}
+    return {"docs_url": "/docs", "redoc_url": "/redoc", "openapi_url": "/openapi.json"}
+
+
 def create_app(settings: Settings | None = None) -> FastAPI:
     """
     Constructs and configures the production FastAPI instance for `redhand-core`.
     """
     active_settings = settings or get_settings()
+    docs_urls = api_docs_urls(active_settings.ENVIRONMENT)
 
     app = FastAPI(
         title=active_settings.APP_NAME,
         description="Agentic Security Posture Management (ASPM) & Runtime Protection Engine",
         version=active_settings.APP_VERSION,
         lifespan=lifespan,
+        # Production serves no interactive API pages or schema: they are not secret (the repository is public), but a stranger has no need to browse the routes.
+        # The schema is still generated from code for docs/api (app.openapi() does not need the URL).
+        docs_url=docs_urls["docs_url"],
+        redoc_url=docs_urls["redoc_url"],
+        openapi_url=docs_urls["openapi_url"],
     )
 
     async def _provide_supabase_service_client(request: Request) -> Any:
