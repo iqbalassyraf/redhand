@@ -9,7 +9,9 @@ import {
   basisLine,
   dollarsInput,
   formatTokens,
+  MEASURED_BASIS,
   limitNeedsConfirmation,
+  measuredLine,
   modelCost,
   parseDollars,
   shownModel,
@@ -119,4 +121,47 @@ test("a tiered model's figure is shown as a floor and the tone follows the limit
   assert.equal(spendCell(agent({ percent_of_limit: 80 })).tone, "warn");
   assert.equal(spendCell(agent({ percent_of_limit: 100 })).tone, "alert");
   assert.equal(spendCell(agent({ percent_of_limit: null })).tone, "ok");
+});
+
+// --- measured by the model proxy (B5b) -------------------------------------------------------------------------------------------------
+
+const measured = (over = {}) => ({
+  calls: 4, calls_without_usage: 0, prompt_tokens: 3000, completion_tokens: 1000, estimated_micro_usd: 3_000_000, estimated_text: "$3.00",
+  lower_bound: false, unpriced_tokens: 0, unpriced_models: [], models: [], ...over,
+});
+
+test("no proxy traffic means no measured line at all, not a zero", () => {
+  assert.equal(measuredLine(agent({ measured: null, measured_unavailable: false })), null);
+  assert.equal(measuredLine(agent({})), null, "an older core has no measured field");
+});
+
+test("a measured figure says it was measured by RedHand and keeps tokens and calls beside it", () => {
+  const line = measuredLine(agent({ measured: measured() }));
+  assert.equal(line.headline, "$3.00 measured by RedHand");
+  assert.match(line.detail, /4,000 tokens/);
+  assert.match(line.detail, /4 calls/);
+});
+
+test("calls the provider gave no usage for are said out loud, never counted as free", () => {
+  const line = measuredLine(agent({ measured: measured({ calls: 5, calls_without_usage: 2 }) }));
+  assert.match(line.detail, /2 calls with no usage reported/);
+});
+
+test("an unknown price is price unknown, and a tiered model is a floor", () => {
+  assert.equal(measuredLine(agent({ measured: measured({ estimated_micro_usd: 0, estimated_text: "$0.00", unpriced_tokens: 900 }) })).headline, "price unknown, measured by RedHand");
+  assert.equal(measuredLine(agent({ measured: measured({ lower_bound: true }) })).headline, "at least $3.00 measured by RedHand");
+  assert.match(measuredLine(agent({ measured: measured({ unpriced_tokens: 900 }) })).detail, /plus 900 tokens with no known price/);
+});
+
+test("a measured read that failed says so and points at the reported figure", () => {
+  const line = measuredLine(agent({ measured: null, measured_unavailable: true }));
+  assert.equal(line.headline, "measured usage could not be read");
+  assert.match(line.detail, /reported figure is unaffected/);
+});
+
+test("the basis text says what measured means and that it is never added to the reported number", () => {
+  assert.match(MEASURED_BASIS, /provider reported/);
+  assert.match(MEASURED_BASIS, /off by default/);
+  assert.match(MEASURED_BASIS, /never added/);
+  assert.doesNotMatch(MEASURED_BASIS, /guarantee|protect/i);
 });

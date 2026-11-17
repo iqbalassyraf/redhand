@@ -19,6 +19,20 @@ export interface ModelUse {
   lower_bound: boolean;
 }
 
+/** What the model proxy measured (B5b): the provider's own token counts for calls that went through RedHand. Apart from the reported figures, never added to them. */
+export interface MeasuredSpend {
+  calls: number;
+  calls_without_usage: number;
+  prompt_tokens: number;
+  completion_tokens: number;
+  estimated_micro_usd: number;
+  estimated_text: string;
+  lower_bound: boolean;
+  unpriced_tokens: number;
+  unpriced_models: string[];
+  models: ModelUse[];
+}
+
 export interface AgentSpend {
   agent_id: string;
   name: string;
@@ -36,6 +50,8 @@ export interface AgentSpend {
   spend_limit_text: string | null;
   percent_of_limit: number | null;
   models: ModelUse[];
+  measured?: MeasuredSpend | null; // absent on an older core
+  measured_unavailable?: boolean;
 }
 
 export interface SpendToday {
@@ -149,4 +165,27 @@ export function spendCell(view: AgentSpend | undefined): SpendCell {
   const limit = view.percent_of_limit;
   const tone = limit === null ? "ok" : limit >= 100 ? "alert" : limit >= 80 ? "warn" : "ok";
   return { headline, detail: `${tokens}${unknown}`, tone };
+}
+
+export const MEASURED_BASIS =
+  "Measured by RedHand's model proxy from the token counts the provider reported for calls that went through it. The proxy is off by default, and calls that do not go through it " +
+  "appear only in the reported figure above. The two are never added together.";
+
+export interface MeasuredLine {
+  headline: string;
+  detail: string;
+}
+
+/** The "measured by RedHand" line under an agent's reported figure, or null when the proxy measured nothing (never a zero). */
+export function measuredLine(view: AgentSpend): MeasuredLine | null {
+  if (view.measured_unavailable) return { headline: "measured usage could not be read", detail: "the reported figure is unaffected" };
+  const m = view.measured;
+  if (!m) return null;
+  const priced = m.estimated_micro_usd > 0 || m.unpriced_tokens === 0;
+  const amount = priced ? (m.lower_bound ? `at least ${m.estimated_text}` : m.estimated_text) : "price unknown";
+  const headline = priced ? `${amount} measured by RedHand` : `${amount}, measured by RedHand`;
+  const parts = [`${formatTokens(m.prompt_tokens + m.completion_tokens)} tokens`, `${m.calls} calls`];
+  if (m.calls_without_usage > 0) parts.push(`${m.calls_without_usage} calls with no usage reported`);
+  if (priced && m.unpriced_tokens > 0) parts.push(`plus ${formatTokens(m.unpriced_tokens)} tokens with no known price`);
+  return { headline, detail: parts.join(" · ") };
 }

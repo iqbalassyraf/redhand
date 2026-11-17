@@ -1773,6 +1773,88 @@ def spend_rollup_statement(store: LocalSupabaseAdapter, new_rows: list[dict[str,
         target["completion_tokens"] += completion
 
 
+MEASURED_MAX_ROWS = 500
+MEASURED_BATCH_RETENTION = timedelta(days=7)
+
+
+def _record_model_usage(store: LocalSupabaseAdapter, p: dict[str, Any]) -> dict[str, Any]:
+    """Emulates record_model_usage() of supabase/migrations/20261201000000_model_measured_usage.sql: batch ids make a resent batch count once, the organization comes from the
+    agent's own row, a bad row is rejected on its own, the day uses the organization's offset (future counts as now, over 35 days old is dropped), 50 models per agent and day."""
+    batch, rows = p.get("p_batch"), p.get("p_rows")
+    if not batch or not isinstance(rows, list):
+        raise _error("22023", "a batch id and an array of rows are required")
+    if len(rows) > MEASURED_MAX_ROWS:
+        raise _error("22023", "at most 500 rows in one batch")
+    batches = store.tables.setdefault("model_usage_batches", [])
+    if any(b["batch_id"] == str(batch) for b in batches):
+        return {"accepted": 0, "rejected": 0, "duplicate": True}
+    batches.append({"batch_id": str(batch), "received_at": datetime.now(timezone.utc).isoformat()})
+    now = datetime.now(timezone.utc)
+    agents = {str(a["id"]): a for a in store.tables.get("agents", [])}
+    offsets = {str(o["id"]): int(o.get("utc_offset_minutes", 480)) for o in store.tables.get("organizations", [])}
+
+    def whole(value: Any, low: int, high: int) -> int | None:
+        return value if isinstance(value, int) and not isinstance(value, bool) and low <= value <= high else None
+
+    groups: dict[tuple[str, str, date, str, str], list[int]] = {}
+    accepted = 0
+    for row in rows:
+        agent = agents.get(str(row.get("agent_id")))
+        model = str(row.get("model") or "").strip(" ")[:128].lower()
+        calls, vp, vc = whole(row.get("calls"), 1, 10**9 - 1), whole(row.get("input_tokens"), 0, 10**15 - 1), whole(row.get("output_tokens"), 0, 10**15 - 1)
+        nu = whole(row.get("calls_without_usage", 0), 0, 10**9 - 1) or 0
+        try:
+            at = _parse_ts(row["occurred_at"])
+        except (KeyError, ValueError, TypeError):
+            at = None
+        if agent is None or not model or calls is None or vp is None or vc is None or at is None or at <= now - SPEND_WINDOW:
+            continue
+        org = str(agent["organization_id"])
+        day = (min(at, now).astimezone(timezone.utc) + timedelta(minutes=offsets.get(org, 480))).date()
+        provider = str(row.get("provider") or "").strip(" ")[:64].lower()
+        total = groups.setdefault((org, str(agent["id"]), day, provider, model), [0, 0, 0, 0, 0])
+        total[0] += calls
+        total[1] += vp
+        total[2] += vc
+        total[3] += nu
+        total[4] += 1
+        accepted += 1
+    table = store.tables.setdefault("agent_model_measured_daily", [])
+    for (org, agent_id, day, provider, model), (calls, vp, vc, nu, _n) in sorted(groups.items(), key=lambda kv: kv[0][1:]):
+        def find(prov: str, mod: str) -> dict[str, Any] | None:
+            return next((r for r in table if r["agent_id"] == agent_id and r["day"] == day.isoformat() and r["provider"] == prov and r["model"] == mod), None)
+
+        target = find(provider, model)
+        if target is None and sum(1 for r in table if r["agent_id"] == agent_id and r["day"] == day.isoformat() and r["model"] != "(other)") >= SPEND_MAX_MODELS_PER_DAY:
+            provider, model = "", "(other)"
+            target = find(provider, model)
+        if target is None:
+            target = {"organization_id": org, "agent_id": agent_id, "day": day.isoformat(), "provider": provider, "model": model,
+                      "calls": 0, "prompt_tokens": 0, "completion_tokens": 0, "calls_without_usage": 0}
+            table.append(target)
+        target["calls"] += calls
+        target["prompt_tokens"] += vp
+        target["completion_tokens"] += vc
+        target["calls_without_usage"] += nu
+    return {"accepted": accepted, "rejected": len(rows) - accepted, "duplicate": False}
+
+
+def _agent_model_measured_usage(store: LocalSupabaseAdapter, p: dict[str, Any]) -> list[dict[str, Any]]:
+    org, only = str(p["p_org"]), (str(p["p_agent"]) if p.get("p_agent") else None)
+    since, until = date.fromisoformat(str(p["p_since"])), date.fromisoformat(str(p["p_until"]))
+    rows = [
+        r for r in store.tables.get("agent_model_measured_daily", [])
+        if r["organization_id"] == org and (only is None or r["agent_id"] == only) and since <= date.fromisoformat(r["day"]) <= until
+    ]
+    rows.sort(key=lambda r: (r["agent_id"], r["day"], r["provider"], r["model"]))
+    return [
+        {"agent_id": r["agent_id"], "day": r["day"], "provider": r["provider"], "model": r["model"], "calls": r["calls"],
+         "prompt_tokens": min(r["prompt_tokens"], SPEND_READ_CAP), "completion_tokens": min(r["completion_tokens"], SPEND_READ_CAP),
+         "calls_without_usage": r["calls_without_usage"]}
+        for r in rows
+    ]
+
+
 def _agent_model_usage(store: LocalSupabaseAdapter, p: dict[str, Any]) -> list[dict[str, Any]]:
     org, only = str(p["p_org"]), (str(p["p_agent"]) if p.get("p_agent") else None)
     since, until = date.fromisoformat(str(p["p_since"])), date.fromisoformat(str(p["p_until"]))
@@ -2331,6 +2413,8 @@ HANDLERS: dict[str, RpcHandler] = {
     "control_member_remove": _control_member_remove,
     "control_member_set_role": _control_member_set_role,
     "list_organization_members": _list_organization_members,
+    "record_model_usage": _record_model_usage,
+    "agent_model_measured_usage": _agent_model_measured_usage,
     "control_org_export": _control_org_export,
     "control_org_request_deletion": _control_org_request_deletion,
     "control_org_cancel_deletion": _control_org_cancel_deletion,

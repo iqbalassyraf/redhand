@@ -20,6 +20,7 @@ MANIFEST: Final[tuple[tuple[str, Scope, tuple[str, ...]], ...]] = (
     ("agent_budget_state", "agent", ()),
     ("agent_usage_daily", "org", ()),
     ("agent_model_daily", "org", ()),
+    ("agent_model_measured_daily", "org", ()),
     ("agent_tool_hourly", "org", ()),
     ("agent_events", "org", ()),
     ("event_batches", "org", ()),

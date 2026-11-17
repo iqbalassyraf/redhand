@@ -6,6 +6,10 @@ Model spend (Phase 4.5 B4a, ADR 0023): what each agent's SDK reported, as an est
 - PUT /v1/passports/{id}/spend-limit admin: set, lower, raise or remove the agent's limit (audited; raising or removing needs "confirm")
 
 Numbers are self-reported by the agent's SDK and are never used to refuse a call.
+
+Measured usage (B5b, ADR 0025): the gateway's model proxy (off by default) reports what the PROVIDER counted.
+- POST /internal/v1/model-usage     gateway -> core, service token only: a batch of at most 500 aggregates; idempotent per batch id; the tenant comes from each agent's own row
+The spend views carry it as `measured`, apart from the reported figures.
 """
 
 from __future__ import annotations
@@ -19,7 +23,15 @@ from redhand_core.auth.operator import AdminDep, ViewerDep
 from redhand_core.passports.models import utcnow
 from redhand_core.routers.telemetry import get_supabase_service_client
 from redhand_core.spend import service
-from redhand_core.spend.models import AgentSpendDetailResponse, SpendLimitRequest, SpendLimitResponse, SpendTodayResponse
+from redhand_core.routers.agent_auth import require_internal_service
+from redhand_core.spend.models import (
+    AgentSpendDetailResponse,
+    ModelUsageBatch,
+    ModelUsageBatchResponse,
+    SpendLimitRequest,
+    SpendLimitResponse,
+    SpendTodayResponse,
+)
 
 router = APIRouter(tags=["Model spend"])
 
@@ -40,3 +52,8 @@ async def get_agent_spend(agent_id: UUID, operator: ViewerDep, supabase: Supabas
 async def set_spend_limit(agent_id: UUID, payload: SpendLimitRequest, operator: AdminDep, supabase: SupabaseDep) -> SpendLimitResponse:
     limit, changed = await service.set_limit(supabase, operator, agent_id, payload.spend_limit_micro_usd, payload.reason, payload.confirm)
     return SpendLimitResponse(agent_id=agent_id, spend_limit_micro_usd=limit, changed=changed)
+
+
+@router.post("/internal/v1/model-usage", response_model=ModelUsageBatchResponse, dependencies=[Depends(require_internal_service)], include_in_schema=False)
+async def post_model_usage(batch: ModelUsageBatch, supabase: SupabaseDep) -> ModelUsageBatchResponse:
+    return await service.record_measured(supabase, batch)

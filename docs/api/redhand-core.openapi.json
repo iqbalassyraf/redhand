@@ -446,6 +446,21 @@
             "title": "Lower Bound",
             "type": "boolean"
           },
+          "measured": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MeasuredSpendView"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "measured_unavailable": {
+            "default": false,
+            "title": "Measured Unavailable",
+            "type": "boolean"
+          },
           "models": {
             "items": {
               "$ref": "#/components/schemas/ModelUseView"
@@ -3561,6 +3576,71 @@
           "role"
         ],
         "title": "MeResponse",
+        "type": "object"
+      },
+      "MeasuredSpendView": {
+        "description": "What the model proxy measured for one agent today, from the provider's own token counts. Kept apart from the SDK-reported figures and never added to them.",
+        "properties": {
+          "calls": {
+            "title": "Calls",
+            "type": "integer"
+          },
+          "calls_without_usage": {
+            "title": "Calls Without Usage",
+            "type": "integer"
+          },
+          "completion_tokens": {
+            "title": "Completion Tokens",
+            "type": "integer"
+          },
+          "estimated_micro_usd": {
+            "title": "Estimated Micro Usd",
+            "type": "integer"
+          },
+          "estimated_text": {
+            "title": "Estimated Text",
+            "type": "string"
+          },
+          "lower_bound": {
+            "title": "Lower Bound",
+            "type": "boolean"
+          },
+          "models": {
+            "items": {
+              "$ref": "#/components/schemas/ModelUseView"
+            },
+            "title": "Models",
+            "type": "array"
+          },
+          "prompt_tokens": {
+            "title": "Prompt Tokens",
+            "type": "integer"
+          },
+          "unpriced_models": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Unpriced Models",
+            "type": "array"
+          },
+          "unpriced_tokens": {
+            "title": "Unpriced Tokens",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "calls",
+          "calls_without_usage",
+          "prompt_tokens",
+          "completion_tokens",
+          "estimated_micro_usd",
+          "estimated_text",
+          "lower_bound",
+          "unpriced_tokens",
+          "unpriced_models",
+          "models"
+        ],
+        "title": "MeasuredSpendView",
         "type": "object"
       },
       "MemberList": {

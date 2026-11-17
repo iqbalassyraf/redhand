@@ -33,3 +33,13 @@ refuses a call because of spend.
 - **Too many alerts?** Add the model to the list, or silence `RAD-MDL-001` for one agent (Radar, silences). Findings still list under kind "Model not on the approved list".
 - **No finding although a model is not listed?** The list may be empty (check off); the agent's SDK may not report a model; the agent may have a live silence; check `model_checks_total{outcome=...}` and the core log `Approved-model check failed`.
 - Metrics: `model_checks_total{outcome}`, `model_findings_total`, `model_alerts_total` (no model names in labels). Rollback: `supabase/rollbacks/20261126000000_approved_models.down.sql` (loses the lists and deletes model findings).
+
+## Measured usage from the model proxy (B5b, off unless the proxy is on)
+- **What it is:** the tokens the provider reported for calls that went through RedHand's model proxy, shown as "measured by RedHand" beside the SDK-reported figure. Stored in `agent_model_measured_daily`; never added to the reported figure.
+- **No measured line for an agent:** the proxy never saw a call for it today. That is normal and is not a zero.
+- **"measured usage could not be read":** core's read of the measured table failed; the reported figure is unaffected. Check core logs for "Measured spend could not be read" and that migration `20261201000000_model_measured_usage` is applied.
+- **Measured figures are missing though the proxy is on:** the gateway reports in the background. `curl` the gateway's `/metrics` (service token): `agentwall_model_usage_failed_batches_total` rising means core is refusing or unreachable
+  (check `AGENTWALL_CORE_URL` and `AGENTWALL_CORE_SERVICE_TOKEN` equal core's `INTERNAL_SERVICE_TOKEN`); `agentwall_model_usage_dropped_total{reason="refused"}` means core answered a 4xx (a token or version mismatch);
+  `{reason="overflow"}` means more distinct agent-and-model pairs than the memory bound during an outage; `{reason="not_configured"}` means no service token is set on the gateway.
+- **Purge:** `purge_model_measured()` (daily 19:57 UTC when pg_cron exists, else schedule it yourself) keeps 90 days of usage and 7 days of batch ids.
+

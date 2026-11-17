@@ -13,6 +13,13 @@ Both tools work on RedHand and its demo projects. This file is how each learns w
 
 ---
 
+
+## 2026-11-17, Claude Code: B5b measured model usage (branch feat/b5b-measured-usage)
+- **Built:** migration `20261201000000_model_measured_usage` (+ rollback, SQL test: 25 checks, 9 of 9 deliberate breakages caught), core `POST /internal/v1/model-usage` and `measured` on the spend views, twin handlers, gateway `ReportingUsageSink` (32 tests, 9 of 9 breakages caught), dashboard line, tenant manifest entry.
+- **Verified locally:** a real-browser run 22/22 (owner and viewer, 1280 and 375 px) against a local core seeded through the real route; a contract test that the gateway's own reporter posts to the real core app.
+- **Not verified:** a real provider, Cloud Run, the gateway reporting to the staging core (the proxy is off there and refused in production). Nothing to run on staging: the migration can wait for the next deploy (core and gateway tolerate its absence only when the proxy is off; apply it before turning the proxy on in staging).
+- **Next:** B5c (refuse over the daily dollar limit from the measured figure), then B5d papers.
+
 ## 2026-11-17, Claude Code: B5 model-proxy prototype (branch feat/b5-model-proxy-prototype, DRAFT PR, not approved)
 - **Built:** `agentwall/src/gateway/model_proxy.py` (flagged off; route absent unless `AGENTWALL_MODEL_PROXY_ENABLED`), 53 tests against a fake provider, `examples/fake_model_provider.py`, `scripts/benchmark_model_proxy.py`, ADR 0025 (Proposed) with the go/no-go table, measurements in `docs/security/measurements/2026-11-17-model-proxy-prototype.md`.
 - **Measured (local, fake provider):** about 2 to 3 ms added per non-stream call (p99 under 10 ms), about 7 ms to a stream's first byte, event gaps unchanged, stream byte-identical, 100 concurrent streams no errors (+7 MB).

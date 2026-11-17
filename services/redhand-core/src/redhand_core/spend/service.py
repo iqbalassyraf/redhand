@@ -27,6 +27,9 @@ from redhand_core.spend.models import (
     AgentSpendDetailResponse,
     AgentSpendView,
     DaySpendView,
+    MeasuredSpendView,
+    ModelUsageBatch,
+    ModelUsageBatchResponse,
     ModelUseView,
     SpendTodayResponse,
 )
@@ -70,6 +73,48 @@ async def read_usage(supabase: Any, organization_id: UUID, agent_id: UUID | None
     return list(res.data or [])
 
 
+async def read_measured(supabase: Any, organization_id: UUID, agent_id: UUID | None, since: date, until: date) -> list[dict[str, Any]] | None:
+    """Rows the model proxy measured. None means "could not be read" (shown as such, with the reported figures intact), never an empty list standing in for zero."""
+    try:
+        res = await supabase.rpc(
+            "agent_model_measured_usage",
+            {"p_org": str(organization_id), "p_agent": str(agent_id) if agent_id else None, "p_since": since.isoformat(), "p_until": until.isoformat()},
+        ).execute()
+    except Exception as exc:  # noqa: BLE001  any failure, whatever the driver raised, must be shown as "could not be read"
+        logger.error("Measured spend could not be read: %s", type(exc).__name__)
+        return None
+    return list(res.data or [])
+
+
+async def record_measured(supabase: Any, batch: ModelUsageBatch) -> ModelUsageBatchResponse:
+    """Hands the gateway's batch to the database function. The tenant is decided there from each agent's own row; a failure is a plain 503 (the gateway retries the same batch id)."""
+    rows = [
+        {"agent_id": str(i.agent_id), "provider": i.provider, "model": i.model, "calls": i.calls, "input_tokens": i.input_tokens, "output_tokens": i.output_tokens,
+         "calls_without_usage": i.calls_without_usage, "occurred_at": i.occurred_at.isoformat()}
+        for i in batch.items
+    ]
+    try:
+        res = await supabase.rpc("record_model_usage", {"p_batch": str(batch.batch_id), "p_rows": rows}).execute()
+    except Exception as exc:  # noqa: BLE001
+        logger.error("Measured usage could not be recorded: %s", type(exc).__name__)
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "Usage could not be recorded.") from None
+    data = res.data
+    return ModelUsageBatchResponse(accepted=int(data["accepted"]), rejected=int(data["rejected"]), duplicate=bool(data["duplicate"]))
+
+
+def _measured_view(rows: list[dict[str, Any]]) -> MeasuredSpendView | None:
+    if not rows:
+        return None
+    est = estimate(_usage(rows))
+    models = sorted((_model_view(r) for r in rows), key=lambda m: (-(m.estimated_micro_usd or 0), -m.prompt_tokens, m.provider, m.model))
+    return MeasuredSpendView(
+        calls=est.calls, calls_without_usage=sum(int(r.get("calls_without_usage") or 0) for r in rows),
+        prompt_tokens=sum(int(r["prompt_tokens"]) for r in rows), completion_tokens=sum(int(r["completion_tokens"]) for r in rows),
+        estimated_micro_usd=est.micro_usd, estimated_text=format_dollars(est.micro_usd), lower_bound=est.lower_bound,
+        unpriced_tokens=est.unpriced_tokens, unpriced_models=list(est.unpriced_models), models=models,
+    )
+
+
 def _usage(rows: Iterable[Mapping[str, Any]]) -> list[Usage]:
     return [Usage(str(r["provider"]), str(r["model"]), int(r["calls"]), int(r["prompt_tokens"]), int(r["completion_tokens"])) for r in rows]
 
@@ -86,7 +131,7 @@ def _model_view(row: Mapping[str, Any]) -> ModelUseView:
     )
 
 
-def _agent_view(agent: Mapping[str, Any], rows: list[dict[str, Any]]) -> AgentSpendView:
+def _agent_view(agent: Mapping[str, Any], rows: list[dict[str, Any]], measured_rows: list[dict[str, Any]] | None = None, measured_unavailable: bool = False) -> AgentSpendView:
     est = estimate(_usage(rows))
     limit = agent.get("spend_limit_micro_usd")
     limit = limit if isinstance(limit, int) and not isinstance(limit, bool) and limit >= 1 else None
@@ -98,6 +143,7 @@ def _agent_view(agent: Mapping[str, Any], rows: list[dict[str, Any]]) -> AgentSp
         unpriced_tokens=est.unpriced_tokens, unpriced_models=list(est.unpriced_models),
         spend_limit_micro_usd=limit, spend_limit_text=format_dollars(limit) if limit else None,
         percent_of_limit=None if limit is None else min(999, est.micro_usd * 100 // limit), models=models,
+        measured=_measured_view(measured_rows or []), measured_unavailable=measured_unavailable,
     )
 
 
@@ -108,9 +154,13 @@ async def list_today(supabase: Any, operator: OperatorContext, now: datetime) ->
     by_agent: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for row in await read_usage(supabase, operator.organization_id, None, day, day):
         by_agent[str(row["agent_id"])].append(row)
+    measured = await read_measured(supabase, operator.organization_id, None, day, day)
+    measured_by_agent: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for row in measured or []:
+        measured_by_agent[str(row["agent_id"])].append(row)
     return SpendTodayResponse(
         day=day, resets_at=budget_rules.next_reset_utc(now, offset), utc_offset_minutes=offset, prices_as_of=PRICES_AS_OF_TEXT, basis=BASIS,
-        agents=[_agent_view(a, by_agent.get(str(a["id"]), [])) for a in agents],
+        agents=[_agent_view(a, by_agent.get(str(a["id"]), []), measured_by_agent.get(str(a["id"]), []), measured is None) for a in agents],
     )
 
 
@@ -131,7 +181,10 @@ async def agent_detail(supabase: Any, operator: OperatorContext, agent_id: UUID,
             day=day, usage_reported=bool(day_rows), calls=est.calls, estimated_micro_usd=est.micro_usd, estimated_text=format_dollars(est.micro_usd),
             lower_bound=est.lower_bound, unpriced_tokens=est.unpriced_tokens, models=[_model_view(r) for r in day_rows],
         ))
-    return AgentSpendDetailResponse(prices_as_of=PRICES_AS_OF_TEXT, basis=BASIS, agent=_agent_view(agent, by_day.get(today, [])), days=days)
+    measured = await read_measured(supabase, operator.organization_id, agent_id, today, today)
+    return AgentSpendDetailResponse(
+        prices_as_of=PRICES_AS_OF_TEXT, basis=BASIS, agent=_agent_view(agent, by_day.get(today, []), measured or [], measured is None), days=days,
+    )
 
 
 # --- the limit ----------------------------------------------------------------------------------------------------------------------
