@@ -13,6 +13,15 @@ Both tools work on RedHand and its demo projects. This file is how each learns w
 
 ---
 
+## 2026-11-17, Claude Code: B5 model-proxy prototype (branch feat/b5-model-proxy-prototype, DRAFT PR, not approved)
+- **Built:** `agentwall/src/gateway/model_proxy.py` (flagged off; route absent unless `AGENTWALL_MODEL_PROXY_ENABLED`), 53 tests against a fake provider, `examples/fake_model_provider.py`, `scripts/benchmark_model_proxy.py`, ADR 0025 (Proposed) with the go/no-go table, measurements in `docs/security/measurements/2026-11-17-model-proxy-prototype.md`.
+- **Measured (local, fake provider):** about 2 to 3 ms added per non-stream call (p99 under 10 ms), about 7 ms to a stream's first byte, event gaps unchanged, stream byte-identical, 100 concurrent streams no errors (+7 MB).
+- **Deliberate breakages:** 12 mutants, 11 caught at once; the survivor (event-line cap) is now caught by a memory-bound test.
+- **Not built, and decisions for the owner:** per-tenant provider keys (envelope encryption), reporting usage to core's spend roll-up, content inspection (PDPA position), an uptime plan for in-path generation, other providers, customer pull. The ADR recommends a higher-tier or self-hosted feature, never Starter.
+- **To try it locally:** run core and the gateway as in the README, `AGENTWALL_MODEL_PROXY_ENABLED=true AGENTWALL_MODEL_PROXY_ANTHROPIC_KEY=<your key>`, give an agent a scope `model` / `<model id>`, set the SDK base URL to `<gateway>/v1/model/anthropic` and its token as the credential.
+
+## 2026-11-17, Claude Code: test day brief and the last product gaps (for Antigravity and the owner)
+
 
 ## 2026-11-17, Claude Code: database check of the test day results
 - Verified read-only on staging: the four migrations' objects exist, purge not executable by the service role, triggers and RLS on; Q11 rows present; no passport renamed.
