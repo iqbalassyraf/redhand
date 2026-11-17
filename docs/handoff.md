@@ -21,6 +21,33 @@ Both tools work on RedHand and its demo projects. This file is how each learns w
 - **To try it locally:** run core and the gateway as in the README, `AGENTWALL_MODEL_PROXY_ENABLED=true AGENTWALL_MODEL_PROXY_ANTHROPIC_KEY=<your key>`, give an agent a scope `model` / `<model id>`, set the SDK base URL to `<gateway>/v1/model/anthropic` and its token as the credential.
 
 ## 2026-11-17, Claude Code: test day brief and the last product gaps (for Antigravity and the owner)
+
+
+## 2026-11-17, Claude Code: database check of the test day results
+- Verified read-only on staging: the four migrations' objects exist, purge not executable by the service role, triggers and RLS on; Q11 rows present; no passport renamed.
+- Corrected the result file: 0.2 verified, Q11 PASS (partial), and a second active SDK key **`night-sdk`** that was missing from the staging-changes table. Revoke both `night-q` and `night-sdk` keys and the `night-sdk` agent during clean-up.
+- Launch-blocking steps still to run (my view): Site URL fix, Part R, Part S plus the purge rehearsal 7 days later, Q5 and Q9. Not blocking: Part T (moves to the production smoke run), Q6 to Q8, Q10, N7, O8, P5, P8.
+
+## 2026-11-17, Antigravity: Test day staging verification & report (branch docs/test-day-2026-11-18-results)
+- **Deployed & Verified on Staging (Part 0 & Part Q):**
+  - Git commit `8601fa7` on `main`.
+  - Migrations `20261127000000_sdk_keys`, `20261128000000_reported_only`, `20261129000000_onboarding`, and `20261130000000_tenant_lifecycle` applied cleanly in Supabase SQL editor by owner.
+  - Core deployed: `redhand-core-00034-fj7`; Gateway deployed: `redhand-gateway-00030-dq8`; Dashboard promoted on Vercel from `8601fa7`.
+  - Supabase Auth: email confirmation active; redirect allow-list verified (`https://redhand.archtificial.com/login`, `https://redhand.archtificial.com/**`).
+  - Smoke tests: `deploy/cloudrun/smoke.sh` 13/13 PASS; `scripts/smoke_launch.py` 33 pass, 2 expected warn (`/docs` and `/openapi.json` reachable on staging).
+  - Part Q (C1): Q1 (SDK key `night-q` created, masked as `rh_live_2pBu...` in UI table), Q3 (telemetry ingest for `night-sdk` -> HTTP 202, badge `reported by SDK` displayed on `/passports`), Q4 NOT RUN as written (sent for revoked `night-model`, got HTTP 403).
+- **Deferred by Owner Decision (to unblock active development):**
+  - Q5-Q12 (token exchange refusal for reported-only agent, promotion flow, SDK key revocation, cleanup).
+  - Part R (onboarding with two fresh email inboxes + invite link acceptance).
+  - Part S (organization export and deletion on throwaway tenant).
+  - Part T (gateway lookup timeout cold-start 20-min idle timing).
+  - Leftovers N7, O8, P8, P5. (P1-P4 approved models and Telegram alert confirmed working in previous session).
+- **Report Written:** `docs/testing/results/2026-11-18-test-day.md` committed on branch `docs/test-day-2026-11-18-results`.
+- **For Claude Code next:**
+  1. Check `control_audit_log` (read-only) for `sdk_key.created` for `night-q`, and `agents` table for `night-sdk` (`reported_only = true`).
+  2. With staging and migrations fully up to date on `main`, proceed with **B5 (Model-proxy prototype)**, the final Phase 4.5 feature.
+  3. Triage Dependabot PRs #73 and #74.
+
 - **Next run:** `docs/testing/briefs/2026-11-18-test-day.md` (about 2 hours): Part 0 deploy (four migrations `20261127` to `20261130`, core, gateway, dashboard, `smoke.sh` and `scripts/smoke_launch.py`), Part Q (C1, unchanged),
   Part R onboarding with two fresh e-mail addresses, Part S export and deletion on the throwaway "Night Test Org" only, Part T freeze timing and the first call after idle, leftovers N7, O8, P5, P8, clean-up.
   Every promised string and command is guarded by `agentwall/tests/test_test_day_brief.py`.

@@ -16,7 +16,7 @@ Nothing here is done unless it says so and names the evidence.
 | Production hosting and launch checks are undecided | Staging is not production | A decision recorded in `docs/briefing.md` and an ADR |
 | Blind round 4 not run; Radar stays Watch only (no block mode) | The false-alarm goal is not met on unseen text | `docs/security/m4-7b-results.md` updated after one scored round |
 | Examples and tests contain fake keys that the repo's own `redhand scan` flags (about a dozen test fixtures, `examples/`, `sts_downscoper.py`) | A CI secret gate would be noisy until they are built from pieces or allow-listed | A decision: allow-list file for the scan, or rebuild the fixtures |
-| GitHub Actions are not pinned to commit SHAs | Supply-chain risk | Pin when Dependabot's actions PR is merged (needs the action repositories' SHAs) |
+| ~~GitHub Actions are not pinned to commit SHAs~~ **Done 2026-11-17** (`chore/pin-actions-sha`): every action is pinned to the commit of its release tag, with the version as a comment | Supply-chain risk | Dependabot keeps SHA and comment in step |
 | The first model price table (Anthropic only) was approved on 2026-11-16 | Prices change; the 90-day test will fail on purpose | Re-read the provider page when the age test fails |
 
 ## 3. The pre-release pass (do all of it, in this order)

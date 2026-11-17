@@ -21,9 +21,19 @@ updates:
     # Tailwind v4 is a migration, not an update (a new PostCSS plugin package, CSS and config changes, class renames that can change how pages look), and it
     # broke the dashboard build in the grouped pull request. Held at v3 until it is done on purpose, with before/after screenshots of every page. Minor and
     # patch updates still arrive.
+    # Same for the other framework-level majors Dependabot offered in #86 (Next.js 15 to 16 is a framework change that CLAUDE.md names; TypeScript 5 to 7, lucide-react 0.x to 1.x
+    # and @supabase/ssr 0.5 to 0.12 change APIs). Each becomes its own planned migration; minor and patch updates still arrive.
     ignore:
       - dependency-name: "tailwindcss"
         update-types: ["version-update:semver-major"]
+      - dependency-name: "next"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "typescript"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "lucide-react"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "@supabase/ssr"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
@@ -32,3 +42,4 @@ updates:
     groups:
       github-actions:
         patterns: ["*"]
+    # Workflows pin every action to a full commit SHA with the version as a comment; Dependabot updates both together.
