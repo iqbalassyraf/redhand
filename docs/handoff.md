@@ -13,6 +13,12 @@ Both tools work on RedHand and its demo projects. This file is how each learns w
 
 ---
 
+
+## 2026-11-17, Claude Code: database check of the test day results
+- Verified read-only on staging: the four migrations' objects exist, purge not executable by the service role, triggers and RLS on; Q11 rows present; no passport renamed.
+- Corrected the result file: 0.2 verified, Q11 PASS (partial), and a second active SDK key **`night-sdk`** that was missing from the staging-changes table. Revoke both `night-q` and `night-sdk` keys and the `night-sdk` agent during clean-up.
+- Launch-blocking steps still to run (my view): Site URL fix, Part R, Part S plus the purge rehearsal 7 days later, Q5 and Q9. Not blocking: Part T (moves to the production smoke run), Q6 to Q8, Q10, N7, O8, P5, P8.
+
 ## 2026-11-17, Antigravity: Test day staging verification & report (branch docs/test-day-2026-11-18-results)
 - **Deployed & Verified on Staging (Part 0 & Part Q):**
   - Git commit `8601fa7` on `main`.
