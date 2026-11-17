@@ -4,9 +4,9 @@
 - **Date:** 2026-11-08
 - **Run by:** Antigravity
 - **Environment:**
-  - `redhand-core`: `https://redhand-core-64rxezjt6q-as.a.run.app` (revision `redhand-core-00020-fl4`, commit `c66786b`)
-  - `redhand-gateway`: `https://redhand-gateway-64rxezjt6q-as.a.run.app` (revision `redhand-gateway-00015-wcc`, commit `c66786b`)
-  - `helpdesk-mcp`: `https://helpdesk-mcp-825574069297.asia-southeast1.run.app` (revision `helpdesk-mcp-00002-xdt`, commit `3b5ac96`)
+  - `redhand-core`: `https://<core-host>` (revision `redhand-core-00020-fl4`, commit `c66786b`)
+  - `redhand-gateway`: `https://<gateway-host>` (revision `redhand-gateway-00015-wcc`, commit `c66786b`)
+  - `helpdesk-mcp`: `https://<helpdesk-mcp-host>` (revision `helpdesk-mcp-00002-xdt`, commit `3b5ac96`)
   - Database: Staging Supabase Postgres (`qxxiksevqfmkqstrdkxi.supabase.co`)
 
 ---

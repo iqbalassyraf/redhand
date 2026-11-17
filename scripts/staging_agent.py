@@ -34,8 +34,8 @@ from datetime import datetime
 from typing import Any
 
 PROTOCOL_VERSION = "2025-06-18"
-DEFAULT_CORE = "https://redhand-core-825574069297.asia-southeast1.run.app"
-DEFAULT_GATEWAY = "https://redhand-gateway-825574069297.asia-southeast1.run.app"
+DEFAULT_CORE = "http://localhost:8000"
+DEFAULT_GATEWAY = "http://localhost:8080"
 USER_AGENT = "RedHand-StagingAgent/1.0"
 PRINT_LOCK = threading.Lock()
 

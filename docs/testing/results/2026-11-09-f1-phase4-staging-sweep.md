@@ -5,11 +5,11 @@
 - **Branch / commit:** `main` / `feat/phase4-m5a-canary`
 - **Environment:**
   - Dashboard: Production Vercel (`https://redhand.archtificial.com/scanner`, `/radar`, `/passports`, `/honeytokens`, `/blackbox`)
-  - Cloud Run Core: `https://redhand-core-64rxezjt6q-as.a.run.app` (`redhand-core-00030-qtf`)
-  - Cloud Run Gateway: `https://redhand-gateway-64rxezjt6q-as.a.run.app` (`redhand-gateway-00027-7sc`)
+  - Cloud Run Core: `https://<core-host>` (`redhand-core-00030-qtf`)
+  - Cloud Run Gateway: `https://<gateway-host>` (`redhand-gateway-00027-7sc`)
 - **Staging changes made & undone:**
   - Registered server `deepwiki` tool pinning temporarily switched to `enforce` (Step 12), then restored to `alert` (Step 15).
-  - Multi-tenant test accounts (`iassyraf+operator@gmail.com`, `iassyraf+viewer@gmail.com`, `iassyraf+org2@gmail.com`) used for role and tenant isolation verification; zero persistent changes made to org 1 or org 2 configurations.
+  - Multi-tenant test accounts (`<operator test account>`, `<viewer test account>`, `<second-org test account>`) used for role and tenant isolation verification; zero persistent changes made to org 1 or org 2 configurations.
   - Zero unauthorized infrastructure changes made; standing rules strictly honored.
 
 ---
@@ -31,7 +31,7 @@
 | **4** | Scan registered server (`deepwiki`) | **PASS** | Click Scan next to `deepwiki`.<br>Card: `"PASS Risk score 15 of 100 3 tool(s) scanned · 3 finding(s) (0 high) · registered server \"deepwiki\""`<br>Findings:<br>• `ask_wiki_question`: `MCP-SEC-008` (LOW), `"Unbounded String Field 'question' in Tool 'ask_wiki_question'"`<br>• `read_wiki_contents`: `MCP-SEC-008` (LOW), `"Unbounded String Field 'repoName' in Tool 'read_wiki_contents'"`<br>• `read_wiki_structure`: `MCP-SEC-008` (LOW), `"Unbounded String Field 'repoName' in Tool 'read_wiki_structure'"`<br>Zero `MCP-DESC-` findings on clean registered server.<br>• **Screenshot:** `media_1794494402963_abb4c58a.jpg`. |
 | **5** | Ephemeral scan result | **PASS** | Reload `/scanner`: scan results disappeared immediately (not saved to database).<br>• **Screenshot:** `media_1794493932662_c13994fe.png`. |
 | **6** | Description secrecy audit | **PASS** | Findings name rules, severity, tools and parameter names, but never quote the server's descriptive text. |
-| **7** | Viewer role on `/scanner` | **PASS** | Signed in as `iassyraf+viewer@gmail.com`. Pasting clean manifest works (`PASS Risk score 0 of 100`). Header explicitly informs: `"Admins only. A server that needs credentials to list its tools cannot be scanned."`<br>• **Screenshot:** `media_1794494472284_20243a81.png`. |
+| **7** | Viewer role on `/scanner` | **PASS** | Signed in as `<viewer test account>`. Pasting clean manifest works (`PASS Risk score 0 of 100`). Header explicitly informs: `"Admins only. A server that needs credentials to list its tools cannot be scanned."`<br>• **Screenshot:** `media_1794494472284_20243a81.png`. |
 | **8** | Passports regression check | **PASS** | Checked `/passports`: no new agents or servers created by Scanner actions.<br>• **Screenshot:** `media_1794494500345_e64f89fb.jpg`. |
 
 ---
@@ -46,7 +46,7 @@
 | **13** | Change tool description & redeploy helpdesk | **NOT RUN** | Optional owner test; demo redeploy skipped per brief. |
 | **14** | Approve changed tool | **NOT RUN** | Dependent on Step 13. |
 | **15** | Restore mode to `alert` | **PASS** | Confirmation modal appeared: `"redhand.archtificial.com says: Set tool pinning to \"alert\"? Changes are reported to you. Agents still see and can call every tool. (Default.)"`. Clicked OK; mode confirmed restored to `alert`.<br>• **Screenshot:** `media_1794494695447_5de25455.png`. |
-| **16** | Security operator on Tool pins | **PASS** | Signed in as `iassyraf+operator@gmail.com`. Tool pins are visible. Attempting to change mode or approve displays red refusal banner: `"This action requires the 'admin' role or higher."`<br>• **Screenshot:** `media_1794494734025_a3e523b8.png`. |
+| **16** | Security operator on Tool pins | **PASS** | Signed in as `<operator test account>`. Tool pins are visible. Attempting to change mode or approve displays red refusal banner: `"This action requires the 'admin' role or higher."`<br>• **Screenshot:** `media_1794494734025_a3e523b8.png`. |
 
 ---
 
@@ -64,12 +64,12 @@
 
 | # | Step | Result | Quoted on-screen text, numbers, and evidence |
 |---|---|:---:|---|
-| **17** | Viewer on `/radar` | **PASS** | Signed in as `iassyraf+viewer@gmail.com`. Card displays: `"Your role cannot see the Radar. Ask an owner or admin to give you the security operator role."`<br>• **Screenshot:** `media_1794495005538_a316f710.png`. |
-| **18** | Security operator on `/radar` | **PASS** | Signed in as `iassyraf+operator@gmail.com`. Radar and readiness panel visible. Tooltip on disabled Save button: `"Only an admin can change these."`<br>• **Screenshot:** `media_1794495086055_aafa2ba7.jpg`. |
-| **19** | Second Org Owner (`iassyraf+org2@gmail.com`) isolation | **PASS** | Signed in as second organization owner:<br>• **Passports:** `"No agents yet. Register one below."` Active: 0, Frozen: 0, Revoked: 0.<br>• **Black Box:** `"No events recorded yet."`<br>• **Radar:** Last 7 days: 0 findings, 0 strong findings. `"No results scanned yet in the last 7 days."`<br>Total tenant data isolation confirmed.<br>• **Screenshots:** `media_1794495132459_f2dda528.png`, `media_1794495144215_a8ac685c.png`, `media_1794495166257_924dedb5.jpg`. |
+| **17** | Viewer on `/radar` | **PASS** | Signed in as `<viewer test account>`. Card displays: `"Your role cannot see the Radar. Ask an owner or admin to give you the security operator role."`<br>• **Screenshot:** `media_1794495005538_a316f710.png`. |
+| **18** | Security operator on `/radar` | **PASS** | Signed in as `<operator test account>`. Radar and readiness panel visible. Tooltip on disabled Save button: `"Only an admin can change these."`<br>• **Screenshot:** `media_1794495086055_aafa2ba7.jpg`. |
+| **19** | Second Org Owner (`<second-org test account>`) isolation | **PASS** | Signed in as second organization owner:<br>• **Passports:** `"No agents yet. Register one below."` Active: 0, Frozen: 0, Revoked: 0.<br>• **Black Box:** `"No events recorded yet."`<br>• **Radar:** Last 7 days: 0 findings, 0 strong findings. `"No results scanned yet in the last 7 days."`<br>Total tenant data isolation confirmed.<br>• **Screenshots:** `media_1794495132459_f2dda528.png`, `media_1794495144215_a8ac685c.png`, `media_1794495166257_924dedb5.jpg`. |
 | **20** | Second Org Owner on `/scanner` | **PASS** | Under registered servers: `"No registered servers. Register one on the Passports page first."` Zero Org 1 servers or tool pins visible.<br>• **Screenshot:** `media_1794495177418_74fc4753.png`. |
 | **21** | Second Org API isolation | **PASS** | Tenant SQL queries strictly scope `organization_id`; cross-tenant requests return 403 or 404. |
-| **22** | Honeytokens role enforcement (M5a Step 17) | **PASS** | • **Security Operator (`iassyraf+operator@gmail.com`):** Honeytokens list is visible. Attempting to create honeytoken displays: `"This action requires the 'admin' role or higher."`<br>• **Viewer (`iassyraf+viewer@gmail.com`):** Red banner: `"This action requires the 'security_operator' role or higher."` Tables show `"No honeytokens yet."` and `"No decoy tools yet."`<br>• **Screenshots:** `media_1794494954807_d1684d50.jpg` and `media_1794494992505_5c969e97.png`. |
+| **22** | Honeytokens role enforcement (M5a Step 17) | **PASS** | • **Security Operator (`<operator test account>`):** Honeytokens list is visible. Attempting to create honeytoken displays: `"This action requires the 'admin' role or higher."`<br>• **Viewer (`<viewer test account>`):** Red banner: `"This action requires the 'security_operator' role or higher."` Tables show `"No honeytokens yet."` and `"No decoy tools yet."`<br>• **Screenshots:** `media_1794494954807_d1684d50.jpg` and `media_1794494992505_5c969e97.png`. |
 
 ---
 

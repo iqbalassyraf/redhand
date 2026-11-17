@@ -5,7 +5,7 @@ take a screenshot or copy the on-screen text for every step.** Write the results
 `docs/testing/results/TEMPLATE-result.md`, plus a `docs/handoff.md` entry, on a branch named `docs/tonight-2026-11-17`. Then tell Claude Code, which will check
 the database read-only.
 
-Dashboard: `https://redhand.archtificial.com`. You need the admin, operator (`iassyraf+operator@gmail.com`) and viewer (`iassyraf+viewer@gmail.com`) sign-ins, and Telegram on the phone.
+Dashboard: `https://redhand.archtificial.com`. You need the admin, operator (`<operator test account>`) and viewer (`<viewer test account>`) sign-ins, and Telegram on the phone.
 
 ## 1. Redeploy core from `main` (5 min)
 Main now has the corrected approved-model alert text (#88). There are no new migrations since the last run.

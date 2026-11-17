@@ -28,6 +28,13 @@ Nothing here is done unless it says so and names the evidence.
 
 ### 3.2 Code and dependencies
 - Static analysis on all of `agentwall/`, `services/redhand-core/`, `packages/`, `apps/redhand-ui/` (for example Bandit and Semgrep, new tools: owner approval).
+  **First one-off run 2026-11-17** (owner approved, not added to the project): `uvx --from bandit==1.8.6 bandit -q -r agentwall services/redhand-core/src packages -x '*/tests/*'` and
+  `uvx --from semgrep==1.101.0 --with 'setuptools<81' semgrep scan --config p/python --metrics=off agentwall/src services/redhand-core/src packages` (23,268 lines).
+  Bandit 35 findings: **3 real** (literal bidirectional-control and zero-width characters in the source of Radar, the description rules and the MCP scanner: "Trojan Source", now written as `\uXXXX` escapes
+  and guarded by `tests/deploy/test_no_hidden_characters.py`); 32 reviewed false positives or accepted (14 `hardcoded_password_string` and 7 `..._funcarg` on constants such as `"Bearer"`, issuer names and enum values; 7 `assert` in
+  benchmark and twin code; `0.0.0.0` as the container bind default; `random` for retry jitter; a deliberate `except: pass` in best-effort memory zeroing). Semgrep `p/python`: 7 `logger-credential-disclosure` warnings, all reviewed:
+  they log agent ids, token ids or fixed error text, never a credential. Not run: Semgrep on `apps/redhand-ui` (TypeScript rules), `p/secrets` (needs the registry login for line text).
+  Re-run before release; a Pro/Team scan or CodeQL (free on public repositories) would add taint analysis.
 - `pip-audit` and `npm audit` (already in CI) clean at high and above; review the lockfiles for unexpected packages; confirm licences are compatible with closed-source distribution.
 - Review `docs/security/threat-model.md` against the code: every trust boundary still has its mitigation row; update the rows for anything added since.
 - A manual review of every endpoint list in `docs/api/redhand-core.openapi.json` and `docs/api/agentwall.openapi.json`: authenticated unless declared public, role checked, tenant scoped.
@@ -59,6 +66,14 @@ Nothing here is done unless it says so and names the evidence.
 ### 3.7 Claims and copy
 - Every performance, compliance or "integrates with" statement in the product, docs and site is backed by a test, a benchmark or a real integration, or says it is simulated (CLAUDE.md section 1). Legal review of any compliance wording (PDPA, ISO/IEC 42001).
 - The dashboard and docs say RedHand only controls what flows through RedHand, and that spend numbers are self-reported estimates until a proxy exists.
+
+## 3.8 Public repository (the repository is public since 2026-11-17)
+- **History is public and permanent.** Decoy values that look like a live Stripe key and an OpenAI key (`battleground/database/db.py`, commits f82af25, c83151d, 388e278, 29777ae) are readable by anyone. Revoke or rotate both in the provider dashboards (owner); do not paste them anywhere. A history rewrite would not reach forks or caches.
+  A full-history pattern scan on 2026-11-17 found no other real-looking credential (the other hits are test fixtures such as AWS's documented example key).
+- Done 2026-11-17: `SECURITY.md` (private reporting, scope, no testing of hosted environments); personal test e-mail addresses, Cloud Run host names and the GCP project number replaced by placeholders in current files (history keeps them); `scripts/staging_agent.py` defaults to localhost; hidden-character guard.
+  Staging host names are now given to testers by the owner (see `docs/antigravity-briefing.md`).
+- Still the owner's: a **licence** (no `LICENSE` file: legally all rights reserved, which is not what an open repository usually wants), enabling GitHub's private vulnerability reporting and secret scanning with push protection in the repository settings, branch protection on `main` (require the CI checks), and whether Dependabot alerts email the right person.
+- CI on pull requests from forks: the workflow uses `pull_request` with `contents: read` and no secrets, so a fork cannot read secrets; keep it that way (never switch it to `pull_request_target`).
 
 ## 4. Gated, not planned for release
 - B5/B6 (model proxy): only after a measured prototype; it would make spend authoritative.

@@ -13,12 +13,19 @@ Both tools work on RedHand and its demo projects. This file is how each learns w
 
 ---
 
+## 2026-11-17, Claude Code: public-repo hygiene and static scans (branch docs/public-repo-hygiene)
+- **Owner, today:** revoke the old battleground Stripe and OpenAI look-alike keys (still readable in git history, now public); choose a licence; enable GitHub private vulnerability reporting, secret scanning with push protection, and branch protection on `main`.
+- **Done:** `SECURITY.md`; e-mail addresses and Cloud Run hosts replaced by placeholders in 22 current files (testers are told to ask the owner for the staging host names; `docs/antigravity-briefing.md`); Bandit and Semgrep one-off scans triaged in `docs/release-readiness.md` 3.2: 3 real findings fixed (literal bidi and zero-width characters in Radar, the description rules and the MCP scanner, now `\uXXXX` escapes, plus `tests/deploy/test_no_hidden_characters.py`).
+- **Heads-up for blind round 4:** editing `radar.py` changed the rules fingerprint (`21d583301e041d02`, was `2527e7917c908899`). Behaviour is identical, but the block gate counts only evidence measured on the current fingerprint. Freeze the rules, then run and score round 4 on exactly this text.
+- **Not changed:** the Supabase project ref and the dashboard domain remain in docs (both are visible to any browser using the dashboard); the briefs of earlier staging runs now say `<core-host>`: use the real values from the owner.
+
 ## 2026-11-17, Claude Code: revocation and failure drill (branch test/revocation-drill)
 - **Added:** `scripts/revocation_drill.py` (real processes), `tests/e2e/test_revocation_drill.py` (2 trials, about 1 minute, in CI), `docs/security/measurements/` with the first full run and how to read it.
 - **Measured (local, not staging):** freeze, revoke and freeze-all take effect in about 0.4 s for a busy agent and at the first call for a sparse one; no allow after a refusal in 100 trials; core killed: refused after 1.8 s; **core hanging: refused after 4.3 s**, inside the 5 s promise by about 0.7 s only (cache lifetime 2 s + lookup timeout 2 s).
 - **Corrects a claim:** CLAUDE.md and the briefing say a freeze takes effect "on the next gateway call". It does not: a busy agent keeps calling for up to about 0.4 s (refresh-ahead), and the hard bound is the 2 s cache lifetime. The wording should say "within about half a second, never more than 5 s" (owner approval needed for CLAUDE.md).
 - **Follow-up:** lower the gateway's lookup timeout so the core-hang case keeps a wider margin; run the drill against staging and with two gateway instances.
 - Deliberate breakages: serving a stale passport without refreshing makes the drill fail (never refused, exit 1); raising only the cache lifetime does not, because refresh-ahead replaces the entry at 0.4 s (that is a property of the design, now written down).
+
 
 ## 2026-11-17, Claude Code: route sweep (branch test/authz-tenant-sweep)
 - **Added:** `services/redhand-core/tests/test_route_sweep.py` (about 240 cases generated from the live route table) and `agentwall/tests/test_gateway_route_sweep.py`. They check classification, bad or missing credentials, a reviewed role matrix, and cross-tenant access. Deliberate breakages (loosened role, dropped organization filter, a new unauthenticated route, a gateway route without the service token) are caught. One survived at first: the sweep read each route's role from the code, so a loosened role was invisible; the role matrix is now written out in the test.
@@ -91,8 +98,8 @@ Both tools work on RedHand and its demo projects. This file is how each learns w
 - **Executed:** Full Night 1 Integration Sweep on live staging covering PRs 57 through 72 according to `docs/testing/briefs/2026-11-13-night-1.md` and `docs/testing/briefs/2026-11-14-antigravity-master.md`.
 - **Environment:**
   - Branch: `feat/h4-enforcement-tightening` (`b5c06df`).
-  - Cloud Run Core: `https://redhand-core-825574069297.asia-southeast1.run.app` (`redhand-core-00032-c8j`).
-  - Cloud Run Gateway: `https://redhand-gateway-825574069297.asia-southeast1.run.app` (`redhand-gateway-00029-njd`).
+  - Cloud Run Core: `https://<core-host>` (`redhand-core-00032-c8j`).
+  - Cloud Run Gateway: `https://<gateway-host>` (`redhand-gateway-00029-njd`).
   - Dashboard: Production Vercel (`https://redhand.archtificial.com`, promoted to `b5c06df`).
   - Database: Staging Supabase (`qxxiksevqfmkqstrdkxi.supabase.co`).
   - Report written to: `docs/testing/results/2026-11-14-night-1.md`.
@@ -270,13 +277,13 @@ Both tools work on RedHand and its demo projects. This file is how each learns w
 - **Brief & Result:** `docs/testing/briefs/2026-11-09-f1-phase4-staging-sweep.md`, full result written to `docs/testing/results/2026-11-09-f1-phase4-staging-sweep.md`.
 - **Verdict:** **NOT GOOD.** The report says 20 of 22 steps passed; Claude Code's check against the database and the evidence (correction section in the result file) does **not** accept steps 11, 12, 21, the API half of 17, the Coverage steps and step 6, and found an undisclosed honeytoken create and retire. Scanner (done tests 2 and 3), the role screens and the second-organization screens are proven. **Tool pinning (done test 4) is not proven.** Follow-up: `docs/testing/briefs/2026-11-12-f1b-tool-pin-enforce.md`.
 - **Verified:**
-  - **Part A (MCP Scanner):** Clean manifest gave PASS (risk 0, 0 findings). Poisoned manifest gave FAIL (risk 100, `MCP-DESC-001`, `-003`, `-004`, sensitive string `id_rsa` not in findings card). Malformed JSON gave readable error banner: `"That is not valid JSON."`. Scanning registered `deepwiki` server returned PASS (risk 15, 3 `MCP-SEC-008` low findings, 0 `MCP-DESC-`). Scan results confirmed ephemeral (gone on reload). Viewer (`iassyraf+viewer@gmail.com`) can paste and check manifests; registered server scan indicates `"Admins only"`. Passports confirmed no regression.
-  - **Part B (Tool Pinning):** `deepwiki` tools inspected in `alert` mode (`read_wiki_structure` approved). Enforce mode set with confirmation (banner: `"Tool pinning is now enforce."`), and confirmed restored to `alert` via modal. Security operator (`iassyraf+operator@gmail.com`) attempting to approve or change mode was refused with: `"This action requires the 'admin' role or higher."`.
+  - **Part A (MCP Scanner):** Clean manifest gave PASS (risk 0, 0 findings). Poisoned manifest gave FAIL (risk 100, `MCP-DESC-001`, `-003`, `-004`, sensitive string `id_rsa` not in findings card). Malformed JSON gave readable error banner: `"That is not valid JSON."`. Scanning registered `deepwiki` server returned PASS (risk 15, 3 `MCP-SEC-008` low findings, 0 `MCP-DESC-`). Scan results confirmed ephemeral (gone on reload). Viewer (`<viewer test account>`) can paste and check manifests; registered server scan indicates `"Admins only"`. Passports confirmed no regression.
+  - **Part B (Tool Pinning):** `deepwiki` tools inspected in `alert` mode (`read_wiki_structure` approved). Enforce mode set with confirmation (banner: `"Tool pinning is now enforce."`), and confirmed restored to `alert` via modal. Security operator (`<operator test account>`) attempting to approve or change mode was refused with: `"This action requires the 'admin' role or higher."`.
   - **Part C (Self-Test):** Run self-test on `/radar` executed in 308 ms on 180 texts (82% hidden instructions, 95% sensitive files, 100% internal/cloud addresses, 100% script/markup). Immediate second run displayed rate-limit banner: `"A self-test ran a moment ago. Wait about a minute and try again."`.
   - **Part D (Roles & Multi-Tenant Isolation):**
-    - **Viewer (`iassyraf+viewer@gmail.com`):** On `/radar` blocked with: `"Your role cannot see the Radar. Ask an owner or admin to give you the security operator role."`. On `/honeytokens` blocked with: `"This action requires the 'security_operator' role or higher."` with empty tables.
-    - **Security Operator (`iassyraf+operator@gmail.com`):** On `/radar` sees findings and readiness panel; changing checks disabled with: `"Only an admin can change these."`. On `/honeytokens` sees honeytokens list; creating honeytokens refused with: `"This action requires the 'admin' role or higher."` (Step 22 / M5a Step 17 confirmed).
-    - **Second Organization Owner (`iassyraf+org2@gmail.com`):** Complete isolation verified across `/passports` (0 agents), `/blackbox` (0 events), `/radar` (0 scans, 0 findings), and `/scanner` (0 registered servers).
+    - **Viewer (`<viewer test account>`):** On `/radar` blocked with: `"Your role cannot see the Radar. Ask an owner or admin to give you the security operator role."`. On `/honeytokens` blocked with: `"This action requires the 'security_operator' role or higher."` with empty tables.
+    - **Security Operator (`<operator test account>`):** On `/radar` sees findings and readiness panel; changing checks disabled with: `"Only an admin can change these."`. On `/honeytokens` sees honeytokens list; creating honeytokens refused with: `"This action requires the 'admin' role or higher."` (Step 22 / M5a Step 17 confirmed).
+    - **Second Organization Owner (`<second-org test account>`):** Complete isolation verified across `/passports` (0 agents), `/blackbox` (0 events), `/radar` (0 scans, 0 findings), and `/scanner` (0 registered servers).
 - **Cleanup:** Tool pinning restored to `alert`. Staging services remained at 0 min-instances.
 
 ## 2026-11-11, Claude Code: M5a speed check found a gateway cache gap; fix merged (PR 56)
@@ -315,7 +322,7 @@ Both tools work on RedHand and its demo projects. This file is how each learns w
 
 ## 2026-11-09, Claude Code: M5a deployed to staging; F1 accounts attached
 - **Staging changes (the owner asked for each):**
-  - **Roles:** in the staging organization `RedHand Staging`: `iassyraf+viewer@gmail.com` is a viewer and `iassyraf+operator@gmail.com` a security operator (rows in `organization_members`). A second organization `F1 Second Org` (slug `f1-second-org`) was created with `iassyraf+org2@gmail.com` as its owner. The three Auth users were created by the owner in the Supabase dashboard. To undo: delete those three membership rows and the second organization (cascades its members).
+  - **Roles:** in the staging organization `RedHand Staging`: `<viewer test account>` is a viewer and `<operator test account>` a security operator (rows in `organization_members`). A second organization `F1 Second Org` (slug `f1-second-org`) was created with `<second-org test account>` as its owner. The three Auth users were created by the owner in the Supabase dashboard. To undo: delete those three membership rows and the second organization (cascades its members).
   - **Migration** `canary_kind` applied (the repo file `20261119000000_canary_kind.sql`, without its BEGIN and COMMIT lines because the migration tool wraps its own transaction). Checked afterwards: the kind check allows `canary`, `record_trip()` returns the kind, and its privileges are unchanged (service role only).
   - **Core** `deploy.sh core` from `main` at `3f930bd`: revision `redhand-core-00026-w6k`, same origins and bot name as before. Smoke test: ALL CHECKS PASSED (13). The deployed API lists the `canary` kind. The gateway was not redeployed.
   - **Dashboard:** Vercel production deployment of `3f930bd` is READY.

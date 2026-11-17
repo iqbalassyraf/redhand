@@ -128,8 +128,8 @@ def _raise(level: Level, steps: int) -> Level:
 # --- preparing text: the normalisation layer (A1) ---------------------------------------------------------------------
 
 # Zero-width, bidirectional-control, word-joiner and tag characters: invisible to a person, readable to a model.
-_INVISIBLE = re.compile("[​-‏‪-‮⁠-⁤⁦-⁩﻿\U000e0000-\U000e007f]")
-_BIDI = re.compile("[‪-‮⁦-⁩]")
+_INVISIBLE = re.compile("[\u200b-\u200f\u202a-\u202e\u2060-\u2064\u2066-\u2069\ufeff\U000e0000-\U000e007f]")
+_BIDI = re.compile("[\u202a-\u202e\u2066-\u2069]")
 _TAGS = re.compile("[\U000e0020-\U000e007e]")
 _CONFUSABLES = str.maketrans({
     "а": "a", "е": "e", "о": "o", "р": "p", "с": "c", "х": "x", "у": "y", "і": "i", "ј": "j", "ѕ": "s", "ԁ": "d", "һ": "h",

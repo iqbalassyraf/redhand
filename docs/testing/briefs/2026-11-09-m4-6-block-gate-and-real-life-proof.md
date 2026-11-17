@@ -34,7 +34,7 @@ The proof plays a real agent against the staging gateway and asks a real third-p
 | 8 | If a second organization exists (owner-assisted): sign in there and open `/radar` | Its panel shows none of the numbers from steps 3 to 5 (its own scanned count only) |
 | 9 | Open `/coverage` (any role). Find **"Ready to block? Not yet."** and the **"Known gaps"** list. Quote the first two lines of the Known gaps and the reason lines for **"Script and active markup"** | The section lists five rules; every check shows "not yet" overall; script and markup passes the *Independent evidence*, *Measured on these rules* and *Catches enough* rules and fails *False alarms low enough* (0 of 120, upper bound 3.1%, limit 3.0%) and the long-samples rule. Known gaps include a line about 10 of 10 real web pages and 186 READMEs |
 | 10 | Narrow screen (375 px wide) on `/radar` and `/coverage` | No sideways page scroll; text readable |
-| 11 | Call core's counts route with no token: `POST https://redhand-core-64rxezjt6q-as.a.run.app/internal/v1/radar/scan-counts` with the body `{}` and no `Authorization` header | **401** (or 403), nothing stored. (Only the gateway, with the service token, may send counts.) |
+| 11 | Call core's counts route with no token: `POST https://<core-host>/internal/v1/radar/scan-counts` with the body `{}` and no `Authorization` header | **401** (or 403), nothing stored. (Only the gateway, with the service token, may send counts.) |
 
 ## Part C: cleanup and report
 | # | Do | Expected |
