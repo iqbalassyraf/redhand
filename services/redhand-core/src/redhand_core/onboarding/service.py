@@ -212,9 +212,11 @@ def can_manage(role: Role) -> bool:
 
 
 async def whoami(supabase: Any, operator: OperatorContext) -> MeResponse:
-    res = await supabase.table("organizations").select("name").eq("id", str(operator.organization_id)).limit(1).execute()
+    res = await supabase.table("organizations").select("name,slug,deletion_purge_after").eq("id", str(operator.organization_id)).limit(1).execute()
     rows = list(res.data or [])
+    row = dict(rows[0]) if rows else {}
     return MeResponse(
         user_id=operator.user_id, email=operator.email, organization_id=operator.organization_id,
-        organization_name=str(rows[0]["name"]) if rows else "", role=operator.role.name.lower(),  # type: ignore[arg-type]
+        organization_name=str(row.get("name") or ""), role=operator.role.name.lower(),  # type: ignore[arg-type]
+        organization_slug=str(row.get("slug") or ""), deletion_purge_after=_parse(row.get("deletion_purge_after")),
     )

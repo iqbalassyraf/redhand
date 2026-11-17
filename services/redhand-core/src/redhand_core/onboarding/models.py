@@ -127,3 +127,7 @@ class MeResponse(BaseModel):
     organization_id: UUID
     organization_name: str
     role: MemberRole
+    # The address name, so the owner's delete screen can ask for it to be typed back (not secret: it is chosen at sign-up and shown to members).
+    organization_slug: str = ""
+    # Set while a deletion request is pending (the end of the 7-day grace period); every page shows a banner then.
+    deletion_purge_after: datetime | None = None

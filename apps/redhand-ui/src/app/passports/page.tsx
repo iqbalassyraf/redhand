@@ -39,6 +39,7 @@ import { RiskPanel } from "./RiskPanel";
 import { SdkKeysCard } from "./SdkKeysCard";
 import { TeamCard } from "./TeamCard";
 import { SpendPanel } from "./SpendPanel";
+import { isDeletionPendingMessage } from "@/lib/lifecycle";
 import { isAdmin, isNoOrganizationMessage } from "@/lib/onboarding";
 import { REPORTED_ONLY_HELP, REPORTED_ONLY_LABEL, canPromote, promoteConfirmText } from "@/lib/reportedOnly";
 
@@ -100,6 +101,10 @@ export default function PassportsPage() {
       }
       if (err instanceof ApiError && err.status === 403 && isNoOrganizationMessage(err.message)) {
         window.location.href = "/welcome"; // signed in, but not in an organization yet: create or join one
+        return;
+      }
+      if (err instanceof ApiError && err.status === 403 && isDeletionPendingMessage(err.message)) {
+        window.location.href = "/organization"; // deletion is pending: only the organization data page (status, export, cancel) still works
         return;
       }
       setError(err instanceof Error ? err.message : "Something went wrong.");
@@ -226,6 +231,9 @@ export default function PassportsPage() {
             </Link>
             <Link href="/coverage" className="rounded-full px-3 py-1.5 font-medium text-[#606060] hover:bg-[#F2F2F2]">
               Coverage
+            </Link>
+            <Link href="/organization" className="rounded-full px-3 py-1.5 font-medium text-[#606060] hover:bg-[#F2F2F2]">
+              Organization
             </Link>
             <Link href="/" className="rounded-full px-3 py-1.5 font-medium text-[#606060] hover:bg-[#F2F2F2]">
               Command center (demo)

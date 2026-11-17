@@ -32,5 +32,5 @@ paths: an export is a built-in exfiltration route, and a deletion is irreversibl
 - New routes: `GET /v1/organization/export`, `GET /v1/organization/deletion`, `POST /v1/organization/delete-request`, `POST /v1/organization/delete-request/cancel` (all owner, in the route sweep matrix).
 - `get_operator` reads the organization row once per request (a primary-key lookup) to apply the pending-deletion rule; if that row is missing it denies.
 - What a purge does **not** reach, listed in the runbook: the people's Supabase Auth accounts (deleted separately on request), database backups until they age out, Cloud Run logs, Telegram message history, the gateway's in-memory ledger, any export file the owner holds.
-- Not built: a dashboard for these screens (an owner uses the API for now; a small UI follows), a scheduled purge, per-user export, a legal-hold flag.
+- Dashboard: added after this ADR as `/organization` (export, request, cancel, pending banner). Not built: a scheduled purge, per-user export, a legal-hold flag.
 - A deletion request is a destructive control action by a hijacked owner session: it needs the owner role and the typed address name and leaves 7 days to notice and cancel; the audit rows and the Telegram/e-mail notifications of the owner's own channels are the detection (no new notification is added here).

@@ -3500,6 +3500,18 @@
       "MeResponse": {
         "description": "Who the signed-in person is and what they may do: the dashboard uses it to show only the actions their role allows (the server still decides).",
         "properties": {
+          "deletion_purge_after": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deletion Purge After"
+          },
           "email": {
             "anyOf": [
               {
@@ -3518,6 +3530,11 @@
           },
           "organization_name": {
             "title": "Organization Name",
+            "type": "string"
+          },
+          "organization_slug": {
+            "default": "",
+            "title": "Organization Slug",
             "type": "string"
           },
           "role": {
