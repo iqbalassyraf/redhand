@@ -55,7 +55,7 @@ Nothing here is done unless it says so and names the evidence.
 ### 3.5 Performance and failure
 - Gateway latency with everything on: p50 at most 10 ms and p99 at most 50 ms (`scripts/latency_baseline.py`, runbook `docs/runbooks/latency-baseline.md`); compare ingest overhead of the roll-up triggers (B2, B4a) under realistic load.
 - Failure modes: database down, policy store unreachable, Telegram down, slow upstream: the gateway denies and alerts; core's detective features never fail an ingest.
-- Revocation and freeze take effect within 5 seconds, measured.
+- Revocation and freeze take effect within 5 seconds, measured. **Local numbers exist since 2026-11-17** (`docs/security/measurements/`: about 0.4 s for freeze, revoke and freeze-all on real processes; core stopped: refused after 1.8 s; core hanging: refused after 4.3 s, only about 0.7 s inside the promise). **Still needed:** the same drill against staging (`scripts/revocation_drill.py` runs local processes only; a staging variant needs the real URLs and keys and the owner's go-ahead) and with two gateway instances.
 
 ### 3.6 Data and operations
 - Backup and restore tested from a real backup; tenant data export and deletion exercised (`docs/runbooks/tenant-data-deletion.md`).

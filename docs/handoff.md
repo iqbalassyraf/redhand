@@ -19,6 +19,14 @@ Both tools work on RedHand and its demo projects. This file is how each learns w
 - **Heads-up for blind round 4:** editing `radar.py` changed the rules fingerprint (`21d583301e041d02`, was `2527e7917c908899`). Behaviour is identical, but the block gate counts only evidence measured on the current fingerprint. Freeze the rules, then run and score round 4 on exactly this text.
 - **Not changed:** the Supabase project ref and the dashboard domain remain in docs (both are visible to any browser using the dashboard); the briefs of earlier staging runs now say `<core-host>`: use the real values from the owner.
 
+## 2026-11-17, Claude Code: revocation and failure drill (branch test/revocation-drill)
+- **Added:** `scripts/revocation_drill.py` (real processes), `tests/e2e/test_revocation_drill.py` (2 trials, about 1 minute, in CI), `docs/security/measurements/` with the first full run and how to read it.
+- **Measured (local, not staging):** freeze, revoke and freeze-all take effect in about 0.4 s for a busy agent and at the first call for a sparse one; no allow after a refusal in 100 trials; core killed: refused after 1.8 s; **core hanging: refused after 4.3 s**, inside the 5 s promise by about 0.7 s only (cache lifetime 2 s + lookup timeout 2 s).
+- **Corrects a claim:** CLAUDE.md and the briefing say a freeze takes effect "on the next gateway call". It does not: a busy agent keeps calling for up to about 0.4 s (refresh-ahead), and the hard bound is the 2 s cache lifetime. The wording should say "within about half a second, never more than 5 s" (owner approval needed for CLAUDE.md).
+- **Follow-up:** lower the gateway's lookup timeout so the core-hang case keeps a wider margin; run the drill against staging and with two gateway instances.
+- Deliberate breakages: serving a stale passport without refreshing makes the drill fail (never refused, exit 1); raising only the cache lifetime does not, because refresh-ahead replaces the entry at 0.4 s (that is a property of the design, now written down).
+
+
 ## 2026-11-17, Claude Code: route sweep (branch test/authz-tenant-sweep)
 - **Added:** `services/redhand-core/tests/test_route_sweep.py` (about 240 cases generated from the live route table) and `agentwall/tests/test_gateway_route_sweep.py`. They check classification, bad or missing credentials, a reviewed role matrix, and cross-tenant access. Deliberate breakages (loosened role, dropped organization filter, a new unauthenticated route, a gateway route without the service token) are caught. One survived at first: the sweep read each route's role from the code, so a loosened role was invisible; the role matrix is now written out in the test.
 - **Fixed (found by the sweep):** the credential broker minted cloud credentials for any agent id and tool named in the request (see CHANGELOG, threat model). Tests `test_iam_broker_authz.py`.
