@@ -13,6 +13,11 @@ Both tools work on RedHand and its demo projects. This file is how each learns w
 
 ---
 
+## 2026-11-17, Claude Code: D1 onboarding screens (branch feat/d1-onboarding-ui, stacked on feat/d1-onboarding)
+- **Built:** `GET /v1/me`; dashboard `/welcome`, `/join`, login "Create an account", Passports "Team" card, role-aware buttons (no Register agent / New key for non-admins), `lib/onboarding.ts` (+6 tests).
+- **Verified in a real browser (core in development mode, tokens signed locally):** wrong and malformed codes, creating the organization, owner sees Team, invite link shown once and gone, newcomer joins as viewer (no Team card, told registering needs an admin, no New key), a used link refused, 1280 and 375 px. The 43 px overflow at 375 px is the existing Passports header.
+- **Not verified:** real Supabase sign-up and its confirmation e-mail (needs the Supabase project: Auth e-mail templates and SMTP are an owner task), `redirectTo` allow-list in Supabase must include the dashboard `/login` URL.
+
 ## 2026-11-17, Claude Code: D1 PR 3 tenant export and deletion (branch feat/d1-tenant-lifecycle, from main after #100)
 - **Built:** migration `20261130000000_tenant_lifecycle` (manifest, `control_org_export`, `control_org_request_deletion`, `control_org_cancel_deletion`, `control_org_purge`, `tenant_deletions`), core routes (owner only), the pending-deletion gate in `get_operator`, twin handlers, `scripts/purge_tenant.sh`, ADR 0027, runbook rewrite.
 - **Verified locally:** SQL test (all checks, 10 of 10 deliberate breakages caught), rollback and re-apply through `scripts/test_migrations.sh`, `purge_tenant.sh` against a scratch database (not requested, in grace, wrong typed name, right name, hostile id), core tests and route sweep, 6 core mutants caught.

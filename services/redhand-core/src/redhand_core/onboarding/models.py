@@ -117,3 +117,13 @@ class SignupCodeRequest(BaseModel):
 class SignupCodeCreated(BaseModel):
     code: str = Field(description="Shown once.")
     expires_at: datetime
+
+
+class MeResponse(BaseModel):
+    """Who the signed-in person is and what they may do: the dashboard uses it to show only the actions their role allows (the server still decides)."""
+
+    user_id: UUID
+    email: str | None
+    organization_id: UUID
+    organization_name: str
+    role: MemberRole

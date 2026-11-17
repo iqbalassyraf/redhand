@@ -885,3 +885,34 @@ export const sdkKeysApi = {
   create: (t: string, body: { name: string; expires_in_days: number }) => apiFetch<SdkKeyCreated>("/v1/organization/sdk-keys", t, { method: "POST", body }),
   revoke: (t: string, keyId: string) => apiFetch<{ id: string; changed: boolean }>(`/v1/organization/sdk-keys/${keyId}`, t, { method: "DELETE", body: {} }),
 };
+
+
+// Onboarding (Phase 4.5 D1). Codes and invite tokens are shown once by the server and never stored here. See src/lib/onboarding.ts.
+export interface Me {
+  user_id: string;
+  email: string | null;
+  organization_id: string;
+  organization_name: string;
+  role: "owner" | "admin" | "security_operator" | "viewer";
+}
+export interface TeamMember { user_id: string; email: string | null; role: "owner" | "admin" | "security_operator" | "viewer"; joined_at: string | null }
+export interface TeamInvite { id: string; role: "admin" | "security_operator" | "viewer"; state: "pending" | "used" | "revoked" | "expired"; created_at: string | null; expires_at: string | null }
+export interface InviteCreated { token: string; join_path: string; invite: TeamInvite }
+
+export const meApi = { get: (t: string) => apiFetch<Me>("/v1/me", t) };
+export const onboardingApi = {
+  createOrganization: (t: string, body: { name: string; code: string }) =>
+    apiFetch<{ organization_id: string; slug: string; role: "owner" }>("/v1/organizations", t, { method: "POST", body }),
+  acceptInvite: (t: string, token: string) =>
+    apiFetch<{ organization_id: string; role: string }>("/v1/invites/accept", t, { method: "POST", body: { token } }),
+  members: (t: string) => apiFetch<{ members: TeamMember[] }>("/v1/organization/members", t),
+  setRole: (t: string, userId: string, role: string, confirm: boolean) =>
+    apiFetch<{ user_id: string; changed: boolean; role: string }>(`/v1/organization/members/${userId}`, t, { method: "PUT", body: { role, confirm } }),
+  removeMember: (t: string, userId: string) =>
+    apiFetch<{ user_id: string; removed: boolean }>(`/v1/organization/members/${userId}`, t, { method: "DELETE", body: {} }),
+  invites: (t: string) => apiFetch<{ invites: TeamInvite[]; max_pending: number }>("/v1/organization/invites", t),
+  createInvite: (t: string, body: { role: string; expires_in_days: number }) =>
+    apiFetch<InviteCreated>("/v1/organization/invites", t, { method: "POST", body }),
+  revokeInvite: (t: string, id: string) =>
+    apiFetch<{ id: string; changed: boolean }>(`/v1/organization/invites/${id}`, t, { method: "DELETE", body: {} }),
+};
