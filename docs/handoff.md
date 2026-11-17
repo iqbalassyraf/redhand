@@ -13,6 +13,11 @@ Both tools work on RedHand and its demo projects. This file is how each learns w
 
 ---
 
+## 2026-11-17, Claude Code: D1 onboarding screens (branch feat/d1-onboarding-ui, stacked on feat/d1-onboarding)
+- **Built:** `GET /v1/me`; dashboard `/welcome`, `/join`, login "Create an account", Passports "Team" card, role-aware buttons (no Register agent / New key for non-admins), `lib/onboarding.ts` (+6 tests).
+- **Verified in a real browser (core in development mode, tokens signed locally):** wrong and malformed codes, creating the organization, owner sees Team, invite link shown once and gone, newcomer joins as viewer (no Team card, told registering needs an admin, no New key), a used link refused, 1280 and 375 px. The 43 px overflow at 375 px is the existing Passports header.
+- **Not verified:** real Supabase sign-up and its confirmation e-mail (needs the Supabase project: Auth e-mail templates and SMTP are an owner task), `redirectTo` allow-list in Supabase must include the dashboard `/login` URL.
+
 ## 2026-11-17, Claude Code: D1 onboarding backend (branch feat/d1-onboarding, nothing deployed)
 - **Built:** migration `20261129000000_onboarding` (sign-up codes, member invites, six audited control functions, member list; rollback tested), core `onboarding/` + `routers/onboarding.py`, twin mirror, `scripts/issue_signup_code.py`, ADR 0026, threat-model rows, OpenAPI. 36 core tests, SQL tests with 7 deliberate breakages (6 caught, 1 equivalent), 10 core breakages (all caught after one test added), route sweep extended (new "user" auth kind, role matrix edited on purpose, seeds for invites and members).
 - **Behaviour changes (owner):** register agent and rotate key are admin only; viewers' state snapshot has no reasoning or tool-argument text. **Dashboard buttons for operators must follow** (next PR).

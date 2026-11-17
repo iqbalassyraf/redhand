@@ -24,6 +24,8 @@ import {
   type UsageSummary,
   type AgentRiskSummary,
   type RiskList,
+  type Me,
+  meApi,
   riskApi,
   spendApi,
   telegramApi,
@@ -35,7 +37,9 @@ import { DestinationsPanel } from "./DestinationsPanel";
 import { RiskLadderCard } from "./RiskLadderCard";
 import { RiskPanel } from "./RiskPanel";
 import { SdkKeysCard } from "./SdkKeysCard";
+import { TeamCard } from "./TeamCard";
 import { SpendPanel } from "./SpendPanel";
+import { isAdmin, isNoOrganizationMessage } from "@/lib/onboarding";
 import { REPORTED_ONLY_HELP, REPORTED_ONLY_LABEL, canPromote, promoteConfirmText } from "@/lib/reportedOnly";
 
 // RedHand's own automatic actions (Budget Guard, honeytokens, the Risk Engine) are recorded under this fixed actor (not a person).
@@ -84,12 +88,18 @@ export default function PassportsPage() {
   const [revealedKey, setRevealedKey] = useState<{ name: string; key: string } | null>(null);
   const [busy, setBusy] = useState(false);
   const [editing, setEditing] = useState<Passport | null>(null);
+  const [me, setMe] = useState<Me | null>(null);
+  const admin = isAdmin(me?.role);
 
   const handleError = useCallback(
     (err: unknown) => {
       if (err instanceof ApiError && err.status === 401) {
         signOut();
         window.location.href = "/login";
+        return;
+      }
+      if (err instanceof ApiError && err.status === 403 && isNoOrganizationMessage(err.message)) {
+        window.location.href = "/welcome"; // signed in, but not in an organization yet: create or join one
         return;
       }
       setError(err instanceof Error ? err.message : "Something went wrong.");
@@ -119,6 +129,7 @@ export default function PassportsPage() {
           throw err;
         }),
       ]);
+      setMe(await meApi.get(token).catch(() => null)); // an older core has no /v1/me: the page then shows every action and the server decides
       setPassports(p);
       setServers(s);
       setAudit(a);
@@ -224,7 +235,7 @@ export default function PassportsPage() {
         <div className="flex items-center gap-3 text-[12px]">
           <span className="hidden text-[#606060] sm:inline">
             {session.email}
-            {session.role ? ` · ${session.role.replace("_", " ")}` : ""}
+            {me ? ` · ${me.organization_name} · ${me.role.replace("_", " ")}` : session.role ? ` · ${session.role.replace("_", " ")}` : ""}
             {session.mode === "development" ? " · dev login" : ""}
           </span>
           <button
@@ -331,6 +342,7 @@ export default function PassportsPage() {
         )}
 
         <PassportTable
+          canIssueKeys={!me || admin}
           passports={passports}
           busy={busy}
           onFreeze={(p) => act(`${p.name} frozen.`, () => passportsApi.freeze(token, p.id))}
@@ -457,7 +469,12 @@ export default function PassportsPage() {
         )}
 
         <div className="grid gap-6 lg:grid-cols-2">
-          <RegisterAgentForm
+          {me && !admin ? (
+            <section className="rounded-[12px] border border-[#E5E5E5] bg-[#FFFFFF] p-4 text-[13px] text-[#606060]">
+              <h2 className="text-[15px] font-semibold text-[#111111]">Register an agent</h2>
+              <p className="mt-1">Registering an agent issues its key, so it needs an admin. Ask one of your admins to register it.</p>
+            </section>
+          ) : <RegisterAgentForm
             servers={servers}
             busy={busy}
             onSubmit={(body) =>
@@ -466,7 +483,7 @@ export default function PassportsPage() {
                 setRevealedKey({ name: res.passport.name, key: res.agent_key });
               })
             }
-          />
+          />}
           <McpServersPanel
             servers={servers}
             busy={busy}
@@ -495,6 +512,18 @@ export default function PassportsPage() {
           }}
         />
 
+        {me && admin && (
+          <TeamCard
+            token={token}
+            ownRole={me.role}
+            ownUserId={me.user_id}
+            onUnauthorized={() => {
+              signOut();
+              window.location.href = "/login";
+            }}
+          />
+        )}
+
         <AuditPanel entries={audit} passports={passports} servers={servers} />
       </main>
     </div>
@@ -509,6 +538,7 @@ function PassportTable(props: {
   onPromote: (p: Passport) => void;
   onRevoke: (p: Passport) => void;
   onRotate: (p: Passport) => void;
+  canIssueKeys: boolean;
   onRenew: (p: Passport) => void;
   onEditScopes: (p: Passport) => void;
   orgSafeMode: boolean;
@@ -672,7 +702,7 @@ function PassportTable(props: {
                           label={p.safe_mode ? "End Safe Mode" : "Safe Mode"}
                         />
                         <ActionButton disabled={busy} onClick={() => props.onRenew(p)} label="Renew" />
-                        <ActionButton disabled={busy} onClick={() => props.onRotate(p)} label="New key" />
+                        {props.canIssueKeys && <ActionButton disabled={busy} onClick={() => props.onRotate(p)} label="New key" />}
                         <ActionButton disabled={busy} onClick={() => props.onRevoke(p)} label="Revoke" danger />
                       </>
                     )}

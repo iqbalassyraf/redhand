@@ -19,7 +19,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, Request, status
 
-from redhand_core.auth.operator import AdminDep, UserDep
+from redhand_core.auth.operator import AdminDep, UserDep, ViewerDep
 from redhand_core.config import Settings, get_settings
 from redhand_core.net.source import client_source
 from redhand_core.onboarding import service
@@ -32,6 +32,7 @@ from redhand_core.onboarding.models import (
     InviteCreateRequest,
     InviteList,
     InviteRevokeResponse,
+    MeResponse,
     MemberList,
     RemoveMemberResponse,
     SetRoleRequest,
@@ -51,6 +52,11 @@ SettingsDep = Annotated[Settings, Depends(get_settings)]
 
 def _limit(request: Request, user: UserDep, settings: Settings) -> None:
     service.check_rate(user.user_id, client_source(request.scope, settings.TRUSTED_PROXY_HOPS), settings.SIGNUPS_PER_HOUR_PER_USER, settings.SIGNUPS_PER_HOUR_PER_SOURCE)
+
+
+@router.get("/v1/me", response_model=MeResponse)
+async def get_me(operator: ViewerDep, supabase: SupabaseDep) -> MeResponse:
+    return await service.whoami(supabase, operator)
 
 
 @router.post("/v1/organizations", response_model=CreateOrganizationResponse, status_code=status.HTTP_201_CREATED)

@@ -134,6 +134,7 @@ BODY_DEPENDENT_ROLE: dict[tuple[Method, str], str] = {
 EXPECTED_MINIMUM_ROLE: dict[str, list[tuple[Method, str]]] = {
     "VIEWER": [
         ("GET", "/v1/audit/control"),
+        ("GET", "/v1/me"),
         ("GET", "/v1/blackbox/events"),
         ("GET", "/v1/blackbox/settings"),
         ("GET", "/v1/blackbox/verify"),
