@@ -22,6 +22,7 @@ from uuid import UUID, uuid4
 from fastapi import Depends, FastAPI, Header, HTTPException, Path, Query, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, PlainTextResponse, Response
+import httpx
 from pydantic import BaseModel, ConfigDict, Field
 import structlog
 
@@ -42,6 +43,7 @@ from .gateway.radar_scan import HttpFindingsReporter, HttpScanCountsReporter, Ra
 from .gateway.selftest import BusyError, SelfTestError, SelfTestRunner
 from .gateway.recorder import EventRecorder, HttpEventReporter
 from .gateway.trips import HttpTripReporter, TripDispatcher
+from .gateway.model_proxy import MemoryUsageSink, ModelProxy, ModelProxyConfig, mount_model_proxy
 from .gateway.service import McpGateway
 from .gateway.upstream import UpstreamForwarder
 from .telemetry.audit_logger import TamperEvidentAuditLogger
@@ -112,6 +114,20 @@ settings = get_settings()
 firewall_engine = FirewallPolicyEngine(settings.POLICY_FILE_PATH)
 audit_logger = TamperEvidentAuditLogger(log_file_path=settings.AUDIT_LOG_FILE)
 gateway = build_gateway(settings, firewall_engine, audit_logger)
+# PROTOTYPE, off by default (ADR 0025): a disabled proxy mounts no route at all.
+model_proxy = ModelProxy(
+    verifier=gateway.verifier,
+    contexts=gateway.contexts,
+    client=httpx.AsyncClient(timeout=httpx.Timeout(120.0, connect=5.0)),
+    config=ModelProxyConfig(
+        enabled=settings.MODEL_PROXY_ENABLED,
+        provider_url=settings.MODEL_PROXY_ANTHROPIC_URL,
+        provider_key=settings.MODEL_PROXY_ANTHROPIC_KEY,
+        allowed_models=frozenset(m.strip() for m in settings.MODEL_PROXY_ALLOWED_MODELS.split(",") if m.strip()),
+        max_tokens_cap=settings.MODEL_PROXY_MAX_TOKENS_CAP,
+    ),
+    sink=MemoryUsageSink(),
+)
 
 
 @asynccontextmanager
@@ -133,6 +149,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     await gateway.pins.aclose()
     await gateway.radar.aclose()
     await gateway.contexts.aclose()
+    await model_proxy.client.aclose()
 
 
 app = FastAPI(
@@ -143,6 +160,7 @@ app = FastAPI(
 )
 
 app.add_middleware(SecurityHeadersMiddleware)
+mount_model_proxy(app, model_proxy)
 
 # Browsers only need to reach the gateway from the dashboard origin (MCP vetting).
 app.add_middleware(
@@ -376,4 +394,7 @@ async def verify_audit_chain() -> dict[str, Any]:
 
 @app.get("/metrics", dependencies=[Depends(require_service_token)])
 async def metrics() -> PlainTextResponse:
-    return PlainTextResponse(gateway.metrics.render(), media_type="text/plain; version=0.0.4")
+    text = gateway.metrics.render()
+    if settings.MODEL_PROXY_ENABLED:
+        text += model_proxy.render_prometheus()
+    return PlainTextResponse(text, media_type="text/plain; version=0.0.4")

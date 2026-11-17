@@ -111,6 +111,19 @@ class Settings(BaseSettings):
         default=True,
         description="Kill switch for loop detection (Phase 4 M6). False skips the meter entirely, whatever the organization's mode says.",
     )
+    MODEL_PROXY_ENABLED: bool = Field(
+        default=False,
+        description="PROTOTYPE (Phase 4.5 B5, ADR 0025). True mounts POST /v1/model/anthropic/v1/messages. Off by default: the route does not exist.",
+    )
+    MODEL_PROXY_ANTHROPIC_URL: str = Field(default="https://api.anthropic.com", description="Provider base URL for the model proxy prototype.")
+    MODEL_PROXY_ANTHROPIC_KEY: SecretStr | None = Field(
+        default=None,
+        description="The deployment's own provider key, held only in this process and sent only to the provider. Without it the proxy refuses every call.",
+    )
+    MODEL_PROXY_ALLOWED_MODELS: str = Field(
+        default="", description="Comma-separated model ids allowed for the whole deployment; empty means the passport scopes alone decide.",
+    )
+    MODEL_PROXY_MAX_TOKENS_CAP: int = Field(default=32_000, ge=1, le=200_000, description="Largest max_tokens a proxied request may ask for.")
     DESTINATION_CHECK_ENABLED: bool = Field(
         default=True,
         description="Kill switch for the destination allowlist (Phase 4 M7). False skips the check entirely, whatever an agent's mode says.",

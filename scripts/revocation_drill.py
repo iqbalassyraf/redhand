@@ -56,6 +56,7 @@ class Stack:
     gateway_port: int = field(default_factory=free_port)
     upstream_port: int = field(default_factory=free_port)
     procs: dict[str, subprocess.Popen[bytes]] = field(default_factory=dict)
+    gateway_env: dict[str, str] = field(default_factory=dict)  # extra settings for the gateway process (the model-proxy benchmark uses it)
 
     @property
     def core(self) -> str:
@@ -74,7 +75,7 @@ class Stack:
             cmd = [sys.executable, "-m", "uvicorn", "examples.demo_mcp_server:app", "--port", str(self.upstream_port), "--log-level", "warning"]
         else:
             env.update(AGENTWALL_ENVIRONMENT="development", AGENTWALL_CORE_URL=self.core, AGENTWALL_CORE_SERVICE_TOKEN=SERVICE_TOKEN,
-                       AGENTWALL_ALLOW_INSECURE_UPSTREAMS="true")
+                       AGENTWALL_ALLOW_INSECURE_UPSTREAMS="true", **self.gateway_env)
             cmd = [sys.executable, "-m", "uvicorn", "agentwall.src.main:app", "--port", str(self.gateway_port), "--log-level", "warning"]
         self.procs[name] = subprocess.Popen(cmd, cwd=ROOT, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
