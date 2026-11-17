@@ -2,6 +2,8 @@
 
 ## Unreleased: Phase 3 (See things), in progress
 
+- Revocation and failure drill: `scripts/revocation_drill.py` starts real core, gateway and MCP server processes on loopback and measures freeze, revoke and freeze-all (busy and sparse agents), core paused and killed, and an upstream killed; a 2-trial version runs on every build. Result of the first full run in `docs/security/measurements/`: about 0.4 s to refusal, never an allow after a refusal, 4.3 s when core hangs (small margin: see the follow-up there).
+
 - Security fix found by the new route sweep: the credential broker (`/v1/iam/mint/gcp`, `/v1/iam/mint/aws`) minted cloud credentials for whatever agent id and tool the request named, on the strength of an organization SDK key alone. It now requires an active, non-reported-only passport of the key's own organization and a tool its scopes cover (403 otherwise, 503 if the passport cannot be read). **Behaviour change:** callers that minted for agents without a registered passport are refused. New tests `test_route_sweep.py` (every core route: authentication, reviewed role matrix, no or bad credentials, other organization's ids) and `test_gateway_route_sweep.py`.
 
 - Incident view (G4 from the Part N run): an agent's timeline no longer lists organization-wide actions from before the agent was registered. The one exception is Safe Mode for every agent that was still on at registration: it is shown once with "Already in force when this agent was registered." (new optional field `in_effect_at_registration` on timeline items and in the CSV export). ADR 0022 amendment.
