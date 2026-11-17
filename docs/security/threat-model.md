@@ -129,6 +129,8 @@
 | Spend limit relaxed to silence alerts (B4a) | Admin only, audited, confirmation to raise or remove, compare-and-set against the state the decision was made on | An admin can still turn the alert off |
 | Approved-model list weakened or cleared to hide an unapproved model (B4b) | Admin only, audited, compare-and-set on a version, clearing needs confirmation; at most 50 entries of plain names | An admin can still clear it |
 | A hostile model name reaches the dashboard or a chat through a RAD-MDL-001 finding (B4b) | The database reduces names to `[a-z0-9_.:/-]` and 128 characters before storing; the dashboard renders text only; alerts carry the stored name | None known |
+| Stolen or leaked organization SDK key (C1a) | Keys are issued by an admin and shown once, stored as SHA-256 only, expire (default 90 days), can be revoked at once (audited), 10 active per organization, per-key ingest limit, "last used" visible; nobody can write the key table directly | A holder can report for any agent of the organization until it is revoked; C1b removes its power to rename passports or create usable ones |
+| Admin abuses key management (C1a) | Every create and revoke is audited (actor, time, name, prefix; never the hash) | An admin can issue a key; the audit log shows it |
 
 ## 3. Out of scope so far
 Local stdio MCP servers, non-MCP REST APIs, LLM API spend (Budget Guard, Phase 2), honeytokens and

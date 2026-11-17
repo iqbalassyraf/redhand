@@ -27,6 +27,7 @@ from redhand_core.services.notifications.slack import dispatch_slack_hitl_notifi
 from redhand_core.services.policy_engine import get_policy_engine
 from redhand_core.services.siem_exporter import get_siem_exporter
 from redhand_core.telegram.deps import OptionalClientDep
+from redhand_core.sdkkeys import service as sdk_keys
 
 logger = logging.getLogger("redhand.core.telemetry")
 
@@ -314,6 +315,14 @@ async def verify_sdk_api_key(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="RedHand API Key has expired.",
             )
+
+    # Per-key limit (C1a): checked after the key is known to be valid, so an invalid key cannot use up a real key's budget.
+    if not sdk_keys.allow_ingest(str(record["id"])):
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Too many telemetry batches for this SDK key. Try again in a minute.",
+            headers={"Retry-After": "60"},
+        )
 
     org_data = record.get("organizations") or {}
     return AuthenticatedOrgContext(
@@ -623,6 +632,8 @@ async def ingest_telemetry_batch(
             security_event_rows,
             supabase,
         )
+
+    background_tasks.add_task(sdk_keys.touch, supabase, auth_ctx.api_key_id)  # "last used", after the reply, at most once a minute
 
     # Model spend (B4a): count models with no known price (no names), and, when the batch reported model use, compare today's estimate with the
     # agent's dollar limit AFTER the SDK has its reply. Detective only: nothing here can refuse or fail this batch.

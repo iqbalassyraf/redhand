@@ -133,6 +133,13 @@
       "line_sha256": "5e86b9fcdd12dad9a26283bc69e59144231c79220c20b3f78068ea5c491f6ad8",
       "count": 1,
       "reason": "A fake token in a test that proves the DLP scrubber redacts it before storage; not a real credential."
+    },
+    {
+      "file": "services/redhand-core/src/redhand_core/routers/sdk_keys.py",
+      "rule": "RH-SEC-003",
+      "line_sha256": "2d2ad3b73af3d2e3ad3db8c9881697027d53603da0c51f4c6f0e7c95be079f98",
+      "count": 1,
+      "reason": "An authenticated admin-only DELETE route that revokes an SDK key (audited); the Python rule mistakes it for an unguarded destructive agent tool."
     }
   ]
 }

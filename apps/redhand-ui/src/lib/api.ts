@@ -5,6 +5,7 @@
 
 import type { ApprovedModel, ApprovedModelsList } from "./approvedModels";
 import type { AgentSpendDetail, SpendLimitResult, SpendToday } from "./spend";
+import type { SdkKeyCreated, SdkKeyList } from "./sdkKeys";
 import type { TimelineResponse } from "@/lib/timeline";
 
 export const CORE_API_BASE =
@@ -869,4 +870,11 @@ export const approvedModelsApi = {
   get: (t: string) => apiFetch<ApprovedModelsList>("/v1/organization/approved-models", t),
   set: (t: string, body: { items: ApprovedModel[]; version: number; confirm: boolean; reason?: string }) =>
     apiFetch<ApprovedModelsList>("/v1/organization/approved-models", t, { method: "PUT", body }),
+};
+
+// Organization SDK keys (Phase 4.5 C1a). The plaintext key is only in the create response: never store it. See src/lib/sdkKeys.ts.
+export const sdkKeysApi = {
+  list: (t: string) => apiFetch<SdkKeyList>("/v1/organization/sdk-keys", t),
+  create: (t: string, body: { name: string; expires_in_days: number }) => apiFetch<SdkKeyCreated>("/v1/organization/sdk-keys", t, { method: "POST", body }),
+  revoke: (t: string, keyId: string) => apiFetch<{ id: string; changed: boolean }>(`/v1/organization/sdk-keys/${keyId}`, t, { method: "DELETE", body: {} }),
 };
