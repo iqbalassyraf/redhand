@@ -31,6 +31,10 @@ Nothing here is done unless it says so and names the evidence.
 - `pip-audit` and `npm audit` (already in CI) clean at high and above; review the lockfiles for unexpected packages; confirm licences are compatible with closed-source distribution.
 - Review `docs/security/threat-model.md` against the code: every trust boundary still has its mitigation row; update the rows for anything added since.
 - A manual review of every endpoint list in `docs/api/redhand-core.openapi.json` and `docs/api/agentwall.openapi.json`: authenticated unless declared public, role checked, tenant scoped.
+  **Automated since 2026-11-17 (run on every CI build):** `services/redhand-core/tests/test_route_sweep.py` and `agentwall/tests/test_gateway_route_sweep.py` are generated from the live
+  route tables: every route has a known kind of authentication or a reasoned public entry; bad or missing credentials are refused with nothing executed; every operator route has the
+  role in a reviewed matrix (a change to a required role is a visible diff); another organization's ids and list rows are unreachable. Still manual: whether each role's *meaning* is right
+  (see the open questions in `docs/handoff.md`, 2026-11-17 sweep entry).
 
 ### 3.3 Dynamic and abuse testing on staging
 - Run an authenticated and an unauthenticated scan of the public surface (core, gateway, dashboard): headers, TLS, CORS, rate limits, error leakage.

@@ -13,6 +13,16 @@ Both tools work on RedHand and its demo projects. This file is how each learns w
 
 ---
 
+## 2026-11-17, Claude Code: route sweep (branch test/authz-tenant-sweep)
+- **Added:** `services/redhand-core/tests/test_route_sweep.py` (about 240 cases generated from the live route table) and `agentwall/tests/test_gateway_route_sweep.py`. They check classification, bad or missing credentials, a reviewed role matrix, and cross-tenant access. Deliberate breakages (loosened role, dropped organization filter, a new unauthenticated route, a gateway route without the service token) are caught. One survived at first: the sweep read each route's role from the code, so a loosened role was invisible; the role matrix is now written out in the test.
+- **Fixed (found by the sweep):** the credential broker minted cloud credentials for any agent id and tool named in the request (see CHANGELOG, threat model). Tests `test_iam_broker_authz.py`.
+- **Open questions for the owner (not changed, role meaning is a product decision):**
+  1. `GET /v1/state/snapshot` (viewer) returns full `execution_traces` rows (`thought_content`, `observation_payload`, `tool_arguments`, DLP-scrubbed) while the Black Box payload view is admin-only and opt-in. The dashboard's Command center page reads those fields. Restrict for viewers?
+  2. A **security operator** can register a passport (`POST /v1/passports`) and rotate any agent's key (`rotate-key`), and unfreeze (confirmed): that is credential issuance and restoring access. Admin only?
+  3. The credential broker still has one deployment-level source credential for every organization (per-tenant credentials need their own design).
+  4. SCIM is a deployment-level, in-memory demo store, off unless a token is set (documented in `scim.py`): keep it out of any hosted tier until it is tenant-scoped.
+- **Not verified:** staging. The sweep runs on the in-memory store; the Supabase row-level policies have their own SQL tests.
+
 ## 2026-11-17, Claude Code: G4 timeline fix (branch fix/timeline-agent-lifetime, nothing deployed)
 - **Changed:** an agent's timeline shows freeze all and Safe Mode for all only from its registration onwards, plus the one Safe Mode for all that was still on when it was registered (labelled "Already in force when this agent was registered."). Core read path and dashboard text only; no migration.
 - **Verified locally:** timeline tests (8 new), full Python suite, ruff, mypy, dashboard node tests, `tsc`, build, a real-browser look at a seeded agent registered after Safe Mode for all. Deliberate breakages: dropping the clip, dropping the carry-over, carrying over a "turned off", and guessing a lifetime for an agent without one are all caught.
