@@ -894,7 +894,17 @@ export interface Me {
   organization_id: string;
   organization_name: string;
   role: "owner" | "admin" | "security_operator" | "viewer";
+  organization_slug?: string;
+  deletion_purge_after?: string | null;
 }
+export interface DeletionStatus { requested: boolean; requested_at: string | null; purge_after: string | null; already?: boolean }
+export const lifecycleApi = {
+  status: (t: string) => apiFetch<DeletionStatus>("/v1/organization/deletion", t),
+  exportData: (t: string) => apiFetch<unknown>("/v1/organization/export", t),
+  requestDeletion: (t: string, confirmSlug: string) =>
+    apiFetch<DeletionStatus>("/v1/organization/delete-request", t, { method: "POST", body: { confirm_slug: confirmSlug } }),
+  cancelDeletion: (t: string) => apiFetch<DeletionStatus>("/v1/organization/delete-request/cancel", t, { method: "POST" }),
+};
 export interface TeamMember { user_id: string; email: string | null; role: "owner" | "admin" | "security_operator" | "viewer"; joined_at: string | null }
 export interface TeamInvite { id: string; role: "admin" | "security_operator" | "viewer"; state: "pending" | "used" | "revoked" | "expired"; created_at: string | null; expires_at: string | null }
 export interface InviteCreated { token: string; join_path: string; invite: TeamInvite }

@@ -3,7 +3,7 @@
 Applies from migration `20261130000000_tenant_lifecycle` (ADR 0027). The old manual procedure (disable the append-only triggers by hand) is replaced by `control_org_purge`, which does the
 same steps inside one transaction and proves the result.
 
-## What the owner can do (dashboard API, owner role)
+## What the owner can do (dashboard page **Organization**, or the API; owner role)
 - **Export:** `GET /v1/organization/export` returns every table of the organization as JSON (key hashes, token hashes, webhook URLs left out; members with their e-mail). One export per organization per hour; each is audited (counts only).
 - **Request deletion:** `POST /v1/organization/delete-request` with `{"confirm_slug": "<the organization's address name>"}`. This freezes every agent, switches SDK keys off, revokes pending invites and starts a **7-day grace period**.
   Until it ends the organization answers 403 to everything except status, export, a repeated request and cancel.

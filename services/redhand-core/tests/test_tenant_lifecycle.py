@@ -190,3 +190,12 @@ def test_the_purge_is_not_an_api_route(env: Env) -> None:
     paths = {getattr(r, "path", "") for r in env.client.app.routes}  # type: ignore[attr-defined]
     assert not any("purge" in p for p in paths)
     assert "control_org_purge" not in json.dumps(sorted(paths))
+
+
+def test_me_tells_the_dashboard_the_slug_and_when_a_pending_deletion_ends(env: Env) -> None:
+    before = env.client.get("/v1/me", headers=env.h("viewer")).json()
+    assert before["organization_slug"] == env.org["slug"] and before["deletion_purge_after"] is None
+    purge_after = env.request_deletion().json()["purge_after"]
+    during = env.client.get("/v1/me", headers=env.h("viewer"))
+    assert during.status_code == 200, "every member can still see who they are while deletion is pending"
+    assert during.json()["deletion_purge_after"] == purge_after
