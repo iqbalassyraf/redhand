@@ -44,3 +44,10 @@
   row naming the agent under another organization never appears, viewers are refused).
 - A new audit action and a new setting (`DASHBOARD_URL`). Telegram alert texts gain one line when it is set; existing sentences are unchanged.
 - The dashboard's `tsconfig.json` allows `.ts` import extensions (with `noEmit`), so node tests and the build share one module.
+
+## Amendment (2026-11-17): organization-wide items and the agent's lifetime (G4)
+Antigravity's Part N run showed a new agent's timeline listing organization-wide Safe Mode actions from days before it was registered. Now freeze all
+and Safe Mode for all appear only from the agent's registration (`agents.created_at`) onwards, plus at most one older item: the latest organization
+Safe Mode "turned on" before registration, when it was still on then, because Safe Mode for all also restricts agents registered later. That item is
+flagged `in_effect_at_registration` and the dashboard adds "Already in force when this agent was registered." An older freeze all is never carried
+over (it froze only the agents that existed). An agent without a registration time keeps its full organization history; nothing is hidden on a guess.

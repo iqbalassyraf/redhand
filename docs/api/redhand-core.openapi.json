@@ -5502,6 +5502,12 @@
             "title": "Finding Kind",
             "type": "string"
           },
+          "in_effect_at_registration": {
+            "default": false,
+            "description": "Safe Mode for every agent, turned on before this agent was registered and still on then: the one older organization-wide item shown, because it restricted this agent from its start.",
+            "title": "In Effect At Registration",
+            "type": "boolean"
+          },
           "kind": {
             "enum": [
               "refusal",

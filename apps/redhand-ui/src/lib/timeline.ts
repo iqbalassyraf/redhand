@@ -30,6 +30,8 @@ export interface TimelineItem {
   automatic: boolean | null;
   /** An action on every agent of the organization (freeze all, Safe Mode for all). Absent on an older core. */
   organization_wide?: boolean;
+  /** Safe Mode for every agent that was already on when this agent was registered (G4). Absent on an older core. */
+  in_effect_at_registration?: boolean;
 }
 
 export interface TimelineResponse {
@@ -100,6 +102,9 @@ const ACTIONS: Readonly<Record<string, string>> = {
   "organization.safe_mode_disabled": "Safe Mode turned off for every agent",
 };
 
+/** Shown on the one organization-wide item older than the agent: it restricted the agent from its start. */
+export const IN_EFFECT_AT_REGISTRATION = "Already in force when this agent was registered.";
+
 /** A plain name for an audit action; one this version does not know is shown as it is, never hidden. */
 export function actionLabel(action: string): string {
   return ACTIONS[action] ?? action;
@@ -151,9 +156,10 @@ export function describeItem(item: TimelineItem): ItemDescription {
     }
     case "action": {
       const who = item.automatic ? automaticActorLabel(item.reason) : "a person";
+      const detail = item.reason && !item.automatic ? `Reason: ${item.reason}` : (item.reason ?? "");
       return {
         title: `${actionLabel(item.action)} by ${who}`,
-        detail: item.reason && !item.automatic ? `Reason: ${item.reason}` : (item.reason ?? ""),
+        detail: item.in_effect_at_registration ? `${IN_EFFECT_AT_REGISTRATION}${detail ? ` ${detail}` : ""}` : detail,
         tone: "info",
         link: null,
       };
