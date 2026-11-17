@@ -26,7 +26,12 @@ from .honeytokens import HoneytokenRef
 
 logger = structlog.get_logger(__name__)
 
-MAX_CONTEXT_TTL_SECONDS = 4.0
+# Worst case before a hanging core produces a refusal: the cache lifetime, plus a wait for a refresh already running (REFRESH_WAIT_SECONDS), plus this call's own lookup
+# (LOOKUP_TIMEOUT_SECONDS). Their sum at the cap must stay at or under 4.5 s, a second of headroom under the 5 s revocation promise (tested; measured in
+# docs/security/measurements). A slower core answer than the lookup timeout is a refusal: this trades a little availability on a slow core for the bound.
+MAX_CONTEXT_TTL_SECONDS = 2.5
+LOOKUP_TIMEOUT_SECONDS = 1.0
+LOOKUP_CONNECT_TIMEOUT_SECONDS = 0.5
 CACHE_MAX_ENTRIES = 10_000
 # Once a cached passport is this fraction of its lifetime old, the next call that uses it also starts a background refresh, so
 # a busy agent's next call finds a fresh entry instead of waiting for core. This never makes a served entry older than the TTL.
@@ -214,7 +219,7 @@ class CoreContextClient:
         self._token = service_token
         self._instance_id = instance_id
         self._ttl = max(0.0, min(ttl_seconds, MAX_CONTEXT_TTL_SECONDS))
-        self._http = http_client or httpx.AsyncClient(timeout=httpx.Timeout(2.0, connect=1.0))
+        self._http = http_client or httpx.AsyncClient(timeout=httpx.Timeout(LOOKUP_TIMEOUT_SECONDS, connect=LOOKUP_CONNECT_TIMEOUT_SECONDS))
         self._clock = clock
         self._cache: OrderedDict[tuple[str, str, str], tuple[float, GatewayContext]] = OrderedDict()
         self._refreshing: dict[tuple[str, str, str], asyncio.Task[None]] = {}

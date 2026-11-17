@@ -84,8 +84,8 @@ class Settings(BaseSettings):
         ),
     )
     CONTEXT_CACHE_TTL_SECONDS: float = Field(
-        default=2.0, ge=0.0, le=4.0,
-        description="How long a passport lookup is reused. Bounded to keep revocation within 5 s.",
+        default=2.0, ge=0.0, le=2.5,
+        description="How long a passport lookup is reused. Capped so that, with a hanging core, the first refusal still comes within 4.5 s (revocation promise: 5 s).",
     )
     BUDGET_FLUSH_INTERVAL_SECONDS: float = Field(
         default=5.0, ge=1.0, le=60.0,

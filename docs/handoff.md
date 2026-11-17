@@ -13,6 +13,12 @@ Both tools work on RedHand and its demo projects. This file is how each learns w
 
 ---
 
+## 2026-11-17, Claude Code: D1 PR 4 launch kit and gateway lookup timeout (branch docs/d1-launch-kit)
+- **Built:** `docs/launch/*`, ADR 0028 (proposed), `scripts/smoke_launch.py` + `test_smoke_launch.py`, `test_launch_docs.py`; gateway `LOOKUP_TIMEOUT_SECONDS = 1.0`, `MAX_CONTEXT_TTL_SECONDS = 2.5` (setting cap lowered to match), new tests in `agentwall/tests/test_context_refresh.py`, one old test updated on purpose (`test_context_ttl_is_capped_to_meet_revocation_slo` pinned the old 4 s cap).
+- **Measured:** `docs/security/measurements/2026-11-17-revocation-drill-after-lookup-timeout.md` (local): core paused first refusal 3.33 s (was 4.32 s); normal freeze/revoke unchanged (about 0.4 s).
+- **Not verified:** anything on staging or production; real cold-start behaviour with the 1 s lookup timeout (ADR 0028 recommends minimum 1 instance; staging has minimum 0, so the first call after idle may be refused: Antigravity should note it in the next staging run, it is expected, not a bug); the smoke script against a real https deployment.
+- **Owner:** `docs/launch/owner-checklist.md` is the one page. The CLAUDE.md wording "within about half a second, never more than 5 s" is proposed only: say "apply" to put it in.
+
 ## 2026-11-17, Claude Code: D1 onboarding screens (branch feat/d1-onboarding-ui, stacked on feat/d1-onboarding)
 - **Built:** `GET /v1/me`; dashboard `/welcome`, `/join`, login "Create an account", Passports "Team" card, role-aware buttons (no Register agent / New key for non-admins), `lib/onboarding.ts` (+6 tests).
 - **Verified in a real browser (core in development mode, tokens signed locally):** wrong and malformed codes, creating the organization, owner sees Team, invite link shown once and gone, newcomer joins as viewer (no Team card, told registering needs an admin, no New key), a used link refused, 1280 and 375 px. The 43 px overflow at 375 px is the existing Passports header.
