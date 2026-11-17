@@ -15,6 +15,7 @@ from __future__ import annotations
 import copy
 import hashlib
 import json
+import math
 import re
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation
@@ -22,6 +23,8 @@ from typing import Any, Callable
 from uuid import UUID, uuid4
 
 from postgrest.exceptions import APIError
+
+from redhand_core.lifecycle.manifest import MANIFEST
 
 from redhand_core.services.local_store import (
     DEV_OPERATORS,
@@ -2172,6 +2175,94 @@ def _list_organization_members(store: LocalSupabaseAdapter, p: dict[str, Any]) -
     return [{"user_id": m["user_id"], "email": emails.get(str(m["user_id"])), "role": m["role"], "joined_at": m.get("created_at")} for m in rows]
 
 
+def _owner_check(store: LocalSupabaseAdapter, org: str, actor: str, message: str) -> None:
+    member = _member(store, org, actor)
+    if member is None or member["role"] != "owner":
+        raise _error("42501", message)
+
+
+def _lifecycle_org(store: LocalSupabaseAdapter, org: str) -> dict[str, Any]:
+    row = next((o for o in store.tables.get("organizations", []) if str(o.get("id")) == org), None)
+    if row is None:
+        raise _error("P0002", "organization not found")
+    return row
+
+
+def _manifest_rows(store: LocalSupabaseAdapter, table: str, scope: str, exclude: tuple[str, ...], org: str, limit: int) -> dict[str, Any]:
+    agent_ids = {str(a["id"]) for a in store.tables.get("agents", []) if str(a.get("organization_id")) == org}
+    if scope == "self":
+        rows = [r for r in store.tables.get(table, []) if str(r.get("id")) == org]
+    elif scope == "agent":
+        rows = [r for r in store.tables.get(table, []) if str(r.get("agent_id")) in agent_ids]
+    else:
+        rows = [r for r in store.tables.get(table, []) if str(r.get("organization_id")) == org]
+    # "organizations" on a row is the twin's stand-in for a PostgREST embed (a join), not a column of the real table.
+    out = [{k: v for k, v in r.items() if k not in exclude and k != "organizations"} for r in rows[:limit]]
+    if scope == "members":
+        emails = {op["id"]: op["email"] for op in DEV_OPERATORS.values()}
+        out = [{**r, "email": emails.get(str(r.get("user_id")))} for r in out]
+    return {"count": len(rows), "truncated": len(rows) > limit, "rows": out}
+
+
+def _control_org_export(store: LocalSupabaseAdapter, p: dict[str, Any]) -> dict[str, Any]:
+    org, actor, limit = str(p["p_org"]), str(p["p_actor"]), p.get("p_limit", 100000)
+    if not isinstance(limit, int) or not 1 <= limit <= 1_000_000:
+        raise _error("22023", "p_limit must be between 1 and 1000000")
+    _owner_check(store, org, actor, "only an owner can export the organization")
+    now = datetime.now(timezone.utc)
+    recent = [_parse_ts(a["created_at"]) for a in store.tables.get("control_audit_log", [])
+              if str(a["organization_id"]) == org and a["action"] == "organization.exported" and _parse_ts(a["created_at"]) > now - timedelta(hours=1)]
+    if recent:
+        wait = max(1, math.ceil((max(recent) + timedelta(hours=1) - now).total_seconds()))
+        return {"exported": False, "reason": "throttled", "retry_after_seconds": wait}
+    tables = {table: _manifest_rows(store, table, scope, exclude, org, limit) for table, scope, exclude in MANIFEST}
+    _append_audit(store, org=org, actor=actor, action="organization.exported", target_type="organization", target_id=org, reason=None,
+                  details={"row_counts": {t: v["count"] for t, v in tables.items()}})
+    return {"exported": True, "generated_at": _now(), "organization_id": org, "tables": tables}
+
+
+def _control_org_request_deletion(store: LocalSupabaseAdapter, p: dict[str, Any]) -> dict[str, Any]:
+    org, actor, confirm = str(p["p_org"]), str(p["p_actor"]), p.get("p_confirm_slug")
+    _owner_check(store, org, actor, "only an owner can delete the organization")
+    row = _lifecycle_org(store, org)
+    if row.get("deletion_requested_at") is not None:
+        return {"requested": True, "already": True, "requested_at": row["deletion_requested_at"], "purge_after": row["deletion_purge_after"]}
+    if confirm != row["slug"]:
+        return {"requested": False, "reason": "confirmation"}
+    now = datetime.now(timezone.utc)
+    row.update({"deletion_requested_at": now.isoformat(), "deletion_requested_by": actor, "deletion_purge_after": (now + timedelta(days=7)).isoformat()})
+    frozen = 0
+    for agent in store.tables.get("agents", []):
+        if str(agent.get("organization_id")) == org and agent.get("status") == "active":
+            agent["status"], agent["status_reason"], agent["updated_at"] = "frozen", "organization deletion requested", _now()
+            frozen += 1
+    keys = 0
+    for key in store.tables.get("sdk_api_keys", []):
+        if str(key.get("organization_id")) == org and key.get("is_active"):
+            key["is_active"] = False
+            keys += 1
+    invites = 0
+    for invite in store.tables.get("member_invites", []):
+        if str(invite.get("organization_id")) == org and invite.get("used_at") is None and invite.get("revoked_at") is None:
+            invite["revoked_at"] = _now()
+            invites += 1
+    _append_audit(store, org=org, actor=actor, action="organization.deletion_requested", target_type="organization", target_id=org, reason=None,
+                  details={"purge_after": row["deletion_purge_after"], "agents_frozen": frozen, "sdk_keys_deactivated": keys, "invites_revoked": invites})
+    return {"requested": True, "already": False, "requested_at": row["deletion_requested_at"], "purge_after": row["deletion_purge_after"]}
+
+
+def _control_org_cancel_deletion(store: LocalSupabaseAdapter, p: dict[str, Any]) -> dict[str, Any]:
+    org, actor = str(p["p_org"]), str(p["p_actor"])
+    _owner_check(store, org, actor, "only an owner can cancel the deletion")
+    row = _lifecycle_org(store, org)
+    was = row.get("deletion_requested_at")
+    if was is None:
+        return {"cancelled": False, "reason": "not_requested"}
+    row.update({"deletion_requested_at": None, "deletion_requested_by": None, "deletion_purge_after": None})
+    _append_audit(store, org=org, actor=actor, action="organization.deletion_cancelled", target_type="organization", target_id=org, reason=None, details={"requested_at": was})
+    return {"cancelled": True}
+
+
 HANDLERS: dict[str, RpcHandler] = {
     "control_agent_change": _control_agent_change,
     "control_freeze_all": _control_freeze_all,
@@ -2240,6 +2331,9 @@ HANDLERS: dict[str, RpcHandler] = {
     "control_member_remove": _control_member_remove,
     "control_member_set_role": _control_member_set_role,
     "list_organization_members": _list_organization_members,
+    "control_org_export": _control_org_export,
+    "control_org_request_deletion": _control_org_request_deletion,
+    "control_org_cancel_deletion": _control_org_cancel_deletion,
 }
 
 
