@@ -34,6 +34,7 @@ import { type AgentSpend, type SpendToday, spendCell } from "@/lib/spend";
 import { DestinationsPanel } from "./DestinationsPanel";
 import { RiskLadderCard } from "./RiskLadderCard";
 import { RiskPanel } from "./RiskPanel";
+import { SdkKeysCard } from "./SdkKeysCard";
 import { SpendPanel } from "./SpendPanel";
 
 // RedHand's own automatic actions (Budget Guard, honeytokens, the Risk Engine) are recorded under this fixed actor (not a person).
@@ -479,6 +480,14 @@ export default function PassportsPage() {
         />
 
         <TelegramPanel token={token} onChanged={refresh} onError={handleError} />
+
+        <SdkKeysCard
+          token={token}
+          onUnauthorized={() => {
+            signOut();
+            window.location.href = "/login";
+          }}
+        />
 
         <AuditPanel entries={audit} passports={passports} servers={servers} />
       </main>

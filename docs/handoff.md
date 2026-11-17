@@ -13,6 +13,12 @@ Both tools work on RedHand and its demo projects. This file is how each learns w
 
 ---
 
+## 2026-11-17, Claude Code: C1a SDK keys built (branch feat/c1a-sdk-keys, nothing deployed)
+- **Built:** migration `20261127000000_sdk_keys` (audited create/revoke functions, last-use stamp, direct-write policy dropped), core `sdkkeys/` + `/v1/organization/sdk-keys`, per-key ingest limit and last-use in telemetry, local twin, dashboard "SDK keys" card, ADR 0024, runbook, threat model, OpenAPI, CHANGELOG. Tonight's checklist is merged (#90).
+- **Verified locally:** full Python suite, ruff, mypy, SQL suite with rollback (10 mutants killed), 34 core tests (15 mutants killed), dashboard 103 node tests, `tsc`, build, real browser (admin, operator, viewer at 1280 and 375 px: create shown once and gone after reload, works for ingest, revoke then 401, other roles refused).
+- **Deploy order:** migration, core, dashboard. Then N9 and P7 can be run with a key made in the dashboard (no more SQL keys).
+- **Next:** C1b (no passport renaming by telemetry, "reported only" passports, promote).
+
 ## 2026-11-16, Claude Code: Parts N, O, P result checked against staging (branch docs/night-1-nop-db-check)
 - **Read-only checks done** (section 7a of `docs/testing/results/2026-11-16-night-1-parts-nop.md`): N10, O10, P10 PASS; P5 and P6 PASS in the database (the model finding exists and adds 0 Risk points), UI not seen; roll-ups match; the stray agent in "F1 Second Org" is gone with nothing left behind and the unfiltered delete removed no audited agent.
 - **Report corrected:** the test SDK key is already inactive; `pin-test`, `night-radar`, `night-dest` are still active (revoke them).
