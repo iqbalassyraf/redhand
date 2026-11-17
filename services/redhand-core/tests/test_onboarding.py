@@ -364,3 +364,13 @@ def test_guessing_invite_tokens_is_rate_limited_too() -> None:
     user = env.user()
     statuses = [env.accept(user, "rh_join_" + str(n).zfill(32)).status_code for n in range(5)]
     assert statuses[:3] == [403, 403, 403] and statuses[3:] == [429, 429]
+
+
+def test_me_tells_the_dashboard_who_and_which_role(env: Env) -> None:
+    mine = env.client.get("/v1/me", headers=env.h("operator")).json()
+    assert mine["role"] == "security_operator"
+    assert mine["organization_id"] == DEFAULT_ORG_ID and mine["organization_name"]
+    assert env.client.get("/v1/me", headers=env.h("viewer")).json()["role"] == "viewer"
+    assert env.client.get("/v1/me", headers=env.h("owner")).json()["role"] == "owner"
+    assert env.client.get("/v1/me", headers=env.h(env.user())).status_code == 403, "a person with no organization is told they are not a member"
+    assert env.client.get("/v1/me").status_code == 401

@@ -4,6 +4,7 @@ import React, { useState } from "react";
 import { Hand } from "lucide-react";
 
 import { useAuth } from "@/lib/auth";
+import { PENDING_INVITE_KEY } from "@/lib/onboarding";
 
 const DEV_USERS: Array<{ id: string; label: string }> = [
   { id: "owner", label: "Owner" },
@@ -14,8 +15,8 @@ const DEV_USERS: Array<{ id: string; label: string }> = [
 ];
 
 export default function LoginPage() {
-  const { supabaseConfigured, signInWithPassword, signInDevelopment, requestPasswordReset } = useAuth();
-  const [mode, setMode] = useState<"signin" | "forgot">("signin");
+  const { supabaseConfigured, signInWithPassword, signInDevelopment, signUpWithPassword, requestPasswordReset } = useAuth();
+  const [mode, setMode] = useState<"signin" | "forgot" | "signup">("signin");
   const [notice, setNotice] = useState<string | null>(null);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -27,7 +28,9 @@ export default function LoginPage() {
     setError(null);
     try {
       await action();
-      window.location.href = "/passports";
+      let pending = false;
+      try { pending = Boolean(window.sessionStorage.getItem(PENDING_INVITE_KEY)); } catch { /* storage unavailable: go to the passports page */ }
+      window.location.href = pending ? "/join" : "/passports";
     } catch (err) {
       setError(err instanceof Error ? err.message : "Sign-in failed.");
     } finally {
@@ -96,6 +99,44 @@ export default function LoginPage() {
               Back to sign in
             </button>
           </form>
+        ) : supabaseConfigured && mode === "signup" ? (
+          <form
+            onSubmit={async (e) => {
+              e.preventDefault();
+              setBusy(true);
+              setError(null);
+              setNotice(null);
+              try {
+                const result = await signUpWithPassword(email, password);
+                if (result.confirm) {
+                  setNotice("Almost there: open the link we e-mailed you to confirm the address, then sign in here.");
+                  setMode("signin");
+                } else {
+                  window.location.href = "/passports"; // no organization yet: the page sends you to create or join one
+                }
+              } catch (err) {
+                setError(err instanceof Error ? err.message : "Could not create the account.");
+              } finally {
+                setBusy(false);
+              }
+            }}
+            className="flex flex-col gap-3"
+          >
+            <h1 className="text-[15px] font-semibold">Create an account</h1>
+            <label className="text-[12px] font-semibold text-[#606060]" htmlFor="signup-email">Email</label>
+            <input id="signup-email" type="email" autoComplete="username" required value={email} onChange={(e) => setEmail(e.target.value)}
+              className="h-[38px] rounded-[8px] border border-[#E5E5E5] px-3 text-[14px] focus:border-[#0F0F0F] focus:outline-none" />
+            <label className="text-[12px] font-semibold text-[#606060]" htmlFor="signup-password">Password (at least 10 characters)</label>
+            <input id="signup-password" type="password" autoComplete="new-password" required minLength={10} value={password} onChange={(e) => setPassword(e.target.value)}
+              className="h-[38px] rounded-[8px] border border-[#E5E5E5] px-3 text-[14px] focus:border-[#0F0F0F] focus:outline-none" />
+            <p className="text-[12px] text-[#606060]">
+              An account lets you join a team you were invited to, or create an organization with a sign-up code. RedHand is invite-only for now.
+            </p>
+            <button type="submit" disabled={busy} className="mt-1 h-[38px] rounded-full bg-[#0F0F0F] text-[14px] font-semibold text-[#FFFFFF] disabled:opacity-50">
+              Create account
+            </button>
+            <button type="button" onClick={() => { setMode("signin"); setError(null); }} className="text-[13px] text-[#606060] underline">Back to sign in</button>
+          </form>
         ) : supabaseConfigured ? (
           <form
             onSubmit={(e) => {
@@ -144,6 +185,17 @@ export default function LoginPage() {
               className="text-[13px] text-[#606060] underline"
             >
               Forgot password?
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setMode("signup");
+                setError(null);
+                setNotice(null);
+              }}
+              className="text-[13px] text-[#606060] underline"
+            >
+              Create an account
             </button>
           </form>
         ) : (
