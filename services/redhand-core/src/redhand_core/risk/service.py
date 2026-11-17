@@ -66,7 +66,7 @@ ORG_WIDE_READ_FROM = 4
 _in_flight = 0
 ACTIVE = "active"
 SIGNAL_BY_KEY = {s.value: s for s in Signal}
-AGENT_COLUMNS = "id,name,status,safe_mode,risk_released_at"
+AGENT_COLUMNS = "id,name,status,safe_mode,risk_released_at,reported_only"
 PREVIEW_NAMES = 10
 
 
@@ -327,10 +327,16 @@ async def _act_on(supabase: Any, telegram: TelegramClient | None, org: UUID, row
             metrics.increment_counter("risk_actions_total", labels={"action": "alert"})
 
 
+def ladder_eligible(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """The agents the ladder may act on. A reported-only passport (C1b) was created by an SDK key, not by a person: its numbers are whatever that
+    key sent, so the ladder never freezes or alerts on it automatically (an admin promotes it first)."""
+    return [row for row in rows if row.get("reported_only") is not True]
+
+
 async def _evaluate(
     supabase: Any, telegram: TelegramClient | None, org: UUID, agent_ids: list[UUID], now: datetime, alerts: AlertBatch | None
 ) -> None:
-    rows = await _agents(supabase, org, agent_ids)  # an agent of another organization is simply not found
+    rows = ladder_eligible(await _agents(supabase, org, agent_ids))  # an agent of another organization is simply not found
     if not rows:
         return
     ladder = await load_ladder(supabase, org)

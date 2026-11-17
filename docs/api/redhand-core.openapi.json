@@ -3497,6 +3497,12 @@
             ],
             "title": "Owner Id"
           },
+          "reported_only": {
+            "default": false,
+            "description": "Created by an SDK key's telemetry, not by a person: no gateway access until an admin promotes it.",
+            "title": "Reported Only",
+            "type": "boolean"
+          },
           "safe_mode": {
             "title": "Safe Mode",
             "type": "boolean"
@@ -10675,6 +10681,91 @@
           }
         },
         "summary": "Freeze Agent",
+        "tags": [
+          "Agent Passports & Control Actions"
+        ]
+      }
+    },
+    "/v1/passports/{agent_id}/promote": {
+      "post": {
+        "operationId": "promote_agent_v1_passports__agent_id__promote_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "agent_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Agent Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-RedHand-Org",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Redhand-Org"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConfirmedControlActionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ControlActionResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Promote Agent",
         "tags": [
           "Agent Passports & Control Actions"
         ]

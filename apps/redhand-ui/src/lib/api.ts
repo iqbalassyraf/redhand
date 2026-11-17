@@ -99,6 +99,8 @@ export interface Passport {
   safe_mode: boolean;
   daily_call_limit: number | null;
   budget_action: "deny" | "freeze";
+  /** Created by SDK telemetry (C1b); absent on an older core. */
+  reported_only?: boolean;
 }
 
 export interface PassportCreateResponse {
@@ -171,6 +173,11 @@ export const passportsApi = {
     }),
   unfreeze: (t: string, id: string, reason?: string) =>
     apiFetch<ControlActionResponse>(`/v1/passports/${id}/unfreeze`, t, {
+      method: "POST",
+      body: { reason: reason || null, confirm: true },
+    }),
+  promote: (t: string, id: string, reason?: string) =>
+    apiFetch<ControlActionResponse>(`/v1/passports/${id}/promote`, t, {
       method: "POST",
       body: { reason: reason || null, confirm: true },
     }),

@@ -196,6 +196,16 @@ PROMISES = [
     ("Model alert:", "services/redhand-core/src/redhand_core/approved/service.py"),
     ("Recorded only: nothing was refused.", "services/redhand-core/src/redhand_core/approved/service.py"),
     ("Model not on the approved list", "services/redhand-core/src/redhand_core/approved/service.py"),
+    # Part Q (SDK keys and telemetry trust)
+    ("Create SDK key", "apps/redhand-ui/src/app/passports/SdkKeysCard.tsx"),
+    ("Copy this key now. It will not be shown again: RedHand stores only its hash.", "apps/redhand-ui/src/lib/sdkKeys.ts"),
+    ("Revoke this key? Anything still using it will be refused from the next batch. This cannot be undone.", "apps/redhand-ui/src/lib/sdkKeys.ts"),
+    ("reported by SDK", "apps/redhand-ui/src/lib/reportedOnly.ts"),
+    ("no gateway access until an admin promotes it", "apps/redhand-ui/src/lib/reportedOnly.ts"),
+    ("It becomes a managed passport. It still needs scopes and an agent key before it can call any tool.", "apps/redhand-ui/src/lib/reportedOnly.ts"),
+    ("promoted.", "apps/redhand-ui/src/app/passports/page.tsx"),
+    ("Agent passport is reported only: an admin must promote it on the Passports page before it can use the gateway.",
+     "services/redhand-core/src/redhand_core/routers/agent_auth.py"),
 ]
 
 

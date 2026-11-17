@@ -36,6 +36,7 @@ import { RiskLadderCard } from "./RiskLadderCard";
 import { RiskPanel } from "./RiskPanel";
 import { SdkKeysCard } from "./SdkKeysCard";
 import { SpendPanel } from "./SpendPanel";
+import { REPORTED_ONLY_HELP, REPORTED_ONLY_LABEL, canPromote, promoteConfirmText } from "@/lib/reportedOnly";
 
 // RedHand's own automatic actions (Budget Guard, honeytokens, the Risk Engine) are recorded under this fixed actor (not a person).
 const SYSTEM_ACTOR_ID = "00000000-0000-0000-0000-000000000000";
@@ -337,6 +338,11 @@ export default function PassportsPage() {
             if (!window.confirm(`Unfreeze ${p.name}? It will be able to call its tools again.`)) return;
             act(`${p.name} unfrozen.`, () => passportsApi.unfreeze(token, p.id));
           }}
+          onPromote={(p) => {
+            if (!window.confirm(promoteConfirmText(p.name))) return;
+            const reason = window.prompt("Reason (recorded in the audit log):") ?? "";
+            act(`${p.name} promoted.`, () => passportsApi.promote(token, p.id, reason));
+          }}
           onRevoke={(p) => {
             if (!window.confirm(`Permanently revoke ${p.name}? This cannot be undone.`)) return;
             const reason = window.prompt("Reason (recorded in the audit log):") ?? "";
@@ -500,6 +506,7 @@ function PassportTable(props: {
   busy: boolean;
   onFreeze: (p: Passport) => void;
   onUnfreeze: (p: Passport) => void;
+  onPromote: (p: Passport) => void;
   onRevoke: (p: Passport) => void;
   onRotate: (p: Passport) => void;
   onRenew: (p: Passport) => void;
@@ -572,6 +579,13 @@ function PassportTable(props: {
                       </div>
                     );
                   })()}
+                  {p.reported_only === true && (
+                    <div className="mt-1">
+                      <span title={REPORTED_ONLY_HELP} className="rounded-full bg-[#EEF2FF] px-2 py-0.5 text-[11px] font-semibold text-[#3730A3]">
+                        {REPORTED_ONLY_LABEL}
+                      </span>
+                    </div>
+                  )}
                   {p.status !== "revoked" && (p.safe_mode || props.orgSafeMode) && (
                     <div className="mt-1">
                       <span className="rounded-full bg-[#FFF4E5] px-2 py-0.5 text-[11px] font-semibold text-[#8A4B00]">
@@ -646,6 +660,7 @@ function PassportTable(props: {
                     {p.status === "frozen" && (
                       <ActionButton disabled={busy} onClick={() => props.onUnfreeze(p)} label="Unfreeze" />
                     )}
+                    {canPromote(p) && <ActionButton disabled={busy} onClick={() => props.onPromote(p)} label="Promote" />}
                     {p.status !== "revoked" && (
                       <>
                         <ActionButton disabled={busy} onClick={() => props.onEditScopes(p)} label="Scopes" />

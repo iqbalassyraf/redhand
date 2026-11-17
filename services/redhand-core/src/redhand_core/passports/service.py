@@ -284,6 +284,30 @@ async def unfreeze(
     return PassportView.from_row(updated, now), True
 
 
+async def promote(
+    supabase: Any,
+    operator: OperatorContext,
+    agent_id: UUID,
+    reason: str | None,
+    confirm: bool,
+    now: datetime,
+) -> tuple[PassportView, bool]:
+    """Turns a reported-only passport (created by telemetry, C1b) into an ordinary one. Admin-only at the route, confirmed, audited as
+    passport.promoted. It grants nothing by itself: the passport still needs scopes and an agent key to call a tool."""
+    _require_confirmation(confirm, "Promote")
+    data = await _rpc(
+        supabase,
+        "control_passport_promote",
+        {"p_org": str(operator.organization_id), "p_agent": str(agent_id), "p_actor": str(operator.user_id), "p_reason": reason},
+        not_found_detail=f"Passport '{agent_id}' not found.",
+        conflict_detail="A revoked passport cannot be promoted. Register a new agent instead.",
+    )
+    if not isinstance(data, dict):
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Unexpected database response.")
+    row = await get_passport_row(supabase, operator, agent_id)
+    return PassportView.from_row(row, now), data.get("changed") is True
+
+
 @retry_once_on_conflict
 async def revoke(
     supabase: Any,

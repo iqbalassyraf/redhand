@@ -143,6 +143,9 @@ class PassportView(BaseModel):
     safe_mode: bool
     daily_call_limit: int | None
     budget_action: str
+    reported_only: bool = Field(
+        default=False, description="Created by an SDK key's telemetry, not by a person: no gateway access until an admin promotes it."
+    )
 
     @classmethod
     def from_row(cls, row: dict[str, Any], now: datetime) -> PassportView:
@@ -169,6 +172,7 @@ class PassportView(BaseModel):
             safe_mode=row.get("safe_mode") is True,
             daily_call_limit=_stored_limit(row.get("daily_call_limit")),
             budget_action=str(row.get("budget_action") or "deny"),
+            reported_only=row.get("reported_only") is True,
         )
 
 
