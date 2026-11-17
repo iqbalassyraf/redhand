@@ -28,4 +28,26 @@ never written, ingest had no per-key rate limit, and a row-level policy let orga
 - A customer can start sending usage without help. Every key change is in the audit log.
 - The rate limit is per instance (see `services/rate_limit.py`); with N instances the effective limit is up to N times higher. Acceptable as abuse protection, not a quota.
 - The display prefix (12 characters, of which 4 random) is public within the organization; it identifies a key but cannot be used as one.
-- **Not in C1a:** telemetry still renames passports and creates ordinary active ones for new agent ids. C1b fixes both (amendment to follow).
+- **Not in C1a:** telemetry still renames passports and creates ordinary active ones for new agent ids. C1b fixes both (amendment below).
+
+## Amendment (2026-11-17): C1b telemetry trust
+**Context.** Ingest upserted the agent row on every batch: any holder of the organization's SDK key could rename or re-frame an existing passport whose
+external id it knew (names appear in alerts, the dashboard and the audit view), and every new agent id became an ordinary active passport.
+
+**Decision** (owner chose K1 "reported only" over mandatory pre-registration, which would break the SDK's zero-setup path):
+- Ingest calls `telemetry_resolve_agent()`: an existing passport only gets its heartbeat; a new agent id becomes a passport with `agents.reported_only = true`
+  (name cut to 256 characters, framework to 64). The column defaults to false, so every existing passport keeps working.
+- A reported-only passport is refused at token exchange (403 "Agent passport is reported only: ..."), reported as `frozen` to the gateway by
+  `/internal/v1/gateway-context` (defence in depth: it should never hold a token), and skipped by the Risk ladder's automatic actions (its numbers are whatever
+  the key sent). Its telemetry is still accepted and shown.
+- An admin promotes it with `POST /v1/passports/{id}/promote` (`confirm: true`, reason), through `control_passport_promote()`: audited as `passport.promoted`,
+  a revoked passport cannot be promoted (409), another organization's passport is not found (404), an ordinary one is a no-op. Promotion grants nothing by itself:
+  the passport still needs scopes and an agent key.
+- Dashboard: label "reported by SDK" with the explanation on hover, and a **Promote** button with a confirmation.
+
+**Alternatives.** Pre-registration only (rejected above); keep the upsert but stop updating the name (still creates usable passports from a key); a separate
+"telemetry agents" table (duplicates the passport model the Black Box, Risk and spend features already key on).
+
+**Consequences.** A leaked SDK key can no longer rename a passport or create one that reaches tools; it can still create reported-only rows (bounded by the
+per-key rate limit) and send false telemetry for existing agents. Deploy order matters: the migration must be applied before core, because core now selects
+`reported_only` in the gateway context (a missing column fails the lookup, so the gateway denies: closed, but an outage).

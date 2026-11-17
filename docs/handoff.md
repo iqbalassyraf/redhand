@@ -13,6 +13,13 @@ Both tools work on RedHand and its demo projects. This file is how each learns w
 
 ---
 
+## 2026-11-17, Claude Code: CI minutes cut (#92 merged), C1a merged (#91), C1b built (branch feat/c1b-telemetry-trust, nothing deployed)
+- **CI:** one run per commit, and docs-only changes skip the heavy jobs; the secret scan still runs on every change. A docs-only PR now shows Python, SQL and Dashboard as "skipped" (that counts as passed).
+- **C1b built:** migration `20261128000000_reported_only` (`agents.reported_only`, `telemetry_resolve_agent`, `control_passport_promote`), ingest no longer renames passports, reported-only passports refused at token exchange and reported frozen to the gateway, Risk ladder skips them, promote route, twin, dashboard label and Promote button, ADR 0024 amendment, runbook, threat model, OpenAPI, night **Part Q** (covers C1a and C1b, and runs N9 and P7).
+- **Verified locally:** full Python suite, ruff, mypy, SQL suite with rollback, 14 trust tests (7 deliberate breakages all caught), dashboard node tests, `tsc`, build, real browser (admin, operator, viewer at 1280 and 375 px: label, Promote refused for operator and viewer, admin promote with confirmation, no rename).
+- **Deploy order (owner/Antigravity):** migrations `20261127000000_sdk_keys` then `20261128000000_reported_only`, then core, then dashboard. Applying core first would make the gateway context lookup fail (the gateway then denies every call) until the migration is applied.
+- **Next:** Part Q on staging (one milestone run for C1), then the small fixes (timeline clip G4, CLAUDE.md phase line).
+
 ## 2026-11-17, Claude Code: C1a SDK keys built (branch feat/c1a-sdk-keys, nothing deployed)
 - **Built:** migration `20261127000000_sdk_keys` (audited create/revoke functions, last-use stamp, direct-write policy dropped), core `sdkkeys/` + `/v1/organization/sdk-keys`, per-key ingest limit and last-use in telemetry, local twin, dashboard "SDK keys" card, ADR 0024, runbook, threat model, OpenAPI, CHANGELOG. Tonight's checklist is merged (#90).
 - **Verified locally:** full Python suite, ruff, mypy, SQL suite with rollback (10 mutants killed), 34 core tests (15 mutants killed), dashboard 103 node tests, `tsc`, build, real browser (admin, operator, viewer at 1280 and 375 px: create shown once and gone after reload, works for ingest, revoke then 401, other roles refused).

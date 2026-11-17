@@ -20,6 +20,14 @@ organization, so it is a secret. RedHand stores only a hash and shows a key once
 | "An organization can have at most 10 active SDK keys." | The card's count | Revoke unused keys |
 | A key leaked | | Revoke it at once (audited), then create a new one |
 
+## "Reported by SDK" passports (C1b)
+- An agent id first seen in telemetry appears on Passports with the label **reported by SDK**. It has no gateway access: its token exchange answers 403
+  "Agent passport is reported only: an admin must promote it on the Passports page before it can use the gateway."
+- If it is yours, an admin presses **Promote** (confirm, give a reason; audited as `passport.promoted`), then sets scopes and issues an agent key as for any passport.
+  If it is not, revoke it, and revoke the SDK key that created it if you do not recognise the agent.
+- Telemetry never renames a passport: the name and framework are what the person who registered it typed. To rename, use the dashboard, not the SDK.
+- The Risk response ladder never freezes or alerts on a reported-only passport by itself.
+
 ## Facts
 - Audit actions `sdk_key.created`, `sdk_key.revoked` (target type `sdk_key`; never the hash). Metrics `sdk_keys_total{event}`, `sdk_ingest_rate_limited_total`.
 - Database functions only: `control_sdk_key_create`, `control_sdk_key_revoke`, `sdk_key_touch`. Nobody can write `sdk_api_keys` directly any more.
