@@ -20,7 +20,7 @@ Both tools work on RedHand and its demo projects. This file is how each learns w
   - Core deployed: `redhand-core-00034-fj7`; Gateway deployed: `redhand-gateway-00030-dq8`; Dashboard promoted on Vercel from `8601fa7`.
   - Supabase Auth: email confirmation active; redirect allow-list verified (`https://redhand.archtificial.com/login`, `https://redhand.archtificial.com/**`).
   - Smoke tests: `deploy/cloudrun/smoke.sh` 13/13 PASS; `scripts/smoke_launch.py` 33 pass, 2 expected warn (`/docs` and `/openapi.json` reachable on staging).
-  - Part Q (C1): Q1 (SDK key `night-q` created, masked as `rh_live_2pBu...` in UI table), Q3 (telemetry ingest for `night-sdk` -> HTTP 202, badge `reported by SDK` displayed on `/passports`), Q4 (telemetry ingest against revoked agent `night-model` refused with HTTP 403; database function `telemetry_resolve_agent` preserves passport name on conflict).
+  - Part Q (C1): Q1 (SDK key `night-q` created, masked as `rh_live_2pBu...` in UI table), Q3 (telemetry ingest for `night-sdk` -> HTTP 202, badge `reported by SDK` displayed on `/passports`), Q4 NOT RUN as written (sent for revoked `night-model`, got HTTP 403).
 - **Deferred by Owner Decision (to unblock active development):**
   - Q5-Q12 (token exchange refusal for reported-only agent, promotion flow, SDK key revocation, cleanup).
   - Part R (onboarding with two fresh email inboxes + invite link acceptance).
