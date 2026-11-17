@@ -1912,6 +1912,69 @@ def _record_model_findings(store: LocalSupabaseAdapter, p: dict[str, Any]) -> di
     return result
 
 
+# --- SDK keys (Phase 4.5 C1a): emulation of supabase/migrations/20261127000000_sdk_keys.sql -----------------------------------------------
+
+_SDK_KEY_HASH = re.compile(r"^[0-9a-f]{64}$")
+_SDK_KEY_PREFIX = re.compile(r"^rh_live_[A-Za-z0-9_-]{4}$")
+SDK_KEYS_MAX_ACTIVE = 10
+
+
+def _sdk_key_usable(row: dict[str, Any], now: datetime) -> bool:
+    expires = row.get("expires_at")
+    return bool(row.get("is_active")) and (expires is None or _parse_ts(expires) > now)
+
+
+def _control_sdk_key_create(store: LocalSupabaseAdapter, p: dict[str, Any]) -> dict[str, Any]:
+    org, actor = str(p["p_org"]), str(p["p_actor"])
+    name = str(p.get("p_name") or "").strip()
+    if not 1 <= len(name) <= 100:
+        raise _error("22023", "a name of 1 to 100 characters is required")
+    digest, prefix = p.get("p_key_hash"), p.get("p_key_prefix")
+    if not isinstance(digest, str) or not _SDK_KEY_HASH.match(digest) or not isinstance(prefix, str) or not _SDK_KEY_PREFIX.match(prefix):
+        raise _error("22023", "malformed key hash or prefix")
+    now = datetime.now(timezone.utc)
+    expires = _parse_ts(p["p_expires_at"])
+    if not now + timedelta(hours=1) <= expires <= now + timedelta(days=366):
+        raise _error("22023", "the expiry must be between 1 hour and 366 days from now")
+    _org_row(store, org)
+    rows = store.tables.setdefault("sdk_api_keys", [])
+    if any(r.get("key_hash") == digest for r in rows):
+        raise _error("23505", "duplicate key hash")
+    if sum(1 for r in rows if str(r["organization_id"]) == org and _sdk_key_usable(r, now)) >= SDK_KEYS_MAX_ACTIVE:
+        return {"created": False, "limit": True}
+    key_id = str(uuid4())
+    rows.append({"id": key_id, "organization_id": org, "name": name, "key_prefix": prefix, "key_hash": digest, "is_active": True,
+                 "expires_at": expires.isoformat(), "last_used_at": None, "created_at": now.isoformat(), "created_by": actor,
+                 "revoked_at": None, "revoked_by": None, "organizations": {"siem_webhook_url": None}})
+    _append_audit(store, org=org, actor=actor, action="sdk_key.created", target_type="sdk_key", target_id=key_id, reason=None,
+                  details={"name": name, "prefix": prefix, "expires_at": expires.isoformat()})
+    return {"created": True, "id": key_id, "expires_at": expires.isoformat()}
+
+
+def _control_sdk_key_revoke(store: LocalSupabaseAdapter, p: dict[str, Any]) -> dict[str, Any]:
+    org, actor, key_id = str(p["p_org"]), str(p["p_actor"]), str(p["p_key_id"])
+    row = next((r for r in store.tables.get("sdk_api_keys", []) if str(r["id"]) == key_id and str(r["organization_id"]) == org), None)
+    if row is None:
+        raise _error("P0002", "key not found")
+    if not row.get("is_active"):
+        return {"changed": False, "id": key_id}
+    row["is_active"], row["revoked_at"], row["revoked_by"] = False, _now(), actor
+    _append_audit(store, org=org, actor=actor, action="sdk_key.revoked", target_type="sdk_key", target_id=key_id, reason=p.get("p_reason"),
+                  details={"name": row.get("name"), "prefix": row.get("key_prefix")})
+    return {"changed": True, "id": key_id}
+
+
+def _sdk_key_touch(store: LocalSupabaseAdapter, p: dict[str, Any]) -> None:
+    row = next((r for r in store.tables.get("sdk_api_keys", []) if str(r["id"]) == str(p["p_key_id"])), None)
+    if row is None:
+        return None
+    now = datetime.now(timezone.utc)
+    last = row.get("last_used_at")
+    if last is None or _parse_ts(last) < now - timedelta(minutes=1):
+        row["last_used_at"] = now.isoformat()
+    return None
+
+
 HANDLERS: dict[str, RpcHandler] = {
     "control_agent_change": _control_agent_change,
     "control_freeze_all": _control_freeze_all,
@@ -1968,6 +2031,9 @@ HANDLERS: dict[str, RpcHandler] = {
     "approved_models_list": _approved_models_list,
     "control_approved_models": _control_approved_models,
     "record_model_findings": _record_model_findings,
+    "control_sdk_key_create": _control_sdk_key_create,
+    "control_sdk_key_revoke": _control_sdk_key_revoke,
+    "sdk_key_touch": _sdk_key_touch,
 }
 
 
