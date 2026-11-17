@@ -37,7 +37,7 @@ The important ones:
 - `AGENTWALL_CORE_URL` and `AGENTWALL_CORE_SERVICE_TOKEN` (must equal core's
   `INTERNAL_SERVICE_TOKEN`; without it every call is denied).
 - `AGENTWALL_AGENT_TOKEN_PUBLIC_KEY` (optional; otherwise core's JWKS is used).
-- `AGENTWALL_CONTEXT_CACHE_TTL_SECONDS` (default 2, max 4).
+- `AGENTWALL_CONTEXT_CACHE_TTL_SECONDS` (default 2, max 2.5).
 - `AGENTWALL_AUDIT_LOG_FILE` (append-only JSON lines; recommended outside development).
 
 ## Run

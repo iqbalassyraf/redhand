@@ -395,3 +395,32 @@ async def test_the_wait_for_a_stuck_refresh_is_limited_and_the_call_then_looks_u
     assert served.status == "active" and state["n"] == 2  # the call did its own lookup
     release.set()
     await settle(h)
+
+
+# --- the worst case when core hangs (D1 PR 4) -------------------------------------------------------------------------------------------
+
+def test_the_worst_case_with_a_hanging_core_stays_under_the_five_second_promise() -> None:
+    """A call arriving as the entry expires may wait for a refresh already running (REFRESH_WAIT_SECONDS) and then look up for itself (the lookup timeout):
+    the first refusal can come that late. TTL cap + wait + lookup must keep a second of headroom under the 5 s revocation promise (CLAUDE.md 4.5)."""
+    from agentwall.src.gateway.context import LOOKUP_TIMEOUT_SECONDS, MAX_CONTEXT_TTL_SECONDS, REFRESH_WAIT_SECONDS
+
+    assert MAX_CONTEXT_TTL_SECONDS + REFRESH_WAIT_SECONDS + LOOKUP_TIMEOUT_SECONDS <= 4.5
+
+
+def test_the_settings_cap_on_the_cache_lifetime_is_the_clients_cap() -> None:
+    from agentwall.config.settings import Settings
+    from agentwall.src.gateway.context import MAX_CONTEXT_TTL_SECONDS
+
+    with pytest.raises(ValueError):
+        Settings(CONTEXT_CACHE_TTL_SECONDS=MAX_CONTEXT_TTL_SECONDS + 0.5)
+    assert Settings(CONTEXT_CACHE_TTL_SECONDS=MAX_CONTEXT_TTL_SECONDS).CONTEXT_CACHE_TTL_SECONDS == MAX_CONTEXT_TTL_SECONDS
+
+
+async def test_the_default_client_gives_up_on_a_hanging_core_within_the_lookup_timeout() -> None:
+    from agentwall.src.gateway.context import LOOKUP_TIMEOUT_SECONDS, CoreContextClient
+
+    client = CoreContextClient(core_url="http://core.invalid", service_token="t", ttl_seconds=2.0, instance_id="gw-test")
+    timeout = client._http.timeout
+    assert timeout.read == LOOKUP_TIMEOUT_SECONDS and timeout.write == LOOKUP_TIMEOUT_SECONDS and timeout.pool == LOOKUP_TIMEOUT_SECONDS
+    assert timeout.connect is not None and timeout.connect <= LOOKUP_TIMEOUT_SECONDS
+    await client._http.aclose()

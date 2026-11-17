@@ -7,7 +7,7 @@ After an agent's tool call that takes 2 seconds or more upstream, its next call 
 
 ## 2. Current state (checked 2026-11-11)
 - The gateway looks up the passport **once, at the start of a call** (`agentwall/src/gateway/service.py`, step 3, `self.contexts.get(...)`), before forwarding upstream.
-- The cache (`agentwall/src/gateway/context.py`) keeps an entry for the TTL (2 s on staging, `AGENTWALL_CONTEXT_CACHE_TTL_SECONDS=2`, capped at 4 s for the 5-second revocation target). Once an entry is a quarter of the TTL old, a call that uses it also starts one background refresh (`REFRESH_AHEAD_FRACTION`). A refreshed entry is stamped with the time the refresh was **requested**, so nothing older than the TTL is ever served.
+- The cache (`agentwall/src/gateway/context.py`) keeps an entry for the TTL (2 s on staging, `AGENTWALL_CONTEXT_CACHE_TTL_SECONDS=2`, capped at 2.5 s (it was 4 s until D1 PR 4, which also cut the lookup timeout from 2 s to 1 s) for the 5-second revocation target). Once an entry is a quarter of the TTL old, a call that uses it also starts one background refresh (`REFRESH_AHEAD_FRACTION`). A refreshed entry is stamped with the time the refresh was **requested**, so nothing older than the TTL is ever served.
 - **The gap:** a refresh can only start at the start of a call. If the upstream tool then takes 2 s or more, the entry has expired by the time the agent's next call arrives, and that call waits about 150 ms for core. This time counts as gateway time.
 - **Evidence:**
   - Staging, 4 runs on 2026-11-11 with a warm core and always-on CPU: 6 to 17 misses per 200 calls, all four runs over budget (p99 bucket 250 ms). The same with and without a canary.
