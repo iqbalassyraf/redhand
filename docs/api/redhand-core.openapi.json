@@ -1506,6 +1506,103 @@
         "title": "DaySpendView",
         "type": "object"
       },
+      "DeleteRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "confirm_slug": {
+            "maxLength": 40,
+            "minLength": 3,
+            "title": "Confirm Slug",
+            "type": "string"
+          }
+        },
+        "required": [
+          "confirm_slug"
+        ],
+        "title": "DeleteRequest",
+        "type": "object"
+      },
+      "DeletionRequested": {
+        "additionalProperties": false,
+        "properties": {
+          "already": {
+            "default": false,
+            "title": "Already",
+            "type": "boolean"
+          },
+          "purge_after": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Purge After"
+          },
+          "requested": {
+            "title": "Requested",
+            "type": "boolean"
+          },
+          "requested_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Requested At"
+          }
+        },
+        "required": [
+          "requested"
+        ],
+        "title": "DeletionRequested",
+        "type": "object"
+      },
+      "DeletionStatus": {
+        "additionalProperties": false,
+        "properties": {
+          "purge_after": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Purge After"
+          },
+          "requested": {
+            "title": "Requested",
+            "type": "boolean"
+          },
+          "requested_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Requested At"
+          }
+        },
+        "required": [
+          "requested"
+        ],
+        "title": "DeletionStatus",
+        "type": "object"
+      },
       "DestinationAddRequest": {
         "additionalProperties": false,
         "properties": {
@@ -10181,6 +10278,272 @@
         "summary": "Set Budget Default",
         "tags": [
           "Budget Guard"
+        ]
+      }
+    },
+    "/v1/organization/delete-request": {
+      "post": {
+        "operationId": "post_delete_request_v1_organization_delete_request_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-RedHand-Org",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Redhand-Org"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeleteRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeletionRequested"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Post Delete Request",
+        "tags": [
+          "Tenant lifecycle"
+        ]
+      }
+    },
+    "/v1/organization/delete-request/cancel": {
+      "post": {
+        "operationId": "post_cancel_delete_request_v1_organization_delete_request_cancel_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-RedHand-Org",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Redhand-Org"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeletionStatus"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Post Cancel Delete Request",
+        "tags": [
+          "Tenant lifecycle"
+        ]
+      }
+    },
+    "/v1/organization/deletion": {
+      "get": {
+        "operationId": "get_deletion_v1_organization_deletion_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-RedHand-Org",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Redhand-Org"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeletionStatus"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Deletion",
+        "tags": [
+          "Tenant lifecycle"
+        ]
+      }
+    },
+    "/v1/organization/export": {
+      "get": {
+        "operationId": "get_export_v1_organization_export_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-RedHand-Org",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Redhand-Org"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {}
+            },
+            "description": "The organization's data."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Export",
+        "tags": [
+          "Tenant lifecycle"
         ]
       }
     },
