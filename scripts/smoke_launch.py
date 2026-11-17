@@ -118,9 +118,19 @@ def check_core(client: httpx.Client, base: str, *, allow_development: bool, dash
     if r is not None:
         add("a malformed request leaks no internals", not any(m in r.text for m in LEAK_MARKERS), f"status {r.status_code}")
 
-    docs = call("GET", "/docs")
-    if docs is not None and docs.status_code == 200:
-        add("API documentation is publicly reachable", True, "/docs answers 200: not a secret (the repository is public) but a stranger can browse the routes", warn=True)
+    environment = None
+    if health is not None and health.headers.get("content-type", "").startswith("application/json"):
+        environment = health.json().get("environment")
+    for path in ("/docs", "/openapi.json"):
+        page = call("GET", path)
+        if page is None:
+            continue
+        if page.status_code != 200:
+            add(f"{path} is not served", True)
+        elif environment == "production":
+            add(f"{path} is not served", False, "production must not serve the API pages (ENVIRONMENT=production turns them off)")
+        else:
+            add(f"{path} is publicly reachable", True, f"{path} answers 200 outside production: not a secret (the repository is public), turned off in production", warn=True)
     return out
 
 
