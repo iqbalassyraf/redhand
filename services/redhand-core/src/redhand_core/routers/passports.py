@@ -115,6 +115,20 @@ async def unfreeze_agent(
     return ControlActionResponse(passport=passport, changed=changed)
 
 
+@router.post("/passports/{agent_id}/promote", response_model=ControlActionResponse)
+async def promote_agent(
+    agent_id: UUID,
+    payload: ConfirmedControlActionRequest,
+    operator: AdminDep,
+    supabase: SupabaseDep,
+    telegram: OptionalClientDep,
+) -> ControlActionResponse:
+    passport, changed = await service.promote(supabase, operator, agent_id, payload.reason, payload.confirm, utcnow())
+    if changed:
+        await _alert(supabase, telegram, operator, f"{passport.name} was promoted from reported only to a managed passport", payload.reason)
+    return ControlActionResponse(passport=passport, changed=changed)
+
+
 @router.post("/passports/{agent_id}/revoke", response_model=ControlActionResponse)
 async def revoke_agent(
     agent_id: UUID,

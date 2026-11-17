@@ -164,6 +164,13 @@ async def exchange_agent_key(
             status_code=status.HTTP_403_FORBIDDEN,
             detail=f"Agent passport is {current}.",
         )
+    if agent.get("reported_only") is True:
+        # Created by an SDK key's telemetry, not by a person (C1b): no gateway access until an admin promotes it.
+        logger.info("Token exchange refused: agent=%s is reported only", agent["id"])
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Agent passport is reported only: an admin must promote it on the Passports page before it can use the gateway.",
+        )
 
     ttl = timedelta(seconds=settings.AGENT_TOKEN_TTL_SECONDS)
     token, jti, expires_at = signer.issue(
@@ -292,7 +299,9 @@ class GatewayContextResponse(BaseModel):
 LAST_SEEN_WRITE_INTERVAL_SECONDS = 60
 LOOP_RULE_ID = "RAD-LOOP-001"
 # The agent columns the context reads, and only those: the full row (every column) used to be fetched on every passport cache miss.
-AGENT_CONTEXT_COLUMNS = "status, expires_at, scopes, version, safe_mode, daily_call_limit, budget_action, last_seen_at, destination_mode"
+AGENT_CONTEXT_COLUMNS = (
+    "status, expires_at, scopes, version, safe_mode, daily_call_limit, budget_action, last_seen_at, destination_mode, reported_only"
+)
 
 
 def _bounded_int(value: Any, low: int, high: int, default: int) -> int:
@@ -445,6 +454,10 @@ async def gateway_context(
     except (KeyError, TypeError, ValueError):
         logger.error("Malformed passport data for agent %s; reporting revoked", agent_id)
         scopes, expires_at, current = [], now, "revoked"
+    if current == "active" and agent.get("reported_only") is True:
+        # Defence in depth behind the token exchange (C1b): a reported-only passport is never active to the gateway. Reported as frozen, the
+        # reversible state, because promotion makes it usable.
+        current = "frozen"
 
     # Safe Mode is on when the agent's flag OR the organization's flag is on. Anything that is not
     # an explicit false (a missing row, null, a non-boolean) counts as ON: the restrictive reading.

@@ -408,31 +408,27 @@ async def ingest_telemetry_batch(
     supabase: Annotated[AsyncClient, Depends(get_supabase_service_client)],
     telegram: OptionalClientDep,
 ) -> TelemetryIngestResponse:
-    now_iso = datetime.now(timezone.utc).isoformat()
 
-    agent_upsert_res = await (
-        supabase.table("agents")
-        .upsert(
-            {
-                "organization_id": str(auth_ctx.organization_id),
-                "external_agent_id": payload.external_agent_id,
-                "name": payload.agent_name,
-                "framework": payload.framework,
-                "environment": payload.environment,
-                "last_heartbeat_at": now_iso,
-            },
-            on_conflict="organization_id,external_agent_id,environment",
-        )
-        .execute()
-    )
+    # Never an upsert: a batch must not rename, re-frame or re-home an existing passport (C1b). A new agent id becomes a reported-only passport
+    # with no gateway access until an admin promotes it.
+    resolved = await supabase.rpc(
+        "telemetry_resolve_agent",
+        {
+            "p_org": str(auth_ctx.organization_id),
+            "p_external": payload.external_agent_id,
+            "p_environment": payload.environment,
+            "p_name": payload.agent_name,
+            "p_framework": payload.framework,
+        },
+    ).execute()
 
-    if not agent_upsert_res.data:
+    agent_record = resolved.data if isinstance(resolved.data, dict) else None
+    if not agent_record or "id" not in agent_record:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to resolve or register agent identity.",
         )
 
-    agent_record = agent_upsert_res.data[0]
     agent_id = UUID(agent_record["id"])
     agent_status = effective_status(
         str(agent_record.get("status")), agent_record.get("expires_at"), datetime.now(timezone.utc)

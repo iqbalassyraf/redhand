@@ -1975,6 +1975,47 @@ def _sdk_key_touch(store: LocalSupabaseAdapter, p: dict[str, Any]) -> None:
     return None
 
 
+_ENVIRONMENTS = ("development", "staging", "production")
+
+
+def _telemetry_resolve_agent(store: LocalSupabaseAdapter, p: dict[str, Any]) -> dict[str, Any]:
+    """Mirror of telemetry_resolve_agent(): an existing passport only gets a heartbeat; a new agent id becomes a reported-only passport."""
+    org, external, environment = str(p["p_org"]), p.get("p_external"), p.get("p_environment")
+    if not isinstance(external, str) or not 1 <= len(external.strip()) <= 128:
+        raise _error("22023", "an external agent id of 1 to 128 characters is required")
+    if environment not in _ENVIRONMENTS:
+        raise _error("22023", "unknown environment")
+    agents = store.tables.setdefault("agents", [])
+    row = next((a for a in agents if str(a.get("organization_id")) == org and a.get("external_agent_id") == external
+                and a.get("environment") == environment), None)
+    if row is None:
+        name = str(p.get("p_name") or "").strip() or external
+        framework = str(p.get("p_framework") or "").strip() or "custom"
+        row = {"id": str(uuid4()), "organization_id": org, "external_agent_id": external, "environment": environment, "name": name[:256],
+               "framework": framework[:64], "owner_id": None, "backup_owner_id": None, "created_at": _now(), "reported_only": True}
+        apply_insert_defaults("agents", row)
+        agents.insert(0, row)
+        store.publish_event("agents.inserted", [dict(row)])
+    row["last_heartbeat_at"] = _now()
+    return {"id": row["id"], "organization_id": org, "status": row.get("status"), "expires_at": row.get("expires_at"),
+            "reported_only": bool(row.get("reported_only")), "name": row.get("name")}
+
+
+def _control_passport_promote(store: LocalSupabaseAdapter, p: dict[str, Any]) -> dict[str, Any]:
+    org, actor = str(p["p_org"]), str(p["p_actor"])
+    agent = _find(store, "agents", org, str(p["p_agent"]))
+    if agent is None:
+        raise _error("P0002", "agent not found")
+    if agent.get("status") == "revoked":
+        raise _error("23514", "a revoked passport cannot be promoted")
+    if not agent.get("reported_only"):
+        return {"changed": False, "agent_id": agent["id"]}
+    agent["reported_only"] = False
+    _append_audit(store, org=org, actor=actor, action="passport.promoted", target_type="agent", target_id=str(agent["id"]),
+                  reason=p.get("p_reason"), details={"external_agent_id": agent.get("external_agent_id")})
+    return {"changed": True, "agent_id": agent["id"]}
+
+
 HANDLERS: dict[str, RpcHandler] = {
     "control_agent_change": _control_agent_change,
     "control_freeze_all": _control_freeze_all,
@@ -2034,6 +2075,8 @@ HANDLERS: dict[str, RpcHandler] = {
     "control_sdk_key_create": _control_sdk_key_create,
     "control_sdk_key_revoke": _control_sdk_key_revoke,
     "sdk_key_touch": _sdk_key_touch,
+    "telemetry_resolve_agent": _telemetry_resolve_agent,
+    "control_passport_promote": _control_passport_promote,
 }
 
 
