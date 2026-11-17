@@ -195,6 +195,31 @@ async def get_operator(
     )
 
 
+@dataclass(frozen=True, slots=True)
+class AuthenticatedUser:
+    """A verified operator token and nothing else: no organization, no role. Only for the routes a person uses BEFORE they belong to an organization
+    (creating one with a sign-up code, joining one with an invite). Everything else needs `get_operator`."""
+
+    user_id: UUID
+    email: str | None = None
+
+
+async def get_authenticated_user(
+    authorization: Annotated[str | None, Header(alias="Authorization")] = None,
+    settings: Settings = Depends(get_settings),
+) -> AuthenticatedUser:
+    token = bearer_token(authorization)
+    if token is None:
+        raise _unauthorized()
+    claims = await verify_operator_token(token, settings)
+    try:
+        user_id = UUID(str(claims["sub"]))
+    except (KeyError, ValueError) as exc:
+        raise _unauthorized("Invalid operator identity.") from exc
+    email = claims.get("email")
+    return AuthenticatedUser(user_id=user_id, email=str(email) if email else None)
+
+
 def require_role(minimum: Role) -> Any:
     """Dependency factory: the operator must hold at least `minimum`."""
 
@@ -237,6 +262,7 @@ def issue_operator_token(
     return jwt.encode(claims, secret, algorithm="HS256")
 
 
+UserDep = Annotated[AuthenticatedUser, Depends(get_authenticated_user)]
 OperatorDep = Annotated[OperatorContext, Depends(get_operator)]
 ViewerDep = Annotated[OperatorContext, Depends(require_role(Role.VIEWER))]
 SecurityOperatorDep = Annotated[OperatorContext, Depends(require_role(Role.SECURITY_OPERATOR))]

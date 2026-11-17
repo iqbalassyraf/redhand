@@ -593,7 +593,7 @@ def test_new_agents_start_with_the_default_limit_and_it_is_audited(env: Env) -> 
     assert env.budget_of(created["id"])["daily_call_limit"] == 100  # the gateway sees it at once
     entry = next(e for e in env.actions("passport.budget_changed") if e["target_id"] == created["id"])
     assert entry["reason"] == "Organization default daily limit"
-    assert entry["actor_user_id"] == DEV_OPERATORS["operator"]["id"]  # the person who registered the agent
+    assert entry["actor_user_id"] == DEV_OPERATORS["admin"]["id"]  # the person who registered the agent
     assert entry["details"]["new_limit"] == 100
 
 

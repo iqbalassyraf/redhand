@@ -24,6 +24,7 @@ from redhand_core.routers.agent_auth import require_internal_service
 from redhand_core.routers.agent_auth import router as agent_auth_router
 from redhand_core.routers.dev import router as dev_router
 from redhand_core.routers.hitl import router as hitl_router
+from redhand_core.routers.onboarding import router as onboarding_router
 from redhand_core.routers.passports import router as passports_router
 from redhand_core.routers.iam_broker import get_sts_downscoper, router as iam_broker_router
 from redhand_core.routers.scim import router as scim_router
@@ -168,6 +169,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(approved_models_router)
     app.include_router(sdk_keys_router)
     app.include_router(timeline_router)
+    app.include_router(onboarding_router)
     if (
         active_settings.ENVIRONMENT == "development"
         and active_settings.uses_local_store

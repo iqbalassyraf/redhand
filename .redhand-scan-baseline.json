@@ -107,6 +107,20 @@
       "reason": "A fake token inside a sample token response in a test of the SDK token cache; not a real credential."
     },
     {
+      "file": "services/redhand-core/src/redhand_core/routers/onboarding.py",
+      "rule": "RH-SEC-003",
+      "line_sha256": "7260a9295f10b632fe3fae98b471b42a5d93ee4d41c2a6735c73d88ab19da147",
+      "count": 1,
+      "reason": "An authenticated admin route (tenant-scoped, role-checked in core, audited by a database function) that revokes an invite or removes a member of the caller's own organization: a control-plane route, not an agent tool, so the agent-tool circuit-breaker rule does not apply (D1)."
+    },
+    {
+      "file": "services/redhand-core/src/redhand_core/routers/onboarding.py",
+      "rule": "RH-SEC-003",
+      "line_sha256": "ba8cfdd5c98f7d8192aae83fcb1ac9e241c29c1bcfe3bde531cc183ab3baaa22",
+      "count": 1,
+      "reason": "An authenticated admin route (tenant-scoped, role-checked in core, audited by a database function) that revokes an invite or removes a member of the caller's own organization: a control-plane route, not an agent tool, so the agent-tool circuit-breaker rule does not apply (D1)."
+    },
+    {
       "file": "services/redhand-core/src/redhand_core/routers/radar.py",
       "rule": "RH-SEC-003",
       "line_sha256": "0633ffea8feb987cac9a746b9de7baa678171b834b30d8031dc39d8fcde670aa",
@@ -121,6 +135,13 @@
       "reason": "A SCIM DELETE route (deprovision a user) that the Python rule mistakes for an unguarded destructive agent tool; it is an authenticated API route, not an agent tool."
     },
     {
+      "file": "services/redhand-core/src/redhand_core/routers/sdk_keys.py",
+      "rule": "RH-SEC-003",
+      "line_sha256": "2d2ad3b73af3d2e3ad3db8c9881697027d53603da0c51f4c6f0e7c95be079f98",
+      "count": 1,
+      "reason": "An authenticated admin-only DELETE route that revokes an SDK key (audited); the Python rule mistakes it for an unguarded destructive agent tool."
+    },
+    {
       "file": "services/redhand-core/src/redhand_core/services/sts_downscoper.py",
       "rule": "RH-SEC-004",
       "line_sha256": "5933a244e27d03ec9b37dfeb69fb58a30e9418afcef4581ff13b8804cfee9844",
@@ -133,13 +154,6 @@
       "line_sha256": "5e86b9fcdd12dad9a26283bc69e59144231c79220c20b3f78068ea5c491f6ad8",
       "count": 1,
       "reason": "A fake token in a test that proves the DLP scrubber redacts it before storage; not a real credential."
-    },
-    {
-      "file": "services/redhand-core/src/redhand_core/routers/sdk_keys.py",
-      "rule": "RH-SEC-003",
-      "line_sha256": "2d2ad3b73af3d2e3ad3db8c9881697027d53603da0c51f4c6f0e7c95be079f98",
-      "count": 1,
-      "reason": "An authenticated admin-only DELETE route that revokes an SDK key (audited); the Python rule mistakes it for an unguarded destructive agent tool."
     }
   ]
 }

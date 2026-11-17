@@ -59,7 +59,7 @@ class Env:
 
         return operator_headers(settings=self.settings, user_id=UUID(OTHER_OWNER))
 
-    def register(self, user: str = "operator", **body: Any) -> dict[str, Any]:
+    def register(self, user: str = "admin", **body: Any) -> dict[str, Any]:
         payload = {"name": "Invoice Bot", "framework": "n8n", "scopes": [{"server": "xero", "tool": "list_invoices"}]}
         payload.update(body)
         resp = self.client.post("/v1/passports", json=payload, headers=self.h(user))
@@ -127,7 +127,7 @@ def test_register_agent_returns_passport_and_one_time_key(env: Env) -> None:
     passport, key = created["passport"], created["agent_key"]
     assert key.startswith("rh_agent_")
     assert passport["status"] == "active"
-    assert passport["owner_id"] == DEV_OPERATORS["operator"]["id"]
+    assert passport["owner_id"] == DEV_OPERATORS["admin"]["id"]
     assert passport["scopes"] == [{"server": "xero", "tool": "list_invoices", "access": "read"}]
     expiry = datetime.fromisoformat(passport["expires_at"])
     assert timedelta(days=29) < expiry - datetime.now(timezone.utc) <= timedelta(days=30)
@@ -369,7 +369,7 @@ def test_scope_expansion_requires_confirmation_and_bumps_version(env: Env) -> No
 def test_rotate_key_invalidates_previous_key(env: Env) -> None:
     created = env.register()
     rotated = env.client.post(
-        f"/v1/passports/{created['passport']['id']}/rotate-key", json={}, headers=env.h("operator")
+        f"/v1/passports/{created['passport']['id']}/rotate-key", json={}, headers=env.h("admin")
     ).json()
     assert env.exchange(created["agent_key"]).status_code == 401
     assert env.exchange(rotated["agent_key"]).status_code == 200
@@ -521,11 +521,11 @@ def test_failed_audit_write_rolls_back_every_control_action(env: Env) -> None:
     attempts: list[tuple[str, str, dict[str, Any], str]] = [
         ("post", f"/v1/passports/{agent_id}/freeze", {"reason": "x"}, "operator"),
         ("post", f"/v1/passports/{agent_id}/revoke", {"confirm": True}, "admin"),
-        ("post", f"/v1/passports/{agent_id}/rotate-key", {}, "operator"),
+        ("post", f"/v1/passports/{agent_id}/rotate-key", {}, "admin"),
         ("post", f"/v1/passports/{agent_id}/renew", {"expires_in_days": 5}, "admin"),
         ("put", f"/v1/passports/{agent_id}/scopes", {"scopes": [], "confirm": True}, "admin"),
         ("post", "/v1/passports/freeze-all", {"confirm": True, "reason": "x"}, "admin"),
-        ("post", "/v1/passports", {"name": "Second bot"}, "operator"),
+        ("post", "/v1/passports", {"name": "Second bot"}, "admin"),
         ("post", "/v1/mcp-servers", {"slug": "github", "name": "GH", "url": "http://localhost:9101/mcp"}, "admin"),
         ("post", f"/v1/mcp-servers/{server_id}/deactivate", {}, "admin"),
     ]
