@@ -13,6 +13,12 @@ Both tools work on RedHand and its demo projects. This file is how each learns w
 
 ---
 
+## 2026-11-17, Claude Code: D1 PR 4 launch kit and gateway lookup timeout (branch docs/d1-launch-kit)
+- **Built:** `docs/launch/*`, ADR 0028 (proposed), `scripts/smoke_launch.py` + `test_smoke_launch.py`, `test_launch_docs.py`; gateway `LOOKUP_TIMEOUT_SECONDS = 1.0`, `MAX_CONTEXT_TTL_SECONDS = 2.5` (setting cap lowered to match), new tests in `agentwall/tests/test_context_refresh.py`, one old test updated on purpose (`test_context_ttl_is_capped_to_meet_revocation_slo` pinned the old 4 s cap).
+- **Measured:** `docs/security/measurements/2026-11-17-revocation-drill-after-lookup-timeout.md` (local): core paused first refusal 3.33 s (was 4.32 s); normal freeze/revoke unchanged (about 0.4 s).
+- **Not verified:** anything on staging or production; real cold-start behaviour with the 1 s lookup timeout (ADR 0028 recommends minimum 1 instance; staging has minimum 0, so the first call after idle may be refused: Antigravity should note it in the next staging run, it is expected, not a bug); the smoke script against a real https deployment.
+- **Owner:** `docs/launch/owner-checklist.md` is the one page. The CLAUDE.md wording "within about half a second, never more than 5 s" is proposed only: say "apply" to put it in.
+
 ## 2026-11-17, Claude Code: D1 onboarding backend (branch feat/d1-onboarding, nothing deployed)
 - **Built:** migration `20261129000000_onboarding` (sign-up codes, member invites, six audited control functions, member list; rollback tested), core `onboarding/` + `routers/onboarding.py`, twin mirror, `scripts/issue_signup_code.py`, ADR 0026, threat-model rows, OpenAPI. 36 core tests, SQL tests with 7 deliberate breakages (6 caught, 1 equivalent), 10 core breakages (all caught after one test added), route sweep extended (new "user" auth kind, role matrix edited on purpose, seeds for invites and members).
 - **Behaviour changes (owner):** register agent and rotate key are admin only; viewers' state snapshot has no reasoning or tool-argument text. **Dashboard buttons for operators must follow** (next PR).
