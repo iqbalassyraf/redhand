@@ -77,3 +77,13 @@ def test_a_route_that_stops_refusing_strangers_fails_the_check(path: str) -> Non
         assert "GET /v1/passports-open refuses a stranger" in failed(run(client))
     finally:
         smoke.PROTECTED_GETS = original
+
+
+def test_a_production_core_serves_no_api_pages_and_passes_that_check() -> None:
+    from redhand_core.config import Settings
+    from redhand_core.main import create_app
+
+    app = create_app(Settings(ENVIRONMENT="production", OPERATOR_JWKS_URL="https://p.supabase.example/auth/v1/.well-known/jwks.json", OPERATOR_JWT_ISSUER="https://p.supabase.example/auth/v1"))  # type: ignore[arg-type]
+    results = smoke.check_core(TestClient(app), BASE, allow_development=True, dashboard_origin=None)
+    names = {r.name: r for r in results}
+    assert names["/docs is not served"].ok and names["/openapi.json is not served"].ok

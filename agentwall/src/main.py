@@ -135,11 +135,17 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     await gateway.contexts.aclose()
 
 
+_PRODUCTION = settings.ENVIRONMENT.strip().lower() == "production"
+
 app = FastAPI(
     title="AgentWall: RedHand MCP Gateway",
     version="0.2.0",
     description="Enforces Agent Passports on MCP tool traffic.",
     lifespan=lifespan,
+    # Production serves no interactive API pages or schema (the same rule as core); the schema file in docs/api is generated from code.
+    docs_url=None if _PRODUCTION else "/docs",
+    redoc_url=None if _PRODUCTION else "/redoc",
+    openapi_url=None if _PRODUCTION else "/openapi.json",
 )
 
 app.add_middleware(SecurityHeadersMiddleware)
