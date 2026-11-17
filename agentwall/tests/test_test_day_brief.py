@@ -92,8 +92,9 @@ def test_the_migrations_named_in_part_0_exist_in_order() -> None:
     assert named == sorted(named) and len(named) == 4
     for name in named:
         assert (ROOT / "supabase" / "migrations" / name).exists(), name
-    newest = sorted(p.name for p in (ROOT / "supabase" / "migrations").glob("*.sql"))[-1]
-    assert named[-1] == newest, "Part 0 must deploy up to the newest migration"
+    # A migration newer than the last one Part 0 deploys must be mentioned by name as not part of this test day, so the brief can never silently fall behind.
+    for newer in sorted(p.name for p in (ROOT / "supabase" / "migrations").glob("*.sql") if p.name > named[-1]):
+        assert newer in BRIEF, f"Part 0 stops at {named[-1]}: say what {newer} is (deploy it, or say it is not part of this test day)"
 
 
 def test_the_rules_are_stated() -> None:

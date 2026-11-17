@@ -18,7 +18,9 @@ from redhand_core.services.local_store import DEFAULT_ORG_ID, DEV_OPERATORS, Loc
 
 from core_helpers import make_client, operator_headers
 
-MIGRATION = Path(__file__).resolve().parents[3] / "supabase" / "migrations" / "20261130000000_tenant_lifecycle.sql"
+MIGRATIONS = Path(__file__).resolve().parents[3] / "supabase" / "migrations"
+# The manifest is redefined whenever a table with tenant data is added: the newest migration that defines it is the real one.
+MIGRATION = [m for m in sorted(MIGRATIONS.glob("*.sql")) if "FUNCTION public.tenant_data_manifest() RETURNS jsonb" in m.read_text(encoding="utf-8")][-1]
 
 
 class Env:

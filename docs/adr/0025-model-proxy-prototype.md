@@ -35,6 +35,14 @@ for the tool route. It says nothing about a real provider or network, which add 
 `AGENTWALL_MODEL_PROXY_ENABLED=true` **refuses to start** unless `ENVIRONMENT` is `development`, `dev`, `test`, `local` or `staging` (an allowlist, so a typo such as `prod` also refuses). The reason is the one-key custody
 limit below: until per-tenant, envelope-encrypted key custody exists, the proxy must not carry customers' traffic. The flag is off by default and, when off, the route does not exist.
 
+## Measured usage (B5b, added after the prototype landed)
+- The proxy's `ReportingUsageSink` (`agentwall/src/gateway/model_usage_reporter.py`) replaces the in-memory sink **when the proxy is on**: `record()` adds to a bounded table (never blocks or raises) and a background flush
+  posts batches of at most 100 aggregates to core's `POST /internal/v1/model-usage` (service token). Each batch has an id; a failed batch is retried with the same id and items after a growing, jittered wait; usage keeps adding up
+  in memory during an outage (bounded, overflow dropped and counted); a batch core refuses for good is dropped and counted. Only counts and model names are sent.
+- Core stores it in its own table, **`agent_model_measured_daily`**, apart from the SDK-reported `agent_model_daily`, and the two are **never summed** (an agent that reports and also goes through the proxy would be counted twice).
+  The tenant comes from the agent's own row, never from the payload. The dashboard's "Model use" shows "measured by RedHand" beside the reported figure and says which is which; an agent the proxy never saw shows no measured line (not a zero).
+- Still not used by anything that refuses: Budget Guard, the spend alert and the limit keep reading the reported figure. Refusing over a dollar limit from the measured figure is B5c.
+
 ## What is NOT built (each is a decision, not a detail)
 - **Provider-key custody.** The prototype holds ONE deployment-level key in an environment variable. A customer product needs per-tenant keys, envelope-encrypted, never returned, with rotation (CLAUDE.md 5.2, 5.5):
   a new secret store, its own ADR and threat-model section. Until then the proxy can only serve one operator's own key.

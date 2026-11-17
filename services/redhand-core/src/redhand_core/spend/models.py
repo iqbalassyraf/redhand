@@ -6,7 +6,7 @@ from datetime import date, datetime
 from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictInt
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, StrictBool, StrictInt
 
 MAX_REASON_LENGTH = 500
 SPEND_LIMIT_MAX_MICRO_USD = 10**12  # $1,000,000 a day; the database refuses more
@@ -42,6 +42,21 @@ class ModelUseView(BaseModel):
     lower_bound: bool  # a tiered model: the real cost may be higher
 
 
+class MeasuredSpendView(BaseModel):
+    """What the model proxy measured for one agent today, from the provider's own token counts. Kept apart from the SDK-reported figures and never added to them."""
+
+    calls: int
+    calls_without_usage: int  # calls the provider reported no usage for: not "free", just not counted
+    prompt_tokens: int
+    completion_tokens: int
+    estimated_micro_usd: int  # priced usage only: see unpriced_tokens for the rest
+    estimated_text: str
+    lower_bound: bool
+    unpriced_tokens: int
+    unpriced_models: list[str]
+    models: list[ModelUseView]
+
+
 class AgentSpendView(BaseModel):
     agent_id: UUID
     name: str
@@ -59,6 +74,8 @@ class AgentSpendView(BaseModel):
     spend_limit_text: str | None
     percent_of_limit: int | None
     models: list[ModelUseView]
+    measured: MeasuredSpendView | None = None  # None: the proxy measured nothing for this agent today (or it could not be read: see measured_unavailable)
+    measured_unavailable: bool = False  # True: the measured read failed; the reported figures above are still shown
 
 
 class SpendTodayResponse(BaseModel):
@@ -88,3 +105,36 @@ class AgentSpendDetailResponse(BaseModel):
     basis: str
     agent: AgentSpendView  # today
     days: list[DaySpendView]  # the last 7 days, oldest first, empty days kept
+
+
+# --- what the gateway reports (internal route, service token only) -----------------------------------------------------------------------
+
+MAX_BATCH_ITEMS = 500
+
+
+class ModelUsageItem(BaseModel):
+    """One aggregate of proxied calls. There is no organization field: the agent's own row decides the tenant."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    agent_id: UUID
+    provider: str = Field(max_length=64)
+    model: str = Field(min_length=1, max_length=128)
+    calls: StrictInt = Field(ge=1, le=10**6)
+    input_tokens: StrictInt = Field(ge=0, le=10**12)
+    output_tokens: StrictInt = Field(ge=0, le=10**12)
+    calls_without_usage: StrictInt = Field(default=0, ge=0, le=10**6)
+    occurred_at: AwareDatetime
+
+
+class ModelUsageBatch(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    batch_id: UUID
+    items: list[ModelUsageItem] = Field(max_length=MAX_BATCH_ITEMS)
+
+
+class ModelUsageBatchResponse(BaseModel):
+    accepted: int
+    rejected: int
+    duplicate: bool

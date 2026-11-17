@@ -44,6 +44,7 @@ from .gateway.selftest import BusyError, SelfTestError, SelfTestRunner
 from .gateway.recorder import EventRecorder, HttpEventReporter
 from .gateway.trips import HttpTripReporter, TripDispatcher
 from .gateway.model_proxy import MemoryUsageSink, ModelProxy, ModelProxyConfig, mount_model_proxy
+from .gateway.model_usage_reporter import ReportingUsageSink
 from .gateway.service import McpGateway
 from .gateway.upstream import UpstreamForwarder
 from .telemetry.audit_logger import TamperEvidentAuditLogger
@@ -126,7 +127,15 @@ model_proxy = ModelProxy(
         allowed_models=frozenset(m.strip() for m in settings.MODEL_PROXY_ALLOWED_MODELS.split(",") if m.strip()),
         max_tokens_cap=settings.MODEL_PROXY_MAX_TOKENS_CAP,
     ),
-    sink=MemoryUsageSink(),
+    # With the proxy on, what the provider counted is reported to core (B5b); with it off nothing is recorded at all.
+    sink=(
+        ReportingUsageSink(
+            core_url=settings.CORE_URL,
+            service_token=settings.CORE_SERVICE_TOKEN.get_secret_value() if settings.CORE_SERVICE_TOKEN else None,
+        )
+        if settings.MODEL_PROXY_ENABLED
+        else MemoryUsageSink()
+    ),
 )
 
 
@@ -141,9 +150,13 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     firewall_engine.load_policies()
     gateway.budget.start()
     gateway.recorder.start()
+    if isinstance(model_proxy.sink, ReportingUsageSink):
+        model_proxy.sink.start()
     yield
     logger.info("Shutting down AgentWall gateway")
     await gateway.budget.stop()
+    if isinstance(model_proxy.sink, ReportingUsageSink):
+        await model_proxy.sink.stop()
     await gateway.recorder.stop()
     await gateway.trips.aclose()
     await gateway.pins.aclose()
@@ -403,4 +416,6 @@ async def metrics() -> PlainTextResponse:
     text = gateway.metrics.render()
     if settings.MODEL_PROXY_ENABLED:
         text += model_proxy.render_prometheus()
+        if isinstance(model_proxy.sink, ReportingUsageSink):
+            text += model_proxy.sink.render_prometheus()
     return PlainTextResponse(text, media_type="text/plain; version=0.0.4")

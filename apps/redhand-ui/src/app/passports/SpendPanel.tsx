@@ -22,6 +22,8 @@ import {
   parseDollars,
   shownModel,
   spendCell,
+  measuredLine,
+  MEASURED_BASIS,
 } from "@/lib/spend";
 
 const button = "rounded-full border border-[#E5E5E5] bg-[#FFFFFF] px-3 py-1 text-[12px] font-semibold hover:bg-[#F2F2F2] disabled:opacity-50";
@@ -93,6 +95,7 @@ export function SpendPanel(props: {
 
   const agent = detail?.agent;
   const cell = spendCell(agent);
+  const measured = agent ? measuredLine(agent) : null;
   const maxDay = Math.max(1, ...(detail?.days ?? []).map((d) => d.estimated_micro_usd));
   return (
     <section className="rounded-[12px] border-2 border-[#0F0F0F] bg-[#FFFFFF] p-4 text-[12px]" aria-label="Model use">
@@ -120,6 +123,15 @@ export function SpendPanel(props: {
             <span className="text-[22px] font-bold leading-none">{cell.headline}</span>
             <span className="text-[#606060]">{cell.detail}{agent.usage_reported ? ` · ${agent.calls} calls` : ""}</span>
           </div>
+          {measured && (
+            <div className="mt-3" aria-label="Measured by RedHand">
+              <div className="flex flex-wrap items-baseline gap-3">
+                <span className="text-[16px] font-bold leading-none">{measured.headline}</span>
+                <span className="text-[#606060]">{measured.detail}</span>
+              </div>
+              <p className="mt-1 text-[#606060]">{MEASURED_BASIS}</p>
+            </div>
+          )}
           {agent.spend_limit_micro_usd !== null && agent.percent_of_limit !== null && (
             <div className="mt-2 max-w-[360px]">
               <div className="h-[6px] w-full rounded-full bg-[#F2F2F2]" role="progressbar" aria-valuenow={Math.min(100, agent.percent_of_limit)} aria-valuemin={0} aria-valuemax={100}>
