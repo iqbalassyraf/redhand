@@ -102,18 +102,48 @@ async def _actions(
     return list((await query.order("created_at", desc=True).limit(limit).execute()).data or [])
 
 
+def _org_audit(supabase: Any, org: UUID, action: str) -> Any:
+    return (supabase.table("control_audit_log").select("action, actor_user_id, reason, created_at")
+            .eq("organization_id", str(org)).eq("target_type", "organization").eq("action", action))
+
+
 async def _organization_actions(
-    supabase: Any, org: UUID, before: datetime | None, limit: int, exactly: datetime | None = None
+    supabase: Any, org: UUID, before: datetime | None, limit: int, exactly: datetime | None = None, since: datetime | None = None
 ) -> list[Row]:
-    """Freeze all and organization-wide Safe Mode, newest first. One read per action (the in-memory twin has no IN filter)."""
+    """Freeze all and organization-wide Safe Mode while the agent existed (from `since`, its registration), newest first. One read per
+    action (the in-memory twin has no IN filter)."""
     rows: list[Row] = []
     for action in ORGANIZATION_WIDE_ACTIONS:
-        query = (supabase.table("control_audit_log").select("action, actor_user_id, reason, created_at")
-                 .eq("organization_id", str(org)).eq("target_type", "organization").eq("action", action))
-        query = _window(query, "created_at", before, exactly)
+        query = _window(_org_audit(supabase, org, action), "created_at", before, exactly)
+        if since is not None:
+            query = query.gte("created_at", since.isoformat())
         rows.extend((await query.order("created_at", desc=True).limit(limit).execute()).data or [])
     rows.sort(key=lambda r: _time(r["created_at"]), reverse=True)
     return rows[:limit]
+
+
+async def _safe_mode_in_effect(supabase: Any, org: UUID, registered: datetime) -> Row | None:
+    """The organization Safe Mode "turned on" that was still in force when the agent was registered, or None. Safe Mode for all also
+    restricts agents registered later, so it stays on the agent's timeline; an older freeze all froze only the agents that existed then."""
+    latest: dict[str, Row] = {}
+    for action in ("organization.safe_mode_enabled", "organization.safe_mode_disabled"):
+        query = _org_audit(supabase, org, action).lt("created_at", registered.isoformat())
+        found = (await query.order("created_at", desc=True).limit(1).execute()).data or []
+        if found:
+            latest[action] = found[0]
+    enabled, disabled = latest.get("organization.safe_mode_enabled"), latest.get("organization.safe_mode_disabled")
+    if enabled is None or (disabled is not None and _time(disabled["created_at"]) >= _time(enabled["created_at"])):
+        return None
+    return {**enabled, "in_effect_at_registration": True}
+
+
+def _with_carried(rows: list[Row], carried: Row | None, before: datetime | None, exactly: datetime | None = None) -> list[Row]:
+    """Adds the carried-over Safe Mode row when it falls inside the page window, so it is shown once, on the page that reaches its time."""
+    if carried is None:
+        return rows
+    at = _time(carried["created_at"])
+    inside = at == exactly if exactly is not None else (before is None or at < before)
+    return [*rows, carried] if inside else rows
 
 
 def _activity(rows: list[Row]) -> list[TimelineItem]:
@@ -159,7 +189,8 @@ def _items(
     )
     items.extend(
         TimelineItem(at=_time(r["created_at"]), kind="action", action=str(r["action"]), reason=r.get("reason"),
-                     automatic=str(r.get("actor_user_id")) == str(SYSTEM_ACTOR_ID), organization_wide=True)
+                     automatic=str(r.get("actor_user_id")) == str(SYSTEM_ACTOR_ID), organization_wide=True,
+                     in_effect_at_registration=r.get("in_effect_at_registration") is True)
         for r in org_actions
     )
     return items
@@ -188,10 +219,14 @@ async def agent_timeline(
     limit = max(1, min(limit, MAX_PAGE))
     org = operator.organization_id
     try:
-        agent_rows = list((await supabase.table("agents").select("id, name, status").eq("organization_id", str(org))
+        agent_rows = list((await supabase.table("agents").select("id, name, status, created_at").eq("organization_id", str(org))
                            .eq("id", str(agent_id)).limit(1).execute()).data or [])
         if not agent_rows:
             raise HTTPException(status.HTTP_404_NOT_FOUND, "Agent not found.")
+        # Organization-wide actions from before the agent existed are not its history (G4). An agent without a registration time (old
+        # data) keeps its full organization history: nothing is hidden on a guess.
+        registered = _time(agent_rows[0]["created_at"]) if agent_rows[0].get("created_at") else None
+        carried = await _safe_mode_in_effect(supabase, org, registered) if registered is not None else None
         fetch = limit + 1  # one more than a page tells whether an older page exists
         blocks, errors, hourly, findings, trips, actions, org_actions = await asyncio.gather(
             _events(supabase, org, agent_id, "BLOCK", before, fetch),
@@ -200,19 +235,24 @@ async def agent_timeline(
             _findings(supabase, org, agent_id, before, fetch),
             _trips(supabase, org, agent_id, before, fetch),
             _actions(supabase, org, agent_id, before, fetch),
-            _organization_actions(supabase, org, before, fetch),
+            _organization_actions(supabase, org, before, fetch, since=registered),
         )
+        org_actions = _with_carried(org_actions, carried, before)
         cut = _cut(_items(blocks, errors, [], findings, trips, actions, org_actions), limit)
         if cut is not None:
             # A source that filled its fetch may hold more rows at exactly the cut-off moment; read that moment in full, so the page keeps
             # every item of it and the next page (strictly older) misses none.
+            async def _org_actions_at(moment: datetime) -> list[Row]:
+                rows = await _organization_actions(supabase, org, None, TIE_LIMIT, moment, since=registered)
+                return _with_carried(rows, carried, None, moment)
+
             sources: dict[str, tuple[list[Row], str, Callable[[], Awaitable[list[Row]]]]] = {
                 "blocks": (blocks, "occurred_at", lambda: _events(supabase, org, agent_id, "BLOCK", None, TIE_LIMIT, cut)),
                 "errors": (errors, "occurred_at", lambda: _events(supabase, org, agent_id, "ERROR", None, TIE_LIMIT, cut)),
                 "findings": (findings, "first_seen_at", lambda: _findings(supabase, org, agent_id, None, TIE_LIMIT, cut)),
                 "trips": (trips, "occurred_at", lambda: _trips(supabase, org, agent_id, None, TIE_LIMIT, cut)),
                 "actions": (actions, "created_at", lambda: _actions(supabase, org, agent_id, None, TIE_LIMIT, cut)),
-                "org_actions": (org_actions, "created_at", lambda: _organization_actions(supabase, org, None, TIE_LIMIT, cut)),
+                "org_actions": (org_actions, "created_at", lambda: _org_actions_at(cut)),
             }
             completed: dict[str, list[Row]] = {}
             for name, (rows, column, read_moment) in sources.items():
@@ -251,6 +291,7 @@ EXPORT_FAILED = "The export could not be started."
 CSV_COLUMNS = (
     "at", "kind", "tool_name", "server", "reasons", "seq", "calls", "refused", "rule_id", "finding_kind", "confidence", "review_status",
     "occurrences", "trip_kind", "seen_in", "action", "reason", "automatic", "organization_wide",
+    "in_effect_at_registration",
 )
 
 

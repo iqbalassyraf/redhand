@@ -2,7 +2,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { FILTERS, actionLabel, dayKey, describeItem, matchesFilter, TIMELINE_LIMITS_TEXT, FREEZE_REASON } from "../src/lib/timeline.ts";
+import { FILTERS, IN_EFFECT_AT_REGISTRATION, actionLabel, dayKey, describeItem, matchesFilter, TIMELINE_LIMITS_TEXT, FREEZE_REASON } from "../src/lib/timeline.ts";
 import { describeRule } from "../src/lib/radarRules.ts";
 
 const base = { at: "2026-11-16T03:04:05+00:00", seq: null, tool_name: "", server: "", reasons: [], calls: null, refused: null,
@@ -104,4 +104,12 @@ test("organization-wide actions say they covered every agent", () => {
   assert.equal(actionLabel("radar_suppression.created"), "A Radar rule silenced for this agent");
   assert.equal(actionLabel("passport.timeline_exported"), "Timeline exported");
   assert.equal(actionLabel("radar_suppression.revoked"), "Radar silence removed");
+});
+
+test("Safe Mode for all that was already on at registration says so before its reason", () => {
+  const item = { ...base, kind: "action", action: "organization.safe_mode_enabled", reason: "still on", automatic: false, organization_wide: true };
+  const carried = describeItem({ ...item, in_effect_at_registration: true });
+  assert.equal(carried.detail, `${IN_EFFECT_AT_REGISTRATION} Reason: still on`);
+  assert.equal(describeItem(item).detail, "Reason: still on", "an item from the agent's own lifetime is unchanged");
+  assert.equal(describeItem({ ...item, reason: null, in_effect_at_registration: true }).detail, IN_EFFECT_AT_REGISTRATION);
 });

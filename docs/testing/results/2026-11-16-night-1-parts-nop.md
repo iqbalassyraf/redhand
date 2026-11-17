@@ -141,7 +141,7 @@ Which script would undo these: none. No repo script manages `sdk_api_keys`.
 | G1 | Product gap | No way to issue, list, rotate or revoke an organization SDK key except raw SQL. A real customer cannot start sending model usage, so B4a and B4b cannot be used outside our own staging | Admin-only "SDK keys" API and dashboard card: create (show plaintext once), list by prefix, last used, revoke; audited like agent keys |
 | G2 | Product observation | `/v1/telemetry/ingest` creates an `agents` row on first sight of a new `external_agent_id`. `night-spend` appeared as an **active** passport with no owner, no scopes and the default 90-day expiry. Any holder of an SDK key can therefore add active-looking agents to the Passports page | Decide on purpose: either create such agents in a distinct state ("reported only", no gateway access, clearly labelled) or require the agent to exist first. At minimum show "created by SDK telemetry" on the row and in the timeline |
 | G3 | Brief wording | O6 "ends with" and P5 filter name differ from the product text (see notes above) | Update the brief |
-| G4 | Small UX | Org-wide items older than the agent appear on a new agent's timeline (Part N note) | Optional: clip to the agent's `created_at` |
+| G4 | Small UX | Org-wide items older than the agent appear on a new agent's timeline (Part N note) | Optional: clip to the agent's `created_at`. **Fixed 2026-11-17 by Claude Code (branch `fix/timeline-agent-lifetime`):** clipped, except Safe Mode for all still on at registration, shown once and labelled |
 
 ---
 

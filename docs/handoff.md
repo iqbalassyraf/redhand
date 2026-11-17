@@ -13,6 +13,11 @@ Both tools work on RedHand and its demo projects. This file is how each learns w
 
 ---
 
+## 2026-11-17, Claude Code: G4 timeline fix (branch fix/timeline-agent-lifetime, nothing deployed)
+- **Changed:** an agent's timeline shows freeze all and Safe Mode for all only from its registration onwards, plus the one Safe Mode for all that was still on when it was registered (labelled "Already in force when this agent was registered."). Core read path and dashboard text only; no migration.
+- **Verified locally:** timeline tests (8 new), full Python suite, ruff, mypy, dashboard node tests, `tsc`, build, a real-browser look at a seeded agent registered after Safe Mode for all. Deliberate breakages: dropping the clip, dropping the carry-over, carrying over a "turned off", and guessing a lifetime for an agent without one are all caught.
+- **On staging after a core + dashboard deploy:** open `night-incident`'s Timeline; the 04/11 Safe Mode rows from Part N should be gone (unless Safe Mode for all was still on when it was registered).
+
 ## 2026-11-17, Claude Code: CI minutes cut (#92 merged), C1a merged (#91), C1b built (branch feat/c1b-telemetry-trust, nothing deployed)
 - **CI:** one run per commit, and docs-only changes skip the heavy jobs; the secret scan still runs on every change. A docs-only PR now shows Python, SQL and Dashboard as "skipped" (that counts as passed).
 - **C1b built:** migration `20261128000000_reported_only` (`agents.reported_only`, `telemetry_resolve_agent`, `control_passport_promote`), ingest no longer renames passports, reported-only passports refused at token exchange and reported frozen to the gateway, Risk ladder skips them, promote route, twin, dashboard label and Promote button, ADR 0024 amendment, runbook, threat model, OpenAPI, night **Part Q** (covers C1a and C1b, and runs N9 and P7).

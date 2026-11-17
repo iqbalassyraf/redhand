@@ -386,3 +386,110 @@ def test_the_export_holds_no_payload_or_secret(env: Env) -> None:
         row["arguments_redacted"] = {"text": SECRET, "truncated": False, "original_bytes": 40}
     for fmt in ("json", "csv"):
         assert SECRET not in export(env, fmt).text
+
+
+# --- organization-wide items and the agent's lifetime (G4, Part N note) -----------------------------------------------------------------
+
+ADMIN_ACTOR = "00000000-0000-0000-0000-0000000000a2"
+
+
+def registered_at(env: Env, at: datetime) -> None:
+    agent = next(a for a in env.store.tables["agents"] if str(a["id"]) == env.agent)
+    agent["created_at"] = at.isoformat()
+
+
+def org_action(env: Env, action: str, at: datetime, reason: str, org: str = DEFAULT_ORG_ID) -> None:
+    env.store.tables["control_audit_log"].append({
+        "id": str(uuid4()), "organization_id": org, "actor_user_id": ADMIN_ACTOR, "action": action, "target_type": "organization",
+        "target_id": org, "reason": reason, "details": {}, "created_at": at.isoformat(),
+    })
+
+
+def org_items(body: dict[str, Any]) -> list[dict[str, Any]]:
+    return [i for i in body["items"] if i["kind"] == "action" and i["organization_wide"]]
+
+
+def test_organization_wide_actions_from_before_the_agent_existed_are_not_its_history(env: Env) -> None:
+    now = datetime.now(timezone.utc).replace(microsecond=0)
+    registered_at(env, now - timedelta(days=1))
+    org_action(env, "organization.safe_mode_enabled", now - timedelta(days=13), "testing")
+    org_action(env, "organization.safe_mode_disabled", now - timedelta(days=12), "testing finish")
+    org_action(env, "organization.frozen_all", now - timedelta(days=5), "old drill")
+    org_action(env, "organization.frozen_all", now - timedelta(hours=2), "today's drill")
+    reasons = [i["reason"] for i in org_items(env.timeline().json())]
+    assert reasons == ["today's drill"], "only what happened while the agent existed"
+
+
+def test_safe_mode_for_all_still_on_from_before_registration_is_shown_once_and_flagged(env: Env) -> None:
+    """Organization Safe Mode also restricts agents registered later: hiding it would hide why this agent is restricted."""
+    now = datetime.now(timezone.utc).replace(microsecond=0)
+    registered_at(env, now - timedelta(days=1))
+    org_action(env, "organization.safe_mode_enabled", now - timedelta(days=13), "first time")
+    org_action(env, "organization.safe_mode_disabled", now - timedelta(days=12), "off again")
+    org_action(env, "organization.safe_mode_enabled", now - timedelta(days=3), "still on")
+    items = org_items(env.timeline().json())
+    assert [i["reason"] for i in items] == ["still on"]
+    assert items[0]["in_effect_at_registration"] is True
+    assert items[0]["action"] == "organization.safe_mode_enabled"
+
+
+def test_safe_mode_turned_off_before_registration_is_not_carried_over(env: Env) -> None:
+    now = datetime.now(timezone.utc).replace(microsecond=0)
+    registered_at(env, now - timedelta(days=1))
+    org_action(env, "organization.safe_mode_enabled", now - timedelta(days=3), "on")
+    org_action(env, "organization.safe_mode_disabled", now - timedelta(days=2), "off")
+    assert org_items(env.timeline().json()) == []
+
+
+def test_an_older_freeze_all_is_never_carried_over(env: Env) -> None:
+    """Freeze all froze the agents that existed then; an agent registered afterwards was never frozen by it."""
+    now = datetime.now(timezone.utc).replace(microsecond=0)
+    registered_at(env, now - timedelta(days=1))
+    org_action(env, "organization.frozen_all", now - timedelta(days=2), "before it existed")
+    assert org_items(env.timeline().json()) == []
+
+
+def test_actions_after_registration_are_not_flagged(env: Env) -> None:
+    now = datetime.now(timezone.utc).replace(microsecond=0)
+    registered_at(env, now - timedelta(days=1))
+    org_action(env, "organization.safe_mode_enabled", now - timedelta(hours=3), "after")
+    items = org_items(env.timeline().json())
+    assert [i["reason"] for i in items] == ["after"] and items[0]["in_effect_at_registration"] is False
+
+
+def test_an_agent_without_a_registration_time_keeps_its_full_organization_history(env: Env) -> None:
+    """Old rows may lack created_at: then nothing is hidden (never guess a lifetime)."""
+    now = datetime.now(timezone.utc).replace(microsecond=0)
+    agent = next(a for a in env.store.tables["agents"] if str(a["id"]) == env.agent)
+    agent["created_at"] = None
+    org_action(env, "organization.safe_mode_enabled", now - timedelta(days=13), "old")
+    org_action(env, "organization.safe_mode_disabled", now - timedelta(days=12), "old off")
+    assert [i["reason"] for i in org_items(env.timeline().json())] == ["old off", "old"]
+
+
+def test_another_organizations_safe_mode_is_never_carried_over(env: Env) -> None:
+    now = datetime.now(timezone.utc).replace(microsecond=0)
+    registered_at(env, now - timedelta(days=1))
+    org_action(env, "organization.safe_mode_enabled", now - timedelta(days=3), "other org", org="00000000-0000-0000-0000-000000000099")
+    assert org_items(env.timeline().json()) == []
+
+
+def test_the_carried_over_item_appears_once_across_pages_and_in_the_export(env: Env) -> None:
+    now = datetime.now(timezone.utc).replace(microsecond=0)
+    registered_at(env, now - timedelta(days=1))
+    org_action(env, "organization.safe_mode_enabled", now - timedelta(days=3), "still on")
+    env.events([event(env.agent, now - timedelta(hours=1, minutes=n), "BLOCK", f"tool_{n}", ["refused"]) for n in range(12)])
+    carried = 0
+    before: str | None = None
+    for _ in range(10):
+        params: dict[str, Any] = {"limit": 5}
+        if before:
+            params["before"] = before
+        body = env.timeline(**params).json()
+        carried += sum(1 for i in org_items(body) if i["in_effect_at_registration"])
+        before = body["next_before"]
+        if before is None:
+            break
+    assert carried == 1
+    exported = export(env).json()
+    assert sum(1 for i in exported["items"] if i.get("in_effect_at_registration")) == 1

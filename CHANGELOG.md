@@ -2,6 +2,8 @@
 
 ## Unreleased: Phase 3 (See things), in progress
 
+- Incident view (G4 from the Part N run): an agent's timeline no longer lists organization-wide actions from before the agent was registered. The one exception is Safe Mode for every agent that was still on at registration: it is shown once with "Already in force when this agent was registered." (new optional field `in_effect_at_registration` on timeline items and in the CSV export). ADR 0022 amendment.
+
 - Phase 4.5 C1b: telemetry trust (ADR 0024 amendment, runbook `docs/runbooks/sdk-keys.md`). **Behaviour change (security fix):** telemetry ingest no longer renames or re-frames an existing passport (it used to overwrite name, framework and environment on every batch, so an SDK key holder could rename any passport whose external id it knew). An agent id first seen in telemetry now becomes a passport labelled "reported by SDK" that is refused a gateway token and skipped by the Risk ladder until an admin presses **Promote** (`POST /v1/passports/{id}/promote`, confirmed, audited as `passport.promoted`). Existing passports are unaffected (`agents.reported_only` defaults to false). Migration `20261128000000_reported_only` (rollback tested); apply it before deploying core.
 
 - CI spends fewer GitHub Actions minutes: one run per commit (push only on `main`, plus a manual run), and a `changes` job that runs only the jobs the changed files need (`scripts/ci_changes.py`, unknown paths run everything). The secret scan runs on every change, docs included.
