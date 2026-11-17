@@ -1,5 +1,7 @@
 # Tonight's checklist (2026-11-17, 7pm): owner + Antigravity
 
+> **Superseded:** do not run this checklist. Its open steps moved to `docs/testing/briefs/2026-11-18-test-day.md`, which also deploys the C1 and D1 changes.
+
 One page, in order, about 30 to 40 minutes. The rules are the same as the night brief: **never paste a key, token or secret into chat; NOT RUN is not PASS;
 take a screenshot or copy the on-screen text for every step.** Write the results in a new file, `docs/testing/results/2026-11-17-tonight.md`, using
 `docs/testing/results/TEMPLATE-result.md`, plus a `docs/handoff.md` entry, on a branch named `docs/tonight-2026-11-17`. Then tell Claude Code, which will check
