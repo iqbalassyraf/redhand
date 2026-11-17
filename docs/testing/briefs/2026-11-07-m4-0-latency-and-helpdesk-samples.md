@@ -2,8 +2,8 @@
 
 - **Date / PR:** 2026-11-07, Phase 4 M4.0 (see `docs/plans/phase4-m4-plan.md`)
 - **Written by:** Claude Code. **To be run by:** Antigravity (steps marked *owner-assisted* need the owner).
-- **Environment:** staging: gateway `https://redhand-gateway-64rxezjt6q-as.a.run.app`, core
-  `https://redhand-core-64rxezjt6q-as.a.run.app`, helpdesk project `/Users/testing/Documents/redhand-helpdesk-demo`.
+- **Environment:** staging: gateway `https://<gateway-host>`, core
+  `https://<core-host>`, helpdesk project `/Users/testing/Documents/redhand-helpdesk-demo`.
 - **Prerequisites:** an ACTIVE agent passport with a key the owner holds, allowed to call one cheap read tool on a
   registered server (for example `deepwiki`). The key and the gateway's internal service token are secrets: the owner puts them in
   environment variables; nobody prints, pastes or writes them down.

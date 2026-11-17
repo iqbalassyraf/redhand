@@ -29,8 +29,8 @@ No product defect was found in anything that ran. One **brief defect** (Part O c
 | Item | Value |
 |---|---|
 | Git | `main` at `7340432` (merge of #83). `origin/main` has since moved to `26d92da` (#84, #85); those two were **not** deployed or tested here |
-| Core | `https://redhand-core-825574069297.asia-southeast1.run.app`, revision `redhand-core-00033-xv2`, image `redhand-core:7340432` (Cloud Build `847bc230-...`, SUCCESS) |
-| Gateway | `https://redhand-gateway-825574069297.asia-southeast1.run.app`, revision `redhand-gateway-00029-njd` (not redeployed; image unchanged) |
+| Core | `https://<core-host>`, revision `redhand-core-00033-xv2`, image `redhand-core:7340432` (Cloud Build `847bc230-...`, SUCCESS) |
+| Gateway | `https://<gateway-host>`, revision `redhand-gateway-00029-njd` (not redeployed; image unchanged) |
 | Dashboard | `https://redhand.archtificial.com` (Vercel production, from `main`) |
 | Database | Staging Supabase `qxxiksevqfmkqstrdkxi` |
 | Core deploy command | `SUPABASE_URL=... DASHBOARD_ORIGIN="https://redhand.archtificial.com,https://redhand-dashboard.vercel.app" deploy/cloudrun/deploy.sh core` |

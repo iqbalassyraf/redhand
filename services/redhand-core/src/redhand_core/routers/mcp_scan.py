@@ -36,7 +36,7 @@ SupabaseDep = Annotated[Any, Depends(get_supabase_service_client)]
 
 SCAN_TIMEOUT_SECONDS = 30.0
 MAX_FINDINGS = 200
-_CONTROL = re.compile(r"[\x00-\x08\x0b-\x1f\x7f-\x9f​-‏‪-‮⁠-⁤⁦-⁩﻿]")
+_CONTROL = re.compile(r"[\x00-\x08\x0b-\x1f\x7f-\x9f\u200b-\u200f\u202a-\u202e\u2060-\u2064\u2066-\u2069\ufeff]")
 
 
 def _plain(value: Any, limit: int) -> str:

@@ -3,8 +3,8 @@
 - **Date / PRs:** 2026-11-07, PRs 29 (multi-origin deploy), 31 (password reset), 32 (page scrolling)
 - **Written by:** Claude Code. **To be run by:** Antigravity. Steps marked *owner-assisted* need the owner.
 - **Environment:** staging. Dashboard `https://redhand.archtificial.com` (also `https://redhand-dashboard.vercel.app`);
-  core `https://redhand-core-64rxezjt6q-as.a.run.app`; gateway `https://redhand-gateway-64rxezjt6q-as.a.run.app`;
-  helpdesk MCP server `https://helpdesk-mcp-825574069297.asia-southeast1.run.app`.
+  core `https://<core-host>`; gateway `https://<gateway-host>`;
+  helpdesk MCP server `https://<helpdesk-mcp-host>`.
 - **Prerequisites:** Vercel production deploy of `main` finished; Supabase Auth Site URL set to
   `https://redhand.archtificial.com` and the redirect URLs `https://redhand.archtificial.com` and `.../**` added.
   Sign-in is owner-assisted. No secrets in this brief or in your results.

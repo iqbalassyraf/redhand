@@ -17,7 +17,7 @@
 | 1 | Check out `test/night-1` and note `git rev-parse --short HEAD` (it goes in the report) | Everything below is deployed from it |
 | 2 | Look at the **battleground/database** key question separately (compare the last four characters of the key in `battleground/database/db.py` with the OpenAI and Stripe dashboards; revoke it if unsure) | Open since the security review; not part of the test run |
 | 3 | Approve the deploy and the two migrations (loop, then destination), in this order: migrations, **core**, then **gateway**, then the dashboard | The gateway denies every call against a core that lacks the new fields |
-| 4 | Have the phone with Telegram ready, and the three logins (admin, `iassyraf+operator@gmail.com`, `iassyraf+viewer@gmail.com`) | Parts B, C and D use them |
+| 4 | Have the phone with Telegram ready, and the three logins (admin, `<operator test account>`, `<viewer test account>`) | Parts B, C and D use them |
 
 ## The run, in this order
 | Part | What it proves | Steps are in | Who |

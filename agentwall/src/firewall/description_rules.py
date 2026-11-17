@@ -20,7 +20,7 @@ MAX_EXAMINED_CHARS = 8 * 1024
 OVERSIZE_CHARS = 1200
 
 # Zero-width, bidirectional-control, word-joiner and tag characters: invisible to a person, readable to a model.
-_INVISIBLE = re.compile("[​-‏‪-‮⁠-⁤⁦-⁩﻿\U000e0000-\U000e007f]")
+_INVISIBLE = re.compile("[\u200b-\u200f\u202a-\u202e\u2060-\u2064\u2066-\u2069\ufeff\U000e0000-\U000e007f]")
 # Lookalike letters an attacker swaps in to dodge a phrase match (Cyrillic and Greek look-alikes of Latin letters).
 _CONFUSABLES = str.maketrans({
     "а": "a", "е": "e", "о": "o", "р": "p", "с": "c", "х": "x", "у": "y", "і": "i", "ј": "j", "ѕ": "s", "ԁ": "d", "һ": "h",

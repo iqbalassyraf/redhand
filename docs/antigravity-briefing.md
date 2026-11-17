@@ -22,7 +22,8 @@ Not built yet: Prompt Injection Radar and output checks (M4), canaries/secret sc
 
 ## 3. Staging environment
 - Dashboard: `https://redhand.archtificial.com` (also `https://redhand-dashboard.vercel.app`), Next.js on Vercel.
-- Core (control plane): `https://redhand-core-64rxezjt6q-as.a.run.app`; Gateway: `https://redhand-gateway-64rxezjt6q-as.a.run.app`
+- Core (control plane): `https://<core-host>`; Gateway: `https://<gateway-host>`
+  (The repository is public, so the real staging host names are not written in it. Ask the owner, or run `gcloud run services describe redhand-core --region <region> --format 'value(status.url)'`, and put them in `RH_CORE_URL` / `RH_GATEWAY_URL`.)
   (Cloud Run, `asia-southeast1`). Database: Supabase Postgres (RedHand's own project).
 - Deploy order is strict: **migration, then core, then gateway**. Deploy with `deploy/cloudrun/deploy.sh`; it REPLACES all
   environment variables, so always pass them. The dashboard allow-list takes several origins and must list every one:

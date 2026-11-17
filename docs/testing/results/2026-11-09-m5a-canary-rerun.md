@@ -5,8 +5,8 @@
 - **Branch / commit:** `feat/phase4-m5a-canary`
 - **Environment:**
   - Dashboard: Production Vercel (`https://redhand.archtificial.com/honeytokens`)
-  - Cloud Run Core: `https://redhand-core-64rxezjt6q-as.a.run.app` (`redhand-core-00026-w6k`)
-  - Cloud Run Gateway: `https://redhand-gateway-64rxezjt6q-as.a.run.app` (`redhand-gateway-00021-4kx`)
+  - Cloud Run Core: `https://<core-host>` (`redhand-core-00026-w6k`)
+  - Cloud Run Gateway: `https://<gateway-host>` (`redhand-gateway-00021-4kx`)
 - **Staging changes & cleanup:**
   - Created test agent `canary-test-2` (`deepwiki/read_wiki_structure:read`) -> **REVOKED**.
   - Created fresh canary -> **RETIRED**.
@@ -103,7 +103,7 @@ All 3 were blocked (`PolicyViolation: request blocked.`). Telegram alert rate li
 ---
 
 ## Section D: Roles (Step 17)
-- Multi-role testing accounts (`iassyraf+operator@gmail.com` and `iassyraf+viewer@gmail.com`) are scheduled for the Phase 4 staging sweep brief (`docs/testing/briefs/2026-11-09-f1-phase4-staging-sweep.md`).
+- Multi-role testing accounts (`<operator test account>` and `<viewer test account>`) are scheduled for the Phase 4 staging sweep brief (`docs/testing/briefs/2026-11-09-f1-phase4-staging-sweep.md`).
 - Marked **NOT RUN on staging** for this re-run. Role security boundaries verified by automated test suite (`GET /v1/honeytokens` requires SecurityOperator role; `POST /v1/honeytokens` returns 403 Forbidden for non-admin).
 
 ---

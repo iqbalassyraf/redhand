@@ -4,8 +4,8 @@
 - **Author:** Antigravity (+ Owner for assisted latency steps)
 - **Date:** 2026-11-08
 - **Environment:**
-  - Gateway: `https://redhand-gateway-64rxezjt6q-as.a.run.app` (revision `825574069297`)
-  - Core: `https://redhand-core-64rxezjt6q-as.a.run.app`
+  - Gateway: `https://<gateway-host>` (revision `<gcp-project-number>`)
+  - Core: `https://<core-host>`
   - Helpdesk source: `redhand-helpdesk-demo/eval/tickets.jsonl`
 
 ---
@@ -71,7 +71,7 @@ To record the latency numbers without exposing the gateway service token:
 1. **First Snapshot:**
    ```bash
    INTERNAL_TOKEN=$(gcloud secrets versions access latest --secret redhand-internal-service-token)
-   curl -s -H "Authorization: Bearer $INTERNAL_TOKEN" https://redhand-gateway-64rxezjt6q-as.a.run.app/metrics | grep redhand_gateway_overhead_ms > /tmp/metrics_before.txt
+   curl -s -H "Authorization: Bearer $INTERNAL_TOKEN" https://<gateway-host>/metrics | grep redhand_gateway_overhead_ms > /tmp/metrics_before.txt
    ```
 2. **200 Allowed Calls:**
    ```bash
@@ -80,7 +80,7 @@ To record the latency numbers without exposing the gateway service token:
    ```
 3. **Second Snapshot:**
    ```bash
-   curl -s -H "Authorization: Bearer $INTERNAL_TOKEN" https://redhand-gateway-64rxezjt6q-as.a.run.app/metrics | grep redhand_gateway_overhead_ms > /tmp/metrics_after.txt
+   curl -s -H "Authorization: Bearer $INTERNAL_TOKEN" https://<gateway-host>/metrics | grep redhand_gateway_overhead_ms > /tmp/metrics_after.txt
    ```
 4. **Record Difference:**
    Paste the diff lines or overhead buckets to update section 4 and 5 of this result.

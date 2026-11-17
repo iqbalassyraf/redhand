@@ -4,9 +4,9 @@
 - **Run by / date:** Antigravity + Owner (assisted browser testing), 2026-11-07
 - **Environment and versions:**
   - Dashboard: `https://redhand.archtificial.com` (and `https://redhand-dashboard.vercel.app`)
-  - Core: `https://redhand-core-64rxezjt6q-as.a.run.app`
-  - Gateway: `https://redhand-gateway-64rxezjt6q-as.a.run.app`
-  - Helpdesk MCP Server: `https://helpdesk-mcp-825574069297.asia-southeast1.run.app`
+  - Core: `https://<core-host>`
+  - Gateway: `https://<gateway-host>`
+  - Helpdesk MCP Server: `https://<helpdesk-mcp-host>`
   - Browser: Google Chrome on macOS (desktop & mobile emulation)
 
 ## Results

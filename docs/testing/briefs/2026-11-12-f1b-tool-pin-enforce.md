@@ -17,7 +17,7 @@
 | 4 | *Owner-assisted:* run `python3 scripts/staging_agent.py run --server deepwiki --ok-tool read_wiki_structure`. Paste the output | All checks pass. The visible tools list contains only `read_wiki_structure` (the approved one). The unapproved `read_wiki_contents` is **not** listed | normal |
 | 5 | *Owner-assisted:* run the step 0 command again (`--ok-tool read_wiki_contents ...`). Paste the output | The in-scope call to `read_wiki_contents` is **refused** with a message that the tool is not approved. This script line printing FAIL is the **expected** result. The call never reaches DeepWiki | abuse |
 | 6 | Reload **Tool pins**. *Screenshot* | `read_wiki_contents` still pending. One Telegram alert may have arrived about a new or changed tool, with counts only and no tool text. Report whether one arrived and quote it | normal |
-| 7 | As **security operator** (`iassyraf+operator@gmail.com`) try **Approve** on `read_wiki_contents`. *Screenshot* | Refused: "This action requires the 'admin' role or higher." (quote it). Nothing changes | abuse |
+| 7 | As **security operator** (`<operator test account>`) try **Approve** on `read_wiki_contents`. *Screenshot* | Refused: "This action requires the 'admin' role or higher." (quote it). Nothing changes | abuse |
 | 8 | As the owner approve `read_wiki_contents`. *Owner-assisted:* run the step 0 command again | The tool is listed and the call works again | normal |
 | 9 | As the owner set the mode back to **alert** (confirmation needed). *Screenshot* | Mode shows alert | normal |
 
