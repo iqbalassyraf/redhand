@@ -39,6 +39,9 @@ from redhand_core.passports.models import (
     utcnow,
 )
 from redhand_core.routers.telemetry import get_supabase_service_client
+from redhand_core.spend import service as spend_service
+from redhand_core.spend.models import GatewayModelSpend
+from redhand_core.spend.service import MODEL_SERVER_NAME
 
 logger = logging.getLogger("redhand.core.agent_auth")
 
@@ -263,6 +266,8 @@ class GatewayAgentContext(BaseModel):
     # denied. Deploy core before the gateway. The list is sent only while the mode is not "off".
     destination_mode: Literal["off", "observe", "enforce"]
     allowed_destinations: list[str]
+    # B5c. Required by the gateway, though null when there is nothing to check (an older core omits the key, so the lookup fails and the call is denied): deploy core before the gateway.
+    model_spend: GatewayModelSpend | None
 
 
 class GatewayBudgetContext(BaseModel):
@@ -300,7 +305,7 @@ LAST_SEEN_WRITE_INTERVAL_SECONDS = 60
 LOOP_RULE_ID = "RAD-LOOP-001"
 # The agent columns the context reads, and only those: the full row (every column) used to be fetched on every passport cache miss.
 AGENT_CONTEXT_COLUMNS = (
-    "status, expires_at, scopes, version, safe_mode, daily_call_limit, budget_action, last_seen_at, destination_mode, reported_only"
+    "status, expires_at, scopes, version, safe_mode, daily_call_limit, budget_action, last_seen_at, destination_mode, reported_only, spend_limit_micro_usd"
 )
 
 
@@ -535,6 +540,8 @@ async def gateway_context(
         action="freeze" if agent.get("budget_action") == "freeze" else "deny",
     )
 
+    model_spend = await spend_service.model_spend_context(supabase, organization_id, agent_id, agent.get("spend_limit_micro_usd"), day) if server == MODEL_SERVER_NAME else None
+
     return GatewayContextResponse(
         agent=GatewayAgentContext(
             id=agent_id,
@@ -556,6 +563,7 @@ async def gateway_context(
             loop_exempt=loop_exempt,
             destination_mode=destination_mode,
             allowed_destinations=allowed_destinations,
+            model_spend=model_spend,
         ),
         server=GatewayServerContext(
             slug=server_row["slug"], url=server_row["url"], pin_mode=pin_mode, approved_tools=approved_tools

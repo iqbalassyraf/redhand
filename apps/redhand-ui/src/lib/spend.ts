@@ -102,7 +102,8 @@ export const SPEND_LIMITS_TEXT =
   "These numbers come from the token counts each agent's own SDK reports, so an agent whose SDK does not report (or misreports) its model use " +
   "shows less than it really used. RedHand does not see the model call itself and cannot stop it: a limit here only sends an alert. Prices " +
   "are the provider's public standard rates and ignore discounts, caching and batch pricing. A model without a known price is shown as " +
-  "\"price unknown\" and is left out of the dollar figure rather than counted as zero.";
+  "\"price unknown\" and is left out of the dollar figure rather than counted as zero. The one exception to \"a limit only sends an alert\": an agent whose model calls go through " +
+  "RedHand's model proxy (off by default) is also refused once what the proxy measured reaches the limit, a few seconds late, and a model with no known price is refused while a limit is set.";
 
 export const LIMIT_CONFIRM_TEXT = "Raising or removing the limit means RedHand will alert later, or never. Continue?";
 

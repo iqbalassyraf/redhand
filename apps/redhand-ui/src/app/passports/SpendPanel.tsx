@@ -138,7 +138,7 @@ export function SpendPanel(props: {
                 <div className={`h-[6px] rounded-full ${TONE_BAR[cell.tone]}`} style={{ width: `${Math.min(100, agent.percent_of_limit)}%` }} />
               </div>
               <div className="mt-1 text-[#606060]">
-                {agent.percent_of_limit}% of the {agent.spend_limit_text} daily limit{agent.percent_of_limit >= 100 ? " · alert sent, nothing was refused" : ""}
+                {agent.percent_of_limit}% of the {agent.spend_limit_text} daily limit{agent.percent_of_limit >= 100 ? " · alert sent (from the reported figure)" : ""}
               </div>
             </div>
           )}

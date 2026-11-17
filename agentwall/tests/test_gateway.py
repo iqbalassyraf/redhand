@@ -274,7 +274,7 @@ class Harness:
         honeytokens: list[dict[str, str]] | None = None, honey_tools: list[dict[str, str]] | None = None,
         radar_mode: str = "off", output_check_mode: str = "off",
         loop_mode: str = "off", loop_limit: int = 20, loop_window_seconds: int = 60, loop_exempt: bool = False,
-        destination_mode: str = "off", allowed_destinations: tuple[str, ...] = (),
+        destination_mode: str = "off", allowed_destinations: tuple[str, ...] = (), model_spend: dict[str, Any] | None = None,
     ) -> UUID:
         agent_id = uuid4()
         self.core.agents[str(agent_id)] = {
@@ -285,6 +285,7 @@ class Harness:
             "radar_mode": radar_mode, "output_check_mode": output_check_mode,
             "loop_mode": loop_mode, "loop_limit": loop_limit, "loop_window_seconds": loop_window_seconds, "loop_exempt": loop_exempt,
             "destination_mode": destination_mode, "allowed_destinations": list(allowed_destinations),
+            "model_spend": model_spend,
             "budget": {
                 "daily_call_limit": limit, "used_by_other_instances": used_by_others, "day_key": "2026-11-04",
                 "resets_at": "2026-11-04T16:00:00+00:00", "action": "deny",

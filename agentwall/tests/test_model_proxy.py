@@ -51,13 +51,14 @@ class FakeContexts:
         self.error: Exception | None = None
         self.calls: list[tuple[Any, Any, str]] = []
         self.version = 1
+        self.model_spend: Any = None
 
     async def get(self, agent_id: Any, organization_id: Any, server: str) -> Any:
         self.calls.append((agent_id, organization_id, server))
         if self.error is not None:
             raise self.error
         models = self.models
-        return SimpleNamespace(status=self.status, passport_version=self.version, covers_tool=lambda tool: "*" in models or tool in models)
+        return SimpleNamespace(status=self.status, passport_version=self.version, covers_tool=lambda tool: "*" in models or tool in models, model_spend=self.model_spend)
 
 
 class Provider:
@@ -450,3 +451,77 @@ def test_a_production_gateway_without_the_proxy_is_unaffected() -> None:
     from agentwall.config.settings import Settings
 
     assert Settings(ENVIRONMENT="production").MODEL_PROXY_ENABLED is False
+
+
+# --- B5c: refusing over the daily dollar limit (measured spend, ADR 0025) -------------------------------------------------------------
+
+def spend(limit: int = 5_000_000, measured: int = 0, known: bool = True, priced: tuple[str, ...] = (SONNET, "claude-haiku-5-5")) -> SimpleNamespace:
+    return SimpleNamespace(limit_micro_usd=limit, measured_micro_usd=measured, spend_known=known, priced_models=frozenset(priced))
+
+
+def test_a_call_under_the_limit_is_forwarded(w: World) -> None:
+    w.contexts.model_spend = spend(measured=4_999_999)
+    assert w.post().status_code == 200 and len(w.provider.requests) == 1
+
+
+@pytest.mark.parametrize("measured", [5_000_000, 5_000_001, 10**12])
+def test_a_call_at_or_over_the_limit_is_refused_before_the_provider(w: World, measured: int) -> None:
+    w.contexts.model_spend = spend(limit=5_000_000, measured=measured)
+    response = w.post()
+    assert response.status_code == 429 and response.json()["error"]["type"] == "rate_limit_error"
+    assert "daily model spend limit" in response.json()["error"]["message"]
+    assert w.provider.requests == [] and w.sink.items == []
+    assert 'outcome="spend_limit"' in w.proxy.render_prometheus()
+
+
+def test_the_refusal_leaks_no_numbers_and_no_key(w: World) -> None:
+    w.contexts.model_spend = spend(limit=123_456, measured=999_999)
+    text = w.post().text
+    assert "123456" not in text and "999999" not in text and PROVIDER_KEY not in text and AGENT_TOKEN not in text
+
+
+def test_a_limit_of_zero_refuses_everything_the_restrictive_reading(w: World) -> None:
+    w.contexts.model_spend = spend(limit=0, measured=0)
+    assert w.post().status_code == 429 and w.provider.requests == []
+
+
+def test_no_limit_means_no_check(w: World) -> None:
+    w.contexts.model_spend = None
+    assert w.post().status_code == 200
+
+
+def test_unknown_spend_with_a_limit_set_is_refused_not_assumed_zero(w: World) -> None:
+    w.contexts.model_spend = spend(measured=0, known=False)
+    response = w.post()
+    assert response.status_code == 403 and "cannot be priced" in response.json()["error"]["message"]
+    assert w.provider.requests == [] and 'outcome="spend_unpriced"' in w.proxy.render_prometheus()
+
+
+def test_a_model_the_price_table_does_not_know_is_refused_when_a_limit_is_set(w: World) -> None:
+    w.contexts.models = {"*"}
+    w.contexts.model_spend = spend(priced=(SONNET,))
+    assert w.post(body={"model": "mystery-model", "max_tokens": 10, "messages": [{"role": "user", "content": "x"}]}).status_code == 403
+    assert w.provider.requests == []
+
+
+@pytest.mark.parametrize("model", [f"{SONNET}-20261101", SONNET.upper()])
+def test_a_dated_or_differently_cased_id_is_priced_by_the_same_rule_as_core(w: World, model: str) -> None:
+    w.contexts.models = {"*"}
+    w.contexts.model_spend = spend(measured=1)
+    assert w.post(body={"model": model, "max_tokens": 10, "messages": [{"role": "user", "content": "x"}]}).status_code == 200
+
+
+def test_the_limit_is_checked_after_the_passport_and_the_model_scope(w: World) -> None:
+    w.contexts.model_spend = spend(measured=10**12)
+    w.contexts.status = "frozen"
+    assert w.post().status_code == 403 and "frozen" in w.post().json()["error"]["message"]
+    w.contexts.status = "active"
+    w.contexts.models = {"claude-haiku-5-5"}
+    assert w.post().status_code == 403 and "may not use the model" in w.post().json()["error"]["message"]
+
+
+def test_a_streaming_call_over_the_limit_is_refused_before_any_byte_is_streamed(w: World) -> None:
+    w.contexts.model_spend = spend(measured=5_000_000)
+    body = {"model": SONNET, "max_tokens": 10, "stream": True, "messages": [{"role": "user", "content": "x"}]}
+    response = w.post(body=body)
+    assert response.status_code == 429 and response.headers["content-type"].startswith("application/json") and w.provider.requests == []

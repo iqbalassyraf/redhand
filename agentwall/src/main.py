@@ -132,6 +132,7 @@ model_proxy = ModelProxy(
         ReportingUsageSink(
             core_url=settings.CORE_URL,
             service_token=settings.CORE_SERVICE_TOKEN.get_secret_value() if settings.CORE_SERVICE_TOKEN else None,
+            flush_interval=settings.MODEL_USAGE_FLUSH_INTERVAL_SECONDS,
         )
         if settings.MODEL_PROXY_ENABLED
         else MemoryUsageSink()

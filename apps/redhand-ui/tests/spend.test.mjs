@@ -35,6 +35,9 @@ test("every dollar figure comes with the sentence that says what it is", () => {
   assert.match(line, /Not an invoice/);
   assert.match(SPEND_LIMITS_TEXT, /cannot stop it/);
   assert.match(SPEND_LIMITS_TEXT, /price unknown/);
+  assert.match(SPEND_LIMITS_TEXT, /one exception/, "the proxy is the one case where a limit refuses");
+  assert.match(SPEND_LIMITS_TEXT, /off by default/);
+  assert.match(SPEND_LIMITS_TEXT, /a few seconds late/);
 });
 
 test("token counts are grouped by plain digits in every locale", () => {

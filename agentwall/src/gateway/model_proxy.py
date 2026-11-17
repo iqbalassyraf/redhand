@@ -92,6 +92,16 @@ class MemoryUsageSink:
             del self.items[: len(self.items) - self.limit]
 
 
+_DATE_STAMP = re.compile(r"^(?P<base>.+)-\d{8}$")
+
+
+def _price_key(model: str) -> str:
+    """The model id as core's price table keys it: lower case, a trailing -YYYYMMDD stamp ignored (the same rule as spend/prices.py price_for; a test in core pins them together)."""
+    key = model.strip().lower()
+    dated = _DATE_STAMP.match(key)
+    return dated.group("base") if dated else key
+
+
 def _error(status: int, kind: str, message: str, headers: dict[str, str] | None = None) -> JSONResponse:
     headers = dict(headers or {})
     if status == 401:
@@ -195,6 +205,20 @@ class ModelProxy:
         self._tokens["input"] += inp
         self._tokens["output"] += out
 
+    def _spend_refusal(self, spend: Any, model: str) -> JSONResponse | None:
+        """B5c: refuse over the agent's daily dollar limit, using what the proxy MEASURED (never what an SDK reported). No limit (None) means no check. Fails closed: spend that could not be
+        priced, or a model the price table does not know, is refused while a limit is set (a cost cannot be kept under a limit it cannot be measured against). A call's cost is known only after it
+        ends and the figure reaches this process through core a few seconds later, so the limit can be overshot by the calls in flight and in that lag: documented in ADR 0025, bounded by max_tokens."""
+        if spend is None:
+            return None
+        if spend.measured_micro_usd >= spend.limit_micro_usd:
+            self._outcome("spend_limit")
+            return _error(429, "rate_limit_error", "This agent has reached its daily model spend limit. It can call the model again after the day resets or an admin raises the limit.")
+        if not spend.spend_known or _price_key(model) not in spend.priced_models:
+            self._outcome("spend_unpriced")
+            return _error(403, "permission_error", "This agent has a daily model spend limit and this call cannot be priced, so it is refused.")
+        return None
+
     def render_prometheus(self) -> str:
         lines = ["# TYPE agentwall_model_proxy_requests_total counter"]
         for outcome, n in sorted(self._outcomes.items()):
@@ -297,6 +321,10 @@ class ModelProxy:
         if (self.config.allowed_models and model not in self.config.allowed_models) or not context.covers_tool(model):
             self._outcome("model_denied")
             return _error(403, "permission_error", f"This agent may not use the model '{model}'.")
+
+        refusal = self._spend_refusal(context.model_spend, model)
+        if refusal is not None:
+            return refusal
 
         headers = {"content-type": "application/json", "x-api-key": self.config.provider_key.get_secret_value(), "accept-encoding": "identity",
                    "anthropic-version": request.headers.get("anthropic-version", DEFAULT_ANTHROPIC_VERSION)}

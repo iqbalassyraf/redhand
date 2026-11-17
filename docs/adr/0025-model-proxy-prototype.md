@@ -43,11 +43,21 @@ limit below: until per-tenant, envelope-encrypted key custody exists, the proxy 
   The tenant comes from the agent's own row, never from the payload. The dashboard's "Model use" shows "measured by RedHand" beside the reported figure and says which is which; an agent the proxy never saw shows no measured line (not a zero).
 - Still not used by anything that refuses: Budget Guard, the spend alert and the limit keep reading the reported figure. Refusing over a dollar limit from the measured figure is B5c.
 
+## Refusing over a daily dollar limit (B5c)
+- For the proxy's own passport lookup (server `model`) and only when the agent HAS a spend limit, core adds `model_spend` to the gateway context: the limit, today's **measured** spend priced at the public table (`spend/prices.py`),
+  whether every measured token could be priced, and the Anthropic model ids the table knows. Any other lookup, and any agent without a limit, carries `null` and costs no extra query.
+- The proxy refuses **before the provider is called**: spend at or over the limit is HTTP 429 (`rate_limit_error`, "This agent has reached its daily model spend limit..."); spend that could not be priced, or a model the table does not know, is HTTP 403
+  ("...this call cannot be priced, so it is refused") while a limit is set. **Fail closed:** a stored limit that is malformed reads as 0 (refuse everything), an unreadable measured table is a 503 from core (the proxy denies), and a core that predates the field
+  omits the key, which fails the lookup and denies (the field is required on the gateway side, though nullable: deploy core before the gateway). Only measured usage counts: what an SDK reports is never used to refuse. No limit means no check.
+- **Honest limit:** a call's cost is known only when it ends, and the figure reaches the proxy via the batch report (default every 5 s, `AGENTWALL_MODEL_USAGE_FLUSH_INTERVAL_SECONDS`), core and the passport cache (2 s). Calls in flight and in that lag can overshoot the limit;
+  each is bounded by `max_tokens` (capped at 32,000 by default). A shorter interval means less overshoot and more calls to core. The refusal message and metric (`agentwall_model_proxy_requests_total{outcome="spend_limit"|"spend_unpriced"}`) carry no figure.
+- **Not built:** refusals are counted but not written to the Black Box (proxy calls are not recorded there at all yet), and there is no Telegram alert for a proxy refusal (the existing spend alert reads the reported figure).
+- Proved: unit tests on both sides, a test pinning the gateway's copy of the date-stamp rule to core's, and an end-to-end test on real processes (core, gateway with the proxy on, fake provider): an agent is refused after its measured spend crosses a small limit, allowed again when the limit is raised, refused for an unpriced model while a limit is set, and unchecked when the limit is removed.
+
 ## What is NOT built (each is a decision, not a detail)
 - **Provider-key custody.** The prototype holds ONE deployment-level key in an environment variable. A customer product needs per-tenant keys, envelope-encrypted, never returned, with rotation (CLAUDE.md 5.2, 5.5):
   a new secret store, its own ADR and threat-model section. Until then the proxy can only serve one operator's own key.
 - **Reporting usage to core.** The sink is in memory. The next step reuses the B4a roll-up (`agent_model_daily`) through a service-token ingest route and then the spend limit, the approved-model finding and the Risk signals can use authoritative numbers.
-- **Spend limits that refuse.** The data to refuse over a daily dollar limit exists after the step above; the prototype refuses only by passport and model.
 - **Inspection and redaction of prompts and completions** (OWASP LLM01, LLM02, LLM07): the reason to be in the path, and the expensive part (per-token latency, PDPA position, what is stored).
 - **Other providers** (OpenAI, Gemini: each has its own streaming and error format), request caching, retries, regional failover.
 - **Several gateway instances:** the passport cache and stats are per instance (the revocation bound is the same per instance).

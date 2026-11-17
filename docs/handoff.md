@@ -14,6 +14,13 @@ Both tools work on RedHand and its demo projects. This file is how each learns w
 ---
 
 
+
+## 2026-11-17, Claude Code: B5c refuse over the daily dollar limit (branch feat/b5c-spend-limit-refusal)
+- **Built:** core `model_spend` in the gateway context (server `model` and a limit only), gateway `ModelSpend` + the proxy's 429/403 refusals, `AGENTWALL_MODEL_USAGE_FLUSH_INTERVAL_SECONDS`, dashboard wording, ADR 0025/runbook/threat model/CHANGELOG.
+- **Verified locally:** core 11 new tests (9 of 9 deliberate breakages caught after adding a neighbour-agent test), gateway 12 proxy tests + 19 context-parsing tests (9 of 9 breakages caught), a test pinning the gateway's price-key rule to core's, an end-to-end test on real processes (5.7 s), benchmark re-run 2.63 ms p50 / 6.12 ms p99 overhead.
+- **Not verified:** a real provider or Cloud Run; refusals are not in the Black Box and raise no Telegram alert (documented). **Deploy order matters:** core before the gateway (the gateway requires the new key); the proxy is off in staging, so nothing changes there until it is turned on.
+- **Next:** B5d, the decision papers (key custody ADR 0029 draft, uptime and bypass note, PDPA position for legal review, cost model).
+
 ## 2026-11-17, Claude Code: B5b measured model usage (branch feat/b5b-measured-usage)
 - **Built:** migration `20261201000000_model_measured_usage` (+ rollback, SQL test: 25 checks, 9 of 9 deliberate breakages caught), core `POST /internal/v1/model-usage` and `measured` on the spend views, twin handlers, gateway `ReportingUsageSink` (32 tests, 9 of 9 breakages caught), dashboard line, tenant manifest entry.
 - **Verified locally:** a real-browser run 22/22 (owner and viewer, 1280 and 375 px) against a local core seeded through the real route; a contract test that the gateway's own reporter posts to the real core app.

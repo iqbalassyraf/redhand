@@ -138,3 +138,14 @@ class ModelUsageBatchResponse(BaseModel):
     accepted: int
     rejected: int
     duplicate: bool
+
+
+class GatewayModelSpend(BaseModel):
+    """What the model proxy needs to refuse over a daily dollar limit (B5c). Only for the lookup of server "model" and only when the agent HAS a limit. `measured_micro_usd` is priced
+    MEASURED usage only (what the SDK reports is never used to refuse); `spend_known` is False when some of today's measured tokens belong to a model with no known price; `priced_models`
+    are the Anthropic model ids the price table knows (a trailing -YYYYMMDD stamp is ignored, as in spend/prices.py)."""
+
+    limit_micro_usd: int
+    measured_micro_usd: int
+    spend_known: bool
+    priced_models: list[str]

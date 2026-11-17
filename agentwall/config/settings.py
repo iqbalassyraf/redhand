@@ -123,6 +123,11 @@ class Settings(BaseSettings):
     MODEL_PROXY_ALLOWED_MODELS: str = Field(
         default="", description="Comma-separated model ids allowed for the whole deployment; empty means the passport scopes alone decide.",
     )
+    MODEL_USAGE_FLUSH_INTERVAL_SECONDS: float = Field(
+        default=5.0, ge=0.5, le=60.0,
+        description="How often the model proxy reports the usage the provider counted to core (B5b). A daily dollar limit sees new spend only after this, plus core's processing and the passport cache lifetime, so a "
+        "shorter interval means less overshoot and more calls to core. Prototype only (ADR 0025).",
+    )
     MODEL_PROXY_MAX_TOKENS_CAP: int = Field(default=32_000, ge=1, le=200_000, description="Largest max_tokens a proxied request may ask for.")
     DESTINATION_CHECK_ENABLED: bool = Field(
         default=True,
