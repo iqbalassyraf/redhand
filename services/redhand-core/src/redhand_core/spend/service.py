@@ -27,6 +27,7 @@ from redhand_core.spend.models import (
     AgentSpendDetailResponse,
     AgentSpendView,
     DaySpendView,
+    GatewayModelSpend,
     MeasuredSpendView,
     ModelUsageBatch,
     ModelUsageBatchResponse,
@@ -34,6 +35,7 @@ from redhand_core.spend.models import (
     SpendTodayResponse,
 )
 from redhand_core.spend.prices import (
+    PRICES,
     PRICES_AS_OF_TEXT,
     Estimate,
     Usage,
@@ -100,6 +102,27 @@ async def record_measured(supabase: Any, batch: ModelUsageBatch) -> ModelUsageBa
         raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "Usage could not be recorded.") from None
     data = res.data
     return ModelUsageBatchResponse(accepted=int(data["accepted"]), rejected=int(data["rejected"]), duplicate=bool(data["duplicate"]))
+
+
+MODEL_SERVER_NAME = "model"  # the server name the model proxy uses for its passport lookup (agentwall/src/gateway/model_proxy.py)
+
+
+async def model_spend_context(supabase: Any, organization_id: UUID, agent_id: UUID, raw_limit: Any, day: date) -> Any:
+    """The model proxy's view of the agent's daily dollar limit (B5c), or None when there is no limit (nothing to check, nothing looked up).
+
+    Fails closed: a stored limit that is not a plain integer of at least 1 reads as limit 0 (the proxy refuses everything), and a measured-usage read that fails raises 503 (the proxy
+    cannot decide, so it denies). Only MEASURED usage counts, priced at the public table; tokens of a model with no known price make the spend unknown, never zero."""
+    if raw_limit is None:
+        return None
+    limit = raw_limit if isinstance(raw_limit, int) and not isinstance(raw_limit, bool) and raw_limit >= 1 else 0
+    rows = await read_measured(supabase, organization_id, agent_id, day, day)
+    if rows is None:
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "Measured spend lookup failed.")
+    est = estimate(_usage(rows))
+    return GatewayModelSpend(
+        limit_micro_usd=limit, measured_micro_usd=est.micro_usd, spend_known=est.unpriced_tokens == 0,
+        priced_models=sorted(p.model for p in PRICES if p.provider == "anthropic"),
+    )
 
 
 def _measured_view(rows: list[dict[str, Any]]) -> MeasuredSpendView | None:

@@ -43,3 +43,10 @@ refuses a call because of spend.
   `{reason="overflow"}` means more distinct agent-and-model pairs than the memory bound during an outage; `{reason="not_configured"}` means no service token is set on the gateway.
 - **Purge:** `purge_model_measured()` (daily 19:57 UTC when pg_cron exists, else schedule it yourself) keeps 90 days of usage and 7 days of batch ids.
 
+## Refusals over the daily dollar limit (B5c, model proxy only)
+- **What happens:** with the proxy on, an agent that has a spend limit is refused (HTTP 429, "This agent has reached its daily model spend limit...") once what the proxy MEASURED reaches it. It can call again after the day resets (the organization's UTC offset) or when an admin raises the limit (raising needs the confirm tick, as always).
+- **A refusal for a model with no price (HTTP 403, "cannot be priced"):** while a limit is set, a model the price table does not know (or an agent with unpriced measured tokens today) is refused. Add the model to `spend/prices.py` (an owner-approved table update) or remove the limit.
+- **The limit was overshot a little:** expected. The figure arrives a few seconds late (see ADR 0025); tune `AGENTWALL_MODEL_USAGE_FLUSH_INTERVAL_SECONDS` if it matters.
+- **Every call is refused with a limit set, spend looks low:** check `agentwall_model_proxy_requests_total{outcome="spend_unpriced"}`; if the measured figure is zero but refusals say limit reached, the stored limit may be malformed (reads as 0): look at `agents.spend_limit_micro_usd`.
+- **Deploy order:** core before the gateway (the gateway requires the new `model_spend` key). A gateway newer than core denies every proxy lookup.
+

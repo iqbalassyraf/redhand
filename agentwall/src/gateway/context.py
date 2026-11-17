@@ -85,6 +85,17 @@ class HoneyTool(BaseModel):
     description: str
 
 
+class _ModelSpendPayload(BaseModel):
+    """B5c: the agent's daily dollar limit and today's MEASURED spend, only for the model proxy's lookup and only when the agent has a limit. Strict: anything malformed denies."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    limit_micro_usd: StrictInt = Field(ge=0, le=10**12)
+    measured_micro_usd: StrictInt = Field(ge=0, le=10**18)
+    spend_known: StrictBool
+    priced_models: list[Annotated[str, StringConstraints(min_length=1, max_length=128)]] = Field(max_length=200)
+
+
 class _AgentPayload(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
@@ -123,6 +134,9 @@ class _AgentPayload(BaseModel):
     # is empty while the mode is "off".
     destination_mode: Literal["off", "observe", "enforce"]
     allowed_destinations: list[Annotated[str, StringConstraints(pattern=r"^[a-z0-9_.:-]{1,253}$")]] = Field(max_length=100)
+    # Required, with no default, like the fields above, though null when there is nothing to check: a core that predates it omits the key, so the lookup fails and the proxy
+    # denies instead of silently skipping a dollar limit. Deploy core before the gateway.
+    model_spend: _ModelSpendPayload | None
 
 
 class _ApprovedToolPayload(BaseModel):
@@ -151,6 +165,17 @@ class _ContextPayload(BaseModel):
 
 
 @dataclass(frozen=True, slots=True)
+class ModelSpend:
+    """The model proxy's view of an agent's daily dollar limit (B5c). `measured_micro_usd` counts only what the proxy measured; `spend_known` is False when some of it could not be priced;
+    `priced_models` are the model ids the price table knows (a trailing -YYYYMMDD stamp is ignored, as in core's spend/prices.py)."""
+
+    limit_micro_usd: int
+    measured_micro_usd: int
+    spend_known: bool
+    priced_models: frozenset[str]
+
+
+@dataclass(frozen=True, slots=True)
 class GatewayContext:
     agent_id: UUID
     organization_id: UUID
@@ -174,6 +199,7 @@ class GatewayContext:
     loop_exempt: bool = False
     destination_mode: str = "off"
     allowed_destinations: frozenset[str] = frozenset()
+    model_spend: ModelSpend | None = None
 
     def honey_tool(self, name: str) -> HoneyTool | None:
         return next((t for t in self.honey_tools if t.name == name), None)
@@ -383,4 +409,10 @@ class CoreContextClient:
             loop_exempt=payload.agent.loop_exempt,
             destination_mode=payload.agent.destination_mode,
             allowed_destinations=frozenset(payload.agent.allowed_destinations),
+            model_spend=ModelSpend(
+                limit_micro_usd=payload.agent.model_spend.limit_micro_usd,
+                measured_micro_usd=payload.agent.model_spend.measured_micro_usd,
+                spend_known=payload.agent.model_spend.spend_known,
+                priced_models=frozenset(payload.agent.model_spend.priced_models),
+            ) if payload.agent.model_spend is not None else None,
         )
