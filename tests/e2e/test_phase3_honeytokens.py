@@ -232,7 +232,8 @@ async def test_done_5_a_call_to_a_decoy_tool_is_never_forwarded_and_trips(monkey
     assert len(demo_mcp_server.calls) == calls_before  # never forwarded
     await stack.gateway.trips.wait_idle()
     assert time.monotonic() - started < ALERT_DEADLINE_SECONDS
-    assert "export_all_customer_records" in phone.sent[-1][1] and "not forwarded" in phone.sent[-1][1]
+    # Not phone.sent[-1]: the first tools/list of a new server also raises a tool-pinning alert in the background, and the two can arrive in either order (seen failing on CI).
+    assert any("export_all_customer_records" in text and "not forwarded" in text for _, text in phone.sent), phone.sent
     assert await _status(stack, agent_id) == "active"  # a decoy alerts by default, it does not freeze
     assert _audit(stack, "honey_tool.tripped")
 
