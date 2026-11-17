@@ -29,7 +29,7 @@ class Env:
 
     def register(self, scopes: list[dict[str, str]] | None = None, name: str = "broker-bot") -> dict[str, Any]:
         body = {"name": name, "framework": "custom", "scopes": scopes if scopes is not None else [{"server": "gcs", "tool": "read_object"}]}
-        response = self.client.post("/v1/passports", json=body, headers=self.h())
+        response = self.client.post("/v1/passports", json=body, headers=self.h("admin"))
         assert response.status_code == 201, response.text
         passport: dict[str, Any] = response.json()["passport"]
         return passport

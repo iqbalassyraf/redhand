@@ -13,6 +13,12 @@ Both tools work on RedHand and its demo projects. This file is how each learns w
 
 ---
 
+## 2026-11-17, Claude Code: D1 onboarding backend (branch feat/d1-onboarding, nothing deployed)
+- **Built:** migration `20261129000000_onboarding` (sign-up codes, member invites, six audited control functions, member list; rollback tested), core `onboarding/` + `routers/onboarding.py`, twin mirror, `scripts/issue_signup_code.py`, ADR 0026, threat-model rows, OpenAPI. 36 core tests, SQL tests with 7 deliberate breakages (6 caught, 1 equivalent), 10 core breakages (all caught after one test added), route sweep extended (new "user" auth kind, role matrix edited on purpose, seeds for invites and members).
+- **Behaviour changes (owner):** register agent and rotate key are admin only; viewers' state snapshot has no reasoning or tool-argument text. **Dashboard buttons for operators must follow** (next PR).
+- **Owner, to start a design partner:** apply the migration, deploy core, then `RH_CORE_URL=... RH_SERVICE_TOKEN=... python3 scripts/issue_signup_code.py --note "<who>"` and give the code to the person privately. The sign-up and Team screens arrive in the UI PR; until then the API works with curl.
+- **Not built:** e-mail invites, open sign-up, several organizations per person (see ADR 0026).
+
 ## 2026-11-17, Claude Code: public-repo hygiene and static scans (branch docs/public-repo-hygiene)
 - **Owner, today:** revoke the old battleground Stripe and OpenAI look-alike keys (still readable in git history, now public); choose a licence; enable GitHub private vulnerability reporting, secret scanning with push protection, and branch protection on `main`.
 - **Done:** `SECURITY.md`; e-mail addresses and Cloud Run hosts replaced by placeholders in 22 current files (testers are told to ask the owner for the staging host names; `docs/antigravity-briefing.md`); Bandit and Semgrep one-off scans triaged in `docs/release-readiness.md` 3.2: 3 real findings fixed (literal bidi and zero-width characters in Radar, the description rules and the MCP scanner, now `\uXXXX` escapes, plus `tests/deploy/test_no_hidden_characters.py`).

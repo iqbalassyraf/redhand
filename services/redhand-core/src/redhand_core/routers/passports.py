@@ -66,8 +66,9 @@ async def _alert(
 
 @router.post("/passports", response_model=PassportCreateResponse, status_code=status.HTTP_201_CREATED)
 async def register_agent(
-    payload: PassportCreateRequest, operator: SecurityOperatorDep, supabase: SupabaseDep
+    payload: PassportCreateRequest, operator: AdminDep, supabase: SupabaseDep
 ) -> PassportCreateResponse:
+    """Registering an agent issues its key, so it is a credential-issuing action: admin (owner's decision, 2026-11-17)."""
     now = utcnow()
     passport, key = await service.create_passport(supabase, operator, payload, now)
     passport = await service.apply_default_budget(supabase, operator, passport, now)
@@ -235,8 +236,9 @@ async def renew_agent(
 
 @router.post("/passports/{agent_id}/rotate-key", response_model=KeyRotationResponse)
 async def rotate_agent_key(
-    agent_id: UUID, payload: ControlActionRequest, operator: SecurityOperatorDep, supabase: SupabaseDep
+    agent_id: UUID, payload: ControlActionRequest, operator: AdminDep, supabase: SupabaseDep
 ) -> KeyRotationResponse:
+    """A new agent key is a working credential: admin (owner's decision, 2026-11-17)."""
     passport, key = await service.rotate_key(supabase, operator, agent_id, payload.reason, utcnow())
     return KeyRotationResponse(passport=passport, agent_key=key)
 

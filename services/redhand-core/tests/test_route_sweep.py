@@ -28,7 +28,7 @@ import pytest
 from fastapi.routing import APIRoute
 from pydantic import SecretStr
 
-from redhand_core.auth.operator import OPERATOR_JWT_AUDIENCE, Role, get_operator, issue_operator_token
+from redhand_core.auth.operator import OPERATOR_JWT_AUDIENCE, Role, get_authenticated_user, get_operator, issue_operator_token
 from redhand_core.routers.agent_auth import require_internal_service
 from redhand_core.routers.scim import require_scim_token
 from redhand_core.routers.telemetry import verify_sdk_api_key
@@ -89,7 +89,7 @@ def minimum_role(call: Callable[..., Any]) -> Role | None:
 
 @dataclass(frozen=True)
 class Auth:
-    kind: str  # operator | internal | scim | sdk_key | public
+    kind: str  # operator | user (a verified token, no organization yet) | internal | scim | sdk_key | public
     role: Role | None = None
 
 
@@ -98,6 +98,7 @@ def classify(route: Route) -> Auth:
     roles = [r for r in (minimum_role(c) for c in calls) if r is not None]
     kinds = {
         "operator": get_operator in calls,
+        "user": get_authenticated_user in calls,
         "internal": require_internal_service in calls,
         "scim": require_scim_token in calls,
         "sdk_key": verify_sdk_api_key in calls,
@@ -168,15 +169,21 @@ EXPECTED_MINIMUM_ROLE: dict[str, list[tuple[Method, str]]] = {
         ("GET", "/v1/risk/ladder"),
         ("POST", "/v1/findings/{finding_id}/review"),
         ("POST", "/v1/hitl/{intervention_id}/resolve"),
-        ("POST", "/v1/passports"),
         ("POST", "/v1/passports/{agent_id}/freeze"),
-        ("POST", "/v1/passports/{agent_id}/rotate-key"),
         ("POST", "/v1/passports/{agent_id}/unfreeze"),
         ("POST", "/v1/radar/self-test"),
         ("PUT", "/v1/blackbox/payload-capture"),
         ("PUT", "/v1/passports/{agent_id}/budget"),
     ],
     "ADMIN": [
+        ("POST", "/v1/passports"),
+        ("POST", "/v1/passports/{agent_id}/rotate-key"),
+        ("GET", "/v1/organization/invites"),
+        ("POST", "/v1/organization/invites"),
+        ("DELETE", "/v1/organization/invites/{invite_id}"),
+        ("GET", "/v1/organization/members"),
+        ("PUT", "/v1/organization/members/{user_id}"),
+        ("DELETE", "/v1/organization/members/{user_id}"),
         ("DELETE", "/v1/organization/sdk-keys/{key_id}"),
         ("DELETE", "/v1/passports/{agent_id}/destinations/{entry_id}"),
         ("DELETE", "/v1/radar/suppressions/{suppression_id}"),
@@ -246,7 +253,8 @@ class World:
         now = datetime.now(timezone.utc).isoformat()
         ident = {name: str(uuid4()) for name in (
             "agent_id", "entry_id", "finding_id", "honey_tool_id", "honeytoken_id", "intervention_id", "key_id", "link_id", "pin_id",
-            "server_id", "suppression_id", "user_id")}
+            "server_id", "suppression_id", "invite_id")}
+        ident["user_id"] = OTHER_OWNER  # organization B's member: the members routes take a user id
         ident["seq"] = "987654"
         org = {"organization_id": OTHER_ORG}
         agent: dict[str, Any] = {
@@ -274,6 +282,9 @@ class World:
         t.setdefault("mcp_servers", []).append({**org, "id": ident["server_id"], "slug": "other-server", "name": OTHER_MARK, "url": "https://other.example.com/mcp", "is_active": True, "pin_mode": "off"})
         t.setdefault("radar_suppressions", []).append({**org, "id": ident["suppression_id"], "agent_id": ident["agent_id"], "rule_id": "RAD-INJ-001", "revoked_at": None, "created_at": now,
             "expires_at": "2099-01-01T00:00:00+00:00", "reason": OTHER_MARK, "created_by": OTHER_OWNER})
+        t.setdefault("member_invites", []).append({
+            **org, "id": ident["invite_id"], "role": "viewer", "token_hash": "a" * 64, "created_by": OTHER_OWNER, "created_at": now,
+            "expires_at": "2099-01-01T00:00:00+00:00", "used_at": None, "used_by": None, "revoked_at": None})
         t.setdefault("agent_events", []).append({
             **org, "agent_id": ident["agent_id"], "seq": int(ident["seq"]), "occurred_at": now, "server": OTHER_MARK, "tool_name": OTHER_MARK, "decision": "BLOCK", "method": "tools/call", "reasons": [OTHER_MARK]})
         return ident
@@ -338,7 +349,7 @@ def test_every_operator_route_names_its_role_or_says_why_not() -> None:
 
 def test_the_sweep_is_not_vacuous() -> None:
     kinds = {auth.kind for auth in AUTH.values()}
-    assert {"operator", "internal", "scim", "sdk_key", "public"} <= kinds
+    assert {"operator", "user", "internal", "scim", "sdk_key", "public"} <= kinds
     assert {auth.role for auth in AUTH.values() if auth.kind == "operator"} >= {Role.VIEWER, Role.SECURITY_OPERATOR, Role.ADMIN}
 
 
@@ -371,6 +382,7 @@ def bad_operator_headers(world: World) -> dict[str, dict[str, str]]:
 
 
 OPERATOR_ROUTES = [r for r in ROUTES if AUTH[r.key].kind == "operator"]
+USER_ROUTES = [r for r in ROUTES if AUTH[r.key].kind == "user"]
 INTERNAL_ROUTES = [r for r in ROUTES if AUTH[r.key].kind == "internal"]
 SCIM_ROUTES = [r for r in ROUTES if AUTH[r.key].kind == "scim"]
 SDK_ROUTES = [r for r in ROUTES if AUTH[r.key].kind == "sdk_key"]
@@ -385,6 +397,17 @@ def test_operator_routes_refuse_missing_and_bad_credentials(world: World, route:
         assert response.status_code != 503 or label == "never", label
         assert OTHER_MARK not in response.text
     assert world.snapshot() == before, f"{route.key} changed the store for a caller with no valid credentials"
+
+
+@pytest.mark.parametrize("route", USER_ROUTES, ids=ids(USER_ROUTES))
+def test_routes_for_people_without_an_organization_still_need_a_valid_token(world: World, route: Route) -> None:
+    before = world.snapshot()
+    for label, headers in bad_operator_headers(world).items():
+        if label in ("other org's header", "unknown user"):  # a verified token of a user with no organization is exactly who these routes are for
+            continue
+        response = world.send(route, headers=headers)
+        assert refused(response.status_code) and response.status_code != 503, f"{route.key} answered {response.status_code} to: {label}"
+    assert world.snapshot() == before
 
 
 @pytest.mark.parametrize("route", INTERNAL_ROUTES, ids=ids(INTERNAL_ROUTES))

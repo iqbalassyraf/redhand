@@ -21,9 +21,13 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
-from redhand_core.auth.operator import ViewerDep
+from redhand_core.auth.operator import Role, ViewerDep
 from redhand_core.routers.telemetry import get_supabase_service_client
 from redhand_core.services.local_store import get_local_store
+
+# What an agent thought, was given and sent: kept from viewers (security operators and above still see it).
+CONTENT_FIELDS = frozenset({"thought_content", "observation_payload", "tool_arguments"})
+HITL_CONTENT_FIELDS = frozenset({"proposed_tool_arguments", "modified_tool_arguments"})
 
 router = APIRouter(
     prefix="/v1/state",
@@ -51,12 +55,19 @@ async def get_state_snapshot(
         supabase.table("hitl_interventions").select("*").eq("organization_id", org).execute()
     )
 
+    traces = (traces_res.data or [])[:100]
+    hitl = hitl_res.data or []
+    if operator.role < Role.SECURITY_OPERATOR:
+        # A viewer sees the shape of what happened, not what the agent thought or was given: the Black Box payload view is admin-only and opt-in, and
+        # these fields hold the same kind of text (route sweep finding, owner decision 2026-11-17).
+        traces = [{k: v for k, v in row.items() if k not in CONTENT_FIELDS} for row in traces]
+        hitl = [{k: v for k, v in row.items() if k not in HITL_CONTENT_FIELDS} for row in hitl]
     return {
         "organization_id": org,
         "agents": agents_res.data or [],
-        "execution_traces": (traces_res.data or [])[:100],
+        "execution_traces": traces,
         "security_events": (events_res.data or [])[:100],
-        "hitl_interventions": hitl_res.data or [],
+        "hitl_interventions": hitl,
     }
 
 

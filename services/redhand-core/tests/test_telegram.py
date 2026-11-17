@@ -110,7 +110,7 @@ class Env:
         resp = self.client.post(
             "/v1/passports",
             json={"name": name, "framework": "n8n", "scopes": [{"server": "xero", "tool": "*"}]},
-            headers=self.h("operator"),
+            headers=self.h("admin"),  # registering an agent issues its key: admin (D1, owner decision 2026-11-17)
         )
         assert resp.status_code == 201, resp.text
         return resp.json()["passport"]

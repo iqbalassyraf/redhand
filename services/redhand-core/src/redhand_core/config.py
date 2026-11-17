@@ -144,6 +144,13 @@ class Settings(BaseSettings):
             "development/test; a random per-process key is used there when unset."
         ),
     )
+    SIGNUP_MODE: Literal["invite", "closed"] = Field(
+        default="invite",
+        description="Who may create an organization: 'invite' needs a single-use sign-up code the platform owner issued (default); 'closed' refuses everyone. "
+        "Open self-serve sign-up is deliberately not offered yet.",
+    )
+    SIGNUPS_PER_HOUR_PER_USER: int = Field(default=10, ge=1, le=1000, description="Attempts to create an organization or accept an invite per user per hour.")
+    SIGNUPS_PER_HOUR_PER_SOURCE: int = Field(default=30, ge=1, le=10000, description="The same per source address (a stranger guessing codes).")
     AGENT_TOKEN_TTL_SECONDS: int = Field(default=600, ge=60, le=900)
     AGENT_TOKEN_EXCHANGES_PER_MINUTE: int = Field(default=30, ge=1, le=600)
     AGENT_TOKEN_EXCHANGES_PER_MINUTE_PER_SOURCE: int = Field(
