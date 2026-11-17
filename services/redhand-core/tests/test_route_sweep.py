@@ -175,6 +175,12 @@ EXPECTED_MINIMUM_ROLE: dict[str, list[tuple[Method, str]]] = {
         ("PUT", "/v1/blackbox/payload-capture"),
         ("PUT", "/v1/passports/{agent_id}/budget"),
     ],
+    "OWNER": [
+        ("GET", "/v1/organization/export"),
+        ("GET", "/v1/organization/deletion"),
+        ("POST", "/v1/organization/delete-request"),
+        ("POST", "/v1/organization/delete-request/cancel"),
+    ],
     "ADMIN": [
         ("POST", "/v1/passports"),
         ("POST", "/v1/passports/{agent_id}/rotate-key"),
