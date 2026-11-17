@@ -1,17 +1,24 @@
 name: CI
 
-# Runs on every push and on pull requests into main. Nothing here deploys, publishes or uses
-# secrets; the jobs only read the repository.
+# Runs on pull requests into main, on pushes to main, and by hand (Actions tab, "Run workflow") for a branch without a pull request.
+# Nothing here deploys, publishes or uses secrets; the jobs only read the repository.
+#
+# Minutes (owner decision 2026-11-17): a push to a pull request's branch used to run CI twice (push + pull_request). Now it runs once, and the
+# `changes` job decides which heavy jobs a change needs (scripts/ci_changes.py; unknown paths run everything). Jobs are skipped with `if:`, which
+# reports success to a required status check; workflow-level `paths-ignore` is not used because a workflow that never starts leaves a required
+# check pending. The secret scan is in `changes` so it runs on every change, docs included.
 on:
   push:
+    branches: [main]
   pull_request:
     branches: [main]
+  workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 env:
@@ -19,8 +26,57 @@ env:
   NEXT_TELEMETRY_DISABLED: "1"
 
 jobs:
+  changes:
+    name: Changed areas and secret scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      python: ${{ steps.areas.outputs.python }}
+      sql: ${{ steps.areas.outputs.sql }}
+      dashboard: ${{ steps.areas.outputs.dashboard }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # Event values are passed through env, never pasted into the script. A failed diff fails this job, so nothing is silently skipped.
+      - name: Decide which jobs this change needs
+        id: areas
+        env:
+          EVENT: ${{ github.event_name }}
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+          BEFORE: ${{ github.event.before }}
+        run: |
+          set -euo pipefail
+          base=""
+          if [ "$EVENT" = "pull_request" ]; then
+            base="$PR_BASE"
+          elif [ "$EVENT" = "push" ] && [ -n "$BEFORE" ] && [ "$BEFORE" != "0000000000000000000000000000000000000000" ] && git cat-file -e "$BEFORE^{commit}" 2>/dev/null; then
+            base="$BEFORE"
+          fi
+          if [ -z "$base" ]; then
+            python3 scripts/ci_changes.py --all < /dev/null | tee -a "$GITHUB_OUTPUT"
+          else
+            git diff --name-only "$base" HEAD | python3 scripts/ci_changes.py | tee -a "$GITHUB_OUTPUT"
+          fi
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          version: "0.11.32"
+          enable-cache: true
+
+      - name: Install locked dependencies
+        run: uv sync --frozen
+
+      # Secrets in the repository (RH-SEC-004) and the Python agent-tool rules. The reviewed baseline (.redhand-scan-baseline.json) lists the deliberate
+      # fake keys in tests and demos; a NEW finding, or a baseline entry that no longer matches, fails the job. No network, nothing is printed but paths.
+      - name: Secret scan (redhand scan with the reviewed baseline)
+        run: uv run --frozen redhand scan . --strict --baseline .redhand-scan-baseline.json
+
   python:
     name: Python (ruff, mypy, pytest)
+    needs: changes
+    if: needs.changes.outputs.python == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -43,11 +99,6 @@ jobs:
       - name: Tests (unit, integration and Phase 1 end-to-end)
         run: uv run --frozen pytest -q
 
-      # Secrets in the repository (RH-SEC-004) and the Python agent-tool rules. The reviewed baseline (.redhand-scan-baseline.json) lists the deliberate
-      # fake keys in tests and demos; a NEW finding, or a baseline entry that no longer matches, fails the job. No network, nothing is printed but paths.
-      - name: Secret scan (redhand scan with the reviewed baseline)
-        run: uv run --frozen redhand scan . --strict --baseline .redhand-scan-baseline.json
-
       # Fails on any known vulnerability in a locked dependency (CLAUDE.md section 13). It reads the public advisory database, so a new
       # advisory can turn this red without a code change: fix by upgrading the package, or record why it does not apply here.
       - name: Dependency audit (pip-audit, locked versions)
@@ -57,6 +108,8 @@ jobs:
 
   sql:
     name: SQL migrations (apply, tests, rollback)
+    needs: changes
+    if: needs.changes.outputs.sql == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     # A throwaway PostgreSQL that exists only for this job. scripts/test_migrations.sh applies every
@@ -88,6 +141,8 @@ jobs:
 
   dashboard:
     name: Dashboard (tsc, next build)
+    needs: changes
+    if: needs.changes.outputs.dashboard == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     defaults:
@@ -111,6 +166,14 @@ jobs:
 
       - name: Type-check
         run: npx tsc --noEmit
+
+      # Next.js reuses compiled output between builds; the key changes with the lockfile and the sources, older caches are a fallback.
+      - uses: actions/cache@v4
+        with:
+          path: apps/redhand-ui/.next/cache
+          key: next-${{ hashFiles('apps/redhand-ui/package-lock.json') }}-${{ hashFiles('apps/redhand-ui/src/**') }}
+          restore-keys: |
+            next-${{ hashFiles('apps/redhand-ui/package-lock.json') }}-
 
       - name: Build
         run: npm run build
