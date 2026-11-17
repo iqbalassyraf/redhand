@@ -20,6 +20,37 @@ Both tools work on RedHand and its demo projects. This file is how each learns w
 - **Not built, and decisions for the owner:** per-tenant provider keys (envelope encryption), reporting usage to core's spend roll-up, content inspection (PDPA position), an uptime plan for in-path generation, other providers, customer pull. The ADR recommends a higher-tier or self-hosted feature, never Starter.
 - **To try it locally:** run core and the gateway as in the README, `AGENTWALL_MODEL_PROXY_ENABLED=true AGENTWALL_MODEL_PROXY_ANTHROPIC_KEY=<your key>`, give an agent a scope `model` / `<model id>`, set the SDK base URL to `<gateway>/v1/model/anthropic` and its token as the credential.
 
+## 2026-11-17, Claude Code: test day brief and the last product gaps (for Antigravity and the owner)
+- **Next run:** `docs/testing/briefs/2026-11-18-test-day.md` (about 2 hours): Part 0 deploy (four migrations `20261127` to `20261130`, core, gateway, dashboard, `smoke.sh` and `scripts/smoke_launch.py`), Part Q (C1, unchanged),
+  Part R onboarding with two fresh e-mail addresses, Part S export and deletion on the throwaway "Night Test Org" only, Part T freeze timing and the first call after idle, leftovers N7, O8, P5, P8, clean-up.
+  Every promised string and command is guarded by `agentwall/tests/test_test_day_brief.py`.
+- **Also open (Claude Code):** #104 (no API pages in production), #105 (Organization data page). Both are needed before the run (Part S uses #105's page).
+- **Not done by me:** anything on staging. The purge rehearsal waits 7 days after S10; I will write its exact steps then.
+
+## 2026-11-17, Claude Code: D1 PR 4 launch kit and gateway lookup timeout (branch docs/d1-launch-kit)
+- **Built:** `docs/launch/*`, ADR 0028 (proposed), `scripts/smoke_launch.py` + `test_smoke_launch.py`, `test_launch_docs.py`; gateway `LOOKUP_TIMEOUT_SECONDS = 1.0`, `MAX_CONTEXT_TTL_SECONDS = 2.5` (setting cap lowered to match), new tests in `agentwall/tests/test_context_refresh.py`, one old test updated on purpose (`test_context_ttl_is_capped_to_meet_revocation_slo` pinned the old 4 s cap).
+- **Measured:** `docs/security/measurements/2026-11-17-revocation-drill-after-lookup-timeout.md` (local): core paused first refusal 3.33 s (was 4.32 s); normal freeze/revoke unchanged (about 0.4 s).
+- **Not verified:** anything on staging or production; real cold-start behaviour with the 1 s lookup timeout (ADR 0028 recommends minimum 1 instance; staging has minimum 0, so the first call after idle may be refused: Antigravity should note it in the next staging run, it is expected, not a bug); the smoke script against a real https deployment.
+- **Owner:** `docs/launch/owner-checklist.md` is the one page. The CLAUDE.md wording "within about half a second, never more than 5 s" is proposed only: say "apply" to put it in.
+
+## 2026-11-17, Claude Code: D1 onboarding screens (branch feat/d1-onboarding-ui, stacked on feat/d1-onboarding)
+- **Built:** `GET /v1/me`; dashboard `/welcome`, `/join`, login "Create an account", Passports "Team" card, role-aware buttons (no Register agent / New key for non-admins), `lib/onboarding.ts` (+6 tests).
+- **Verified in a real browser (core in development mode, tokens signed locally):** wrong and malformed codes, creating the organization, owner sees Team, invite link shown once and gone, newcomer joins as viewer (no Team card, told registering needs an admin, no New key), a used link refused, 1280 and 375 px. The 43 px overflow at 375 px is the existing Passports header.
+- **Not verified:** real Supabase sign-up and its confirmation e-mail (needs the Supabase project: Auth e-mail templates and SMTP are an owner task), `redirectTo` allow-list in Supabase must include the dashboard `/login` URL.
+
+## 2026-11-17, Claude Code: D1 PR 3 tenant export and deletion (branch feat/d1-tenant-lifecycle, from main after #100)
+- **Built:** migration `20261130000000_tenant_lifecycle` (manifest, `control_org_export`, `control_org_request_deletion`, `control_org_cancel_deletion`, `control_org_purge`, `tenant_deletions`), core routes (owner only), the pending-deletion gate in `get_operator`, twin handlers, `scripts/purge_tenant.sh`, ADR 0027, runbook rewrite.
+- **Verified locally:** SQL test (all checks, 10 of 10 deliberate breakages caught), rollback and re-apply through `scripts/test_migrations.sh`, `purge_tenant.sh` against a scratch database (not requested, in grace, wrong typed name, right name, hostile id), core tests and route sweep, 6 core mutants caught.
+- **Not verified:** a purge against a real Supabase project (needs the owner's database role; the function uses `ALTER TABLE ... DISABLE TRIGGER`, which needs table ownership: confirm the connection role owns the tables), pg_cron, a large tenant (export is capped at 100 000 rows per table).
+- **No dashboard screens yet:** the owner uses the API; Settings screens for export and delete are a small follow-up (the PR 2 `/v1/me` response is where a banner would read the status).
+- **Owner/ops:** deploy the migration before core (the new core calls the functions); Antigravity: nothing to run yet.
+
+## 2026-11-17, Claude Code: D1 onboarding backend (branch feat/d1-onboarding, nothing deployed)
+- **Built:** migration `20261129000000_onboarding` (sign-up codes, member invites, six audited control functions, member list; rollback tested), core `onboarding/` + `routers/onboarding.py`, twin mirror, `scripts/issue_signup_code.py`, ADR 0026, threat-model rows, OpenAPI. 36 core tests, SQL tests with 7 deliberate breakages (6 caught, 1 equivalent), 10 core breakages (all caught after one test added), route sweep extended (new "user" auth kind, role matrix edited on purpose, seeds for invites and members).
+- **Behaviour changes (owner):** register agent and rotate key are admin only; viewers' state snapshot has no reasoning or tool-argument text. **Dashboard buttons for operators must follow** (next PR).
+- **Owner, to start a design partner:** apply the migration, deploy core, then `RH_CORE_URL=... RH_SERVICE_TOKEN=... python3 scripts/issue_signup_code.py --note "<who>"` and give the code to the person privately. The sign-up and Team screens arrive in the UI PR; until then the API works with curl.
+- **Not built:** e-mail invites, open sign-up, several organizations per person (see ADR 0026).
+
 ## 2026-11-17, Claude Code: public-repo hygiene and static scans (branch docs/public-repo-hygiene)
 - **Owner, today:** revoke the old battleground Stripe and OpenAI look-alike keys (still readable in git history, now public); choose a licence; enable GitHub private vulnerability reporting, secret scanning with push protection, and branch protection on `main`.
 - **Done:** `SECURITY.md`; e-mail addresses and Cloud Run hosts replaced by placeholders in 22 current files (testers are told to ask the owner for the staging host names; `docs/antigravity-briefing.md`); Bandit and Semgrep one-off scans triaged in `docs/release-readiness.md` 3.2: 3 real findings fixed (literal bidi and zero-width characters in Radar, the description rules and the MCP scanner, now `\uXXXX` escapes, plus `tests/deploy/test_no_hidden_characters.py`).

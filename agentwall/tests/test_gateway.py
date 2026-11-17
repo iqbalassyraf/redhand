@@ -530,7 +530,8 @@ async def test_freeze_all_blocks_every_agent_of_tenant() -> None:
 
 def test_context_ttl_is_capped_to_meet_revocation_slo() -> None:
     client = CoreContextClient(core_url="http://core", service_token="x", ttl_seconds=60, instance_id="test-gateway-0001")
-    assert client._ttl == 4.0
+    # The cap itself moved from 4 s to 2.5 s in D1 PR 4 (a hanging core must still be refused within 4.5 s: see test_context_refresh.py); what this proves is the clamp.
+    assert client._ttl == 2.5
 
 
 # ---------------------------------------------------------------------------

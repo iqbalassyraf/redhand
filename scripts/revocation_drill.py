@@ -337,7 +337,7 @@ def report(stack: Stack, actions: list[Measure], outcomes: list[Outcome], trials
         f"- Run: {started} UTC; commit `{commit}`; `scripts/revocation_drill.py`; {trials} trials per action.",
         f"- Machine: {platform.platform()}, Python {platform.python_version()}, {os.cpu_count()} CPUs. **Local loopback, in-memory store: not staging, not production.**",
         f"- Promise (CLAUDE.md 4.5): a freeze or revoke takes effect on the next gateway call, at most {SLO_SECONDS:.0f} s. The gateway reuses a passport lookup for at most "
-        "its cache TTL (default 2 s, bounded to 4 s), plus one refresh.",
+        "its cache TTL (default 2 s, capped at 2.5 s), plus one refresh.",
         "- Polling: one call every ~50 ms per agent (every second for the \"once a second\" rows), so times are accurate to about 0.1 s (1 s for those rows).",
         "",
         "## Time from the operator's 200 OK to the agent's first refused call (seconds)",

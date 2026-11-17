@@ -84,8 +84,8 @@ class Settings(BaseSettings):
         ),
     )
     CONTEXT_CACHE_TTL_SECONDS: float = Field(
-        default=2.0, ge=0.0, le=4.0,
-        description="How long a passport lookup is reused. Bounded to keep revocation within 5 s.",
+        default=2.0, ge=0.0, le=2.5,
+        description="How long a passport lookup is reused. Capped so that, with a hanging core, the first refusal still comes within 4.5 s (revocation promise: 5 s).",
     )
     BUDGET_FLUSH_INTERVAL_SECONDS: float = Field(
         default=5.0, ge=1.0, le=60.0,
@@ -169,6 +169,18 @@ class Settings(BaseSettings):
     LOG_LEVEL: str = Field(default="INFO", description="Structured logging level")
     OTEL_SERVICE_NAME: str = Field(default="agentwall-proxy", description="OpenTelemetry service name")
     AUDIT_LOG_FILE: str | None = Field(default=None, description="Optional path to append WORM audit records")
+
+    @model_validator(mode="after")
+    def _model_proxy_is_local_or_staging_only(self) -> Settings:
+        """The model proxy holds ONE deployment-level provider key in an environment variable (ADR 0025): fine for a measured prototype, not for customers' traffic.
+        Until per-tenant, envelope-encrypted key custody exists (ADR 0029 draft, CLAUDE.md 5.2) it may only be switched on in a local or staging environment; any other
+        value, a typo such as "prod" included, refuses to start (fail closed)."""
+        if self.MODEL_PROXY_ENABLED and self.ENVIRONMENT.strip().lower() not in LOCAL_ENVIRONMENTS | {"staging"}:
+            raise ValueError(
+                "MODEL_PROXY_ENABLED may only be set when ENVIRONMENT is 'development', 'dev', 'test', 'local' or 'staging': "
+                "provider-key custody for customer traffic is not built (docs/adr/0025-model-proxy-prototype.md)."
+            )
+        return self
 
     @model_validator(mode="after")
     def _insecure_upstreams_are_development_only(self) -> Settings:

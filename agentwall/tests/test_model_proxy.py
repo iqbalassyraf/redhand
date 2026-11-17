@@ -427,3 +427,26 @@ def test_the_stream_parser_never_holds_more_than_one_capped_line() -> None:
     parser.feed(b"\n")
     parser.feed(STREAM[0])
     assert parser.input_tokens == 25, "after the over-long line is dropped the next events are read again"
+
+
+# --- the production guard (B5a): provider-key custody does not exist yet, so the proxy cannot be switched on where customers are ------------------
+
+@pytest.mark.parametrize("environment", ["development", "dev", "test", "local", "staging", "Staging"])
+def test_the_proxy_may_be_enabled_in_local_and_staging_environments(environment: str) -> None:
+    from agentwall.config.settings import Settings
+
+    assert Settings(ENVIRONMENT=environment, MODEL_PROXY_ENABLED=True).MODEL_PROXY_ENABLED is True
+
+
+@pytest.mark.parametrize("environment", ["production", "prod", "Production", "prd", "live", ""])
+def test_the_proxy_refuses_to_start_anywhere_else_including_typos(environment: str) -> None:
+    from agentwall.config.settings import Settings
+
+    with pytest.raises(ValueError, match="MODEL_PROXY_ENABLED"):
+        Settings(ENVIRONMENT=environment, MODEL_PROXY_ENABLED=True)
+
+
+def test_a_production_gateway_without_the_proxy_is_unaffected() -> None:
+    from agentwall.config.settings import Settings
+
+    assert Settings(ENVIRONMENT="production").MODEL_PROXY_ENABLED is False

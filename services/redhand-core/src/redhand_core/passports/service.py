@@ -49,6 +49,7 @@ T = TypeVar("T")
 SQLSTATE_NOT_FOUND = "P0002"  # no_data_found: the row is missing or belongs to another tenant
 SQLSTATE_UNIQUE_VIOLATION = "23505"
 SQLSTATE_CHECK_VIOLATION = "23514"  # e.g. reactivating a revoked passport
+SQLSTATE_INSUFFICIENT_PRIVILEGE = "42501"  # a database function refused the actor (a role ceiling): the caller's role is not enough
 
 
 class StateConflictError(Exception):
@@ -100,6 +101,8 @@ async def _rpc(
     except APIError as exc:
         if exc.code == SQLSTATE_NOT_FOUND:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=not_found_detail) from exc
+        if exc.code == SQLSTATE_INSUFFICIENT_PRIVILEGE:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Your role does not allow this.") from exc
         if exc.code in (SQLSTATE_UNIQUE_VIOLATION, SQLSTATE_CHECK_VIOLATION):
             raise _conflict(conflict_detail) from exc
         # The message is not logged: database messages can echo submitted values.

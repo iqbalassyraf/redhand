@@ -98,6 +98,12 @@ files = [
     "services/redhand-core/src/redhand_core/sdkkeys/models.py",
     "services/redhand-core/src/redhand_core/sdkkeys/service.py",
     "services/redhand-core/src/redhand_core/routers/sdk_keys.py",
+
+    "services/redhand-core/src/redhand_core/routers/onboarding.py",
+
+    "services/redhand-core/src/redhand_core/onboarding",
+    "services/redhand-core/src/redhand_core/lifecycle",
+    "services/redhand-core/src/redhand_core/routers/lifecycle.py",
     "services/redhand-core/src/redhand_core/timeline/models.py",
     "services/redhand-core/src/redhand_core/timeline/service.py",
     "services/redhand-core/src/redhand_core/routers/timeline.py",

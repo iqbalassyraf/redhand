@@ -32,6 +32,8 @@ interface AuthContextValue {
   supabaseConfigured: boolean;
   signInWithPassword: (email: string, password: string) => Promise<void>;
   signInDevelopment: (user: string) => Promise<void>;
+  /** Creates an account with Supabase Auth. `confirm` is true when the person must click a link in an e-mail before signing in. */
+  signUpWithPassword: (email: string, password: string) => Promise<{ confirm: boolean }>;
   /** Emails a reset link. Resolves the same way whether or not the account exists. */
   requestPasswordReset: (email: string) => Promise<void>;
   /** Sets a new password using the one-time recovery session from the emailed link. */
@@ -89,6 +91,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     [update]
   );
 
+  const signUpWithPassword = useCallback(
+    async (email: string, password: string) => {
+      if (!SUPABASE_URL || !SUPABASE_ANON_KEY) throw new Error("Supabase is not configured.");
+      const client = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, { auth: { persistSession: false } });
+      const { data, error } = await client.auth.signUp({ email, password, options: { emailRedirectTo: `${window.location.origin}/login` } });
+      // Supabase answers the same way for an address that already has an account: say nothing about which it was.
+      if (error) throw new Error("Could not create the account. Use a longer password or try again in a minute.");
+      if (data.session) {
+        update({ token: data.session.access_token, email, role: null, mode: "supabase" });
+        return { confirm: false };
+      }
+      return { confirm: true };
+    },
+    [update]
+  );
+
   const requestPasswordReset = useCallback(async (email: string) => {
     if (!SUPABASE_URL || !SUPABASE_ANON_KEY) throw new Error("Supabase is not configured.");
     const client = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, { auth: { persistSession: false } });
@@ -137,11 +155,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       supabaseConfigured: Boolean(SUPABASE_URL && SUPABASE_ANON_KEY),
       signInWithPassword,
       signInDevelopment,
+      signUpWithPassword,
       requestPasswordReset,
       completePasswordReset,
       signOut,
     }),
-    [session, ready, signInWithPassword, signInDevelopment, requestPasswordReset, completePasswordReset, signOut]
+    [session, ready, signInWithPassword, signInDevelopment, signUpWithPassword, requestPasswordReset, completePasswordReset, signOut]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

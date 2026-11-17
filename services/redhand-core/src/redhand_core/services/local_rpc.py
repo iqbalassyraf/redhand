@@ -15,6 +15,7 @@ from __future__ import annotations
 import copy
 import hashlib
 import json
+import math
 import re
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation
@@ -23,7 +24,10 @@ from uuid import UUID, uuid4
 
 from postgrest.exceptions import APIError
 
+from redhand_core.lifecycle.manifest import MANIFEST
+
 from redhand_core.services.local_store import (
+    DEV_OPERATORS,
     LocalStoreConstraintError,
     LocalSupabaseAdapter,
     QueryResult,
@@ -2016,6 +2020,249 @@ def _control_passport_promote(store: LocalSupabaseAdapter, p: dict[str, Any]) ->
     return {"changed": True, "agent_id": agent["id"]}
 
 
+# --- onboarding (D1): the in-memory mirror of 20261129000000_onboarding.sql ---------------------------------------------------------
+
+_ROLE_RANK = {"viewer": 1, "security_operator": 2, "admin": 3, "owner": 4}
+_HEX64 = re.compile(r"^[0-9a-f]{64}$")
+_SLUG = re.compile(r"^[a-z0-9][a-z0-9-]{1,38}[a-z0-9]$")
+
+
+def _rank(role: str | None) -> int:
+    return _ROLE_RANK.get(role or "", 0)
+
+
+def _members(store: LocalSupabaseAdapter) -> list[dict[str, Any]]:
+    return store.tables.setdefault("organization_members", [])
+
+
+def _member(store: LocalSupabaseAdapter, org: str, user: str) -> dict[str, Any] | None:
+    return next((m for m in _members(store) if str(m["organization_id"]) == org and str(m["user_id"]) == user), None)
+
+
+def _control_org_create(store: LocalSupabaseAdapter, p: dict[str, Any]) -> dict[str, Any]:
+    user, name, slug, digest = str(p["p_user"]), str(p.get("p_name") or "").strip(), p.get("p_slug"), p.get("p_code_hash")
+    if not 1 <= len(name) <= 100:
+        raise _error("22023", "a name of 1 to 100 characters is required")
+    if not isinstance(slug, str) or not _SLUG.match(slug):
+        raise _error("22023", "a slug of 3 to 40 lowercase letters, digits and hyphens is required")
+    now = datetime.now(timezone.utc)
+    codes = store.tables.setdefault("signup_codes", [])
+    code = next((c for c in codes if isinstance(digest, str) and _HEX64.match(digest) and c["code_hash"] == digest and c.get("used_at") is None
+                 and _parse_ts(c["expires_at"]) > now), None)
+    if code is None:
+        return {"created": False, "reason": "code"}
+    if any(str(m["user_id"]) == user for m in _members(store)):
+        return {"created": False, "reason": "member"}
+    orgs = store.tables.setdefault("organizations", [])
+    if any(o.get("slug") == slug for o in orgs):
+        return {"created": False, "reason": "slug"}
+    org_id = str(uuid4())
+    row: dict[str, Any] = {"id": org_id, "name": name, "slug": slug, "created_at": _now()}
+    apply_insert_defaults("organizations", row)
+    orgs.append(row)
+    _members(store).append({"id": str(uuid4()), "organization_id": org_id, "user_id": user, "role": "owner", "created_at": _now()})
+    code.update({"used_at": _now(), "used_by": user, "used_org": org_id})
+    _append_audit(store, org=org_id, actor=user, action="organization.created", target_type="organization", target_id=org_id, reason=None,
+                  details={"slug": slug, "signup_code_id": code["id"]})
+    return {"created": True, "organization_id": org_id}
+
+
+def _control_member_invite_create(store: LocalSupabaseAdapter, p: dict[str, Any]) -> dict[str, Any]:
+    org, actor, role, digest = str(p["p_org"]), str(p["p_actor"]), p.get("p_role"), p.get("p_token_hash")
+    if role not in ("admin", "security_operator", "viewer"):
+        raise _error("22023", "an invite can grant admin, security_operator or viewer")
+    if not isinstance(digest, str) or not _HEX64.match(digest):
+        raise _error("22023", "malformed token hash")
+    now = datetime.now(timezone.utc)
+    expires = _parse_ts(p["p_expires_at"])
+    if not now + timedelta(hours=1) <= expires <= now + timedelta(days=30):
+        raise _error("22023", "the expiry must be between 1 hour and 30 days from now")
+    _org_row(store, org)
+    member = _member(store, org, actor)
+    if member is None or _rank(member["role"]) < 3 or _rank(role) > _rank(member["role"]):
+        raise _error("42501", "not allowed to grant this role")
+    invites = store.tables.setdefault("member_invites", [])
+    pending = [i for i in invites if str(i["organization_id"]) == org and i.get("used_at") is None and i.get("revoked_at") is None and _parse_ts(i["expires_at"]) > now]
+    if len(pending) >= 20:
+        return {"created": False, "limit": True}
+    invite_id = str(uuid4())
+    invites.append({"id": invite_id, "organization_id": org, "role": role, "token_hash": digest, "created_by": actor, "created_at": _now(),
+                    "expires_at": expires.isoformat(), "used_at": None, "used_by": None, "revoked_at": None})
+    _append_audit(store, org=org, actor=actor, action="member.invited", target_type="invite", target_id=invite_id, reason=None,
+                  details={"role": role, "expires_at": expires.isoformat()})
+    return {"created": True, "id": invite_id, "expires_at": expires.isoformat()}
+
+
+def _control_member_invite_revoke(store: LocalSupabaseAdapter, p: dict[str, Any]) -> dict[str, Any]:
+    org, actor, invite_id = str(p["p_org"]), str(p["p_actor"]), str(p["p_invite_id"])
+    member = _member(store, org, actor)
+    if member is None or _rank(member["role"]) < 3:
+        raise _error("42501", "not allowed")
+    invite = next((i for i in store.tables.get("member_invites", []) if str(i["id"]) == invite_id and str(i["organization_id"]) == org), None)
+    if invite is None:
+        raise _error("P0002", "invite not found")
+    if invite.get("used_at") is not None or invite.get("revoked_at") is not None:
+        return {"changed": False, "id": invite_id}
+    invite["revoked_at"] = _now()
+    _append_audit(store, org=org, actor=actor, action="member.invite_revoked", target_type="invite", target_id=invite_id, reason=None, details={"role": invite["role"]})
+    return {"changed": True, "id": invite_id}
+
+
+def _control_member_invite_accept(store: LocalSupabaseAdapter, p: dict[str, Any]) -> dict[str, Any]:
+    user, digest = str(p["p_user"]), p.get("p_token_hash")
+    now = datetime.now(timezone.utc)
+    invite = next((i for i in store.tables.get("member_invites", []) if isinstance(digest, str) and _HEX64.match(digest) and i["token_hash"] == digest
+                   and i.get("used_at") is None and i.get("revoked_at") is None and _parse_ts(i["expires_at"]) > now), None)
+    if invite is None:
+        return {"joined": False, "reason": "invite"}
+    inviter = _member(store, str(invite["organization_id"]), str(invite["created_by"]))
+    if inviter is None or _rank(inviter["role"]) < 3 or _rank(inviter["role"]) < _rank(invite["role"]):
+        return {"joined": False, "reason": "invite"}
+    if any(str(m["user_id"]) == user for m in _members(store)):
+        return {"joined": False, "reason": "member"}
+    org = str(invite["organization_id"])
+    _members(store).append({"id": str(uuid4()), "organization_id": org, "user_id": user, "role": invite["role"], "created_at": _now()})
+    invite.update({"used_at": _now(), "used_by": user})
+    _append_audit(store, org=org, actor=user, action="member.joined", target_type="member", target_id=user, reason=None,
+                  details={"role": invite["role"], "invite_id": invite["id"]})
+    return {"joined": True, "organization_id": org, "role": invite["role"]}
+
+
+def _owners(store: LocalSupabaseAdapter, org: str) -> int:
+    return sum(1 for m in _members(store) if str(m["organization_id"]) == org and m["role"] == "owner")
+
+
+def _control_member_remove(store: LocalSupabaseAdapter, p: dict[str, Any]) -> dict[str, Any]:
+    org, actor, user = str(p["p_org"]), str(p["p_actor"]), str(p["p_user"])
+    _org_row(store, org)
+    actor_row, target = _member(store, org, actor), _member(store, org, user)
+    if target is None:
+        raise _error("P0002", "member not found")
+    if actor_row is None or _rank(actor_row["role"]) < 3 or _rank(actor_row["role"]) < _rank(target["role"]):
+        raise _error("42501", "not allowed")
+    if target["role"] == "owner" and _owners(store, org) <= 1:
+        raise _error("23514", "the last owner cannot be removed")
+    _members(store).remove(target)
+    _append_audit(store, org=org, actor=actor, action="member.removed", target_type="member", target_id=user, reason=None, details={"role": target["role"]})
+    return {"removed": True, "user_id": user}
+
+
+def _control_member_set_role(store: LocalSupabaseAdapter, p: dict[str, Any]) -> dict[str, Any]:
+    org, actor, user, role = str(p["p_org"]), str(p["p_actor"]), str(p["p_user"]), p.get("p_role")
+    if role not in _ROLE_RANK:
+        raise _error("22023", "unknown role")
+    _org_row(store, org)
+    actor_row, target = _member(store, org, actor), _member(store, org, user)
+    if target is None:
+        raise _error("P0002", "member not found")
+    if actor_row is None or _rank(actor_row["role"]) < 3 or _rank(actor_row["role"]) < _rank(target["role"]) or _rank(actor_row["role"]) < _rank(role):
+        raise _error("42501", "not allowed")
+    if target["role"] == role:
+        return {"changed": False, "user_id": user}
+    if target["role"] == "owner" and role != "owner" and _owners(store, org) <= 1:
+        raise _error("23514", "the last owner cannot be demoted")
+    previous = target["role"]
+    target["role"] = role
+    _append_audit(store, org=org, actor=actor, action="member.role_changed", target_type="member", target_id=user, reason=None, details={"from": previous, "to": role})
+    return {"changed": True, "user_id": user, "from": previous, "to": role}
+
+
+def _list_organization_members(store: LocalSupabaseAdapter, p: dict[str, Any]) -> list[dict[str, Any]]:
+    org = str(p["p_org"])
+    emails = {op["id"]: op["email"] for op in DEV_OPERATORS.values()}
+    rows = [m for m in _members(store) if str(m["organization_id"]) == org]
+    rows.sort(key=lambda m: (-_rank(m["role"]), str(m.get("created_at"))))
+    return [{"user_id": m["user_id"], "email": emails.get(str(m["user_id"])), "role": m["role"], "joined_at": m.get("created_at")} for m in rows]
+
+
+def _owner_check(store: LocalSupabaseAdapter, org: str, actor: str, message: str) -> None:
+    member = _member(store, org, actor)
+    if member is None or member["role"] != "owner":
+        raise _error("42501", message)
+
+
+def _lifecycle_org(store: LocalSupabaseAdapter, org: str) -> dict[str, Any]:
+    row = next((o for o in store.tables.get("organizations", []) if str(o.get("id")) == org), None)
+    if row is None:
+        raise _error("P0002", "organization not found")
+    return row
+
+
+def _manifest_rows(store: LocalSupabaseAdapter, table: str, scope: str, exclude: tuple[str, ...], org: str, limit: int) -> dict[str, Any]:
+    agent_ids = {str(a["id"]) for a in store.tables.get("agents", []) if str(a.get("organization_id")) == org}
+    if scope == "self":
+        rows = [r for r in store.tables.get(table, []) if str(r.get("id")) == org]
+    elif scope == "agent":
+        rows = [r for r in store.tables.get(table, []) if str(r.get("agent_id")) in agent_ids]
+    else:
+        rows = [r for r in store.tables.get(table, []) if str(r.get("organization_id")) == org]
+    # "organizations" on a row is the twin's stand-in for a PostgREST embed (a join), not a column of the real table.
+    out = [{k: v for k, v in r.items() if k not in exclude and k != "organizations"} for r in rows[:limit]]
+    if scope == "members":
+        emails = {op["id"]: op["email"] for op in DEV_OPERATORS.values()}
+        out = [{**r, "email": emails.get(str(r.get("user_id")))} for r in out]
+    return {"count": len(rows), "truncated": len(rows) > limit, "rows": out}
+
+
+def _control_org_export(store: LocalSupabaseAdapter, p: dict[str, Any]) -> dict[str, Any]:
+    org, actor, limit = str(p["p_org"]), str(p["p_actor"]), p.get("p_limit", 100000)
+    if not isinstance(limit, int) or not 1 <= limit <= 1_000_000:
+        raise _error("22023", "p_limit must be between 1 and 1000000")
+    _owner_check(store, org, actor, "only an owner can export the organization")
+    now = datetime.now(timezone.utc)
+    recent = [_parse_ts(a["created_at"]) for a in store.tables.get("control_audit_log", [])
+              if str(a["organization_id"]) == org and a["action"] == "organization.exported" and _parse_ts(a["created_at"]) > now - timedelta(hours=1)]
+    if recent:
+        wait = max(1, math.ceil((max(recent) + timedelta(hours=1) - now).total_seconds()))
+        return {"exported": False, "reason": "throttled", "retry_after_seconds": wait}
+    tables = {table: _manifest_rows(store, table, scope, exclude, org, limit) for table, scope, exclude in MANIFEST}
+    _append_audit(store, org=org, actor=actor, action="organization.exported", target_type="organization", target_id=org, reason=None,
+                  details={"row_counts": {t: v["count"] for t, v in tables.items()}})
+    return {"exported": True, "generated_at": _now(), "organization_id": org, "tables": tables}
+
+
+def _control_org_request_deletion(store: LocalSupabaseAdapter, p: dict[str, Any]) -> dict[str, Any]:
+    org, actor, confirm = str(p["p_org"]), str(p["p_actor"]), p.get("p_confirm_slug")
+    _owner_check(store, org, actor, "only an owner can delete the organization")
+    row = _lifecycle_org(store, org)
+    if row.get("deletion_requested_at") is not None:
+        return {"requested": True, "already": True, "requested_at": row["deletion_requested_at"], "purge_after": row["deletion_purge_after"]}
+    if confirm != row["slug"]:
+        return {"requested": False, "reason": "confirmation"}
+    now = datetime.now(timezone.utc)
+    row.update({"deletion_requested_at": now.isoformat(), "deletion_requested_by": actor, "deletion_purge_after": (now + timedelta(days=7)).isoformat()})
+    frozen = 0
+    for agent in store.tables.get("agents", []):
+        if str(agent.get("organization_id")) == org and agent.get("status") == "active":
+            agent["status"], agent["status_reason"], agent["updated_at"] = "frozen", "organization deletion requested", _now()
+            frozen += 1
+    keys = 0
+    for key in store.tables.get("sdk_api_keys", []):
+        if str(key.get("organization_id")) == org and key.get("is_active"):
+            key["is_active"] = False
+            keys += 1
+    invites = 0
+    for invite in store.tables.get("member_invites", []):
+        if str(invite.get("organization_id")) == org and invite.get("used_at") is None and invite.get("revoked_at") is None:
+            invite["revoked_at"] = _now()
+            invites += 1
+    _append_audit(store, org=org, actor=actor, action="organization.deletion_requested", target_type="organization", target_id=org, reason=None,
+                  details={"purge_after": row["deletion_purge_after"], "agents_frozen": frozen, "sdk_keys_deactivated": keys, "invites_revoked": invites})
+    return {"requested": True, "already": False, "requested_at": row["deletion_requested_at"], "purge_after": row["deletion_purge_after"]}
+
+
+def _control_org_cancel_deletion(store: LocalSupabaseAdapter, p: dict[str, Any]) -> dict[str, Any]:
+    org, actor = str(p["p_org"]), str(p["p_actor"])
+    _owner_check(store, org, actor, "only an owner can cancel the deletion")
+    row = _lifecycle_org(store, org)
+    was = row.get("deletion_requested_at")
+    if was is None:
+        return {"cancelled": False, "reason": "not_requested"}
+    row.update({"deletion_requested_at": None, "deletion_requested_by": None, "deletion_purge_after": None})
+    _append_audit(store, org=org, actor=actor, action="organization.deletion_cancelled", target_type="organization", target_id=org, reason=None, details={"requested_at": was})
+    return {"cancelled": True}
+
+
 HANDLERS: dict[str, RpcHandler] = {
     "control_agent_change": _control_agent_change,
     "control_freeze_all": _control_freeze_all,
@@ -2077,6 +2324,16 @@ HANDLERS: dict[str, RpcHandler] = {
     "sdk_key_touch": _sdk_key_touch,
     "telemetry_resolve_agent": _telemetry_resolve_agent,
     "control_passport_promote": _control_passport_promote,
+    "control_org_create": _control_org_create,
+    "control_member_invite_create": _control_member_invite_create,
+    "control_member_invite_revoke": _control_member_invite_revoke,
+    "control_member_invite_accept": _control_member_invite_accept,
+    "control_member_remove": _control_member_remove,
+    "control_member_set_role": _control_member_set_role,
+    "list_organization_members": _list_organization_members,
+    "control_org_export": _control_org_export,
+    "control_org_request_deletion": _control_org_request_deletion,
+    "control_org_cancel_deletion": _control_org_cancel_deletion,
 }
 
 

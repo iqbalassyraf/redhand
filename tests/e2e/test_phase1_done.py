@@ -125,7 +125,7 @@ class Stack:
         resp = await self.core.post(
             "/v1/passports",
             json={"name": name, "framework": "n8n", "scopes": scopes, "expires_in_days": 30},
-            headers=self.operator("operator"),
+            headers=self.operator("admin"),  # registering an agent issues its key: admin (D1, owner decision 2026-11-17)
         )
         assert resp.status_code == 201, resp.text
         return resp.json()
@@ -170,7 +170,7 @@ async def test_done_1_register_agent_passport_visible(monkeypatch: pytest.Monkey
     created = await stack.register_agent("Invoice bot", INVOICE_READER)
     listed = (await stack.core.get("/v1/passports", headers=stack.operator("viewer"))).json()
     passport = next(p for p in listed if p["id"] == created["passport"]["id"])
-    assert passport["owner_id"] == DEV_OPERATORS["operator"]["id"]
+    assert passport["owner_id"] == DEV_OPERATORS["admin"]["id"]
     assert passport["scopes"] == INVOICE_READER
     assert passport["expires_at"] and passport["status"] == "active"
     await stack.close()

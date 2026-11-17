@@ -117,6 +117,45 @@
         "title": "AWSDownscopedTokenResponse",
         "type": "object"
       },
+      "AcceptInviteRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "token": {
+            "pattern": "^rh_join_[A-Za-z0-9_-]{20,64}$",
+            "title": "Token",
+            "type": "string"
+          }
+        },
+        "required": [
+          "token"
+        ],
+        "title": "AcceptInviteRequest",
+        "type": "object"
+      },
+      "AcceptInviteResponse": {
+        "properties": {
+          "organization_id": {
+            "format": "uuid",
+            "title": "Organization Id",
+            "type": "string"
+          },
+          "role": {
+            "enum": [
+              "admin",
+              "security_operator",
+              "viewer"
+            ],
+            "title": "Role",
+            "type": "string"
+          }
+        },
+        "required": [
+          "organization_id",
+          "role"
+        ],
+        "title": "AcceptInviteResponse",
+        "type": "object"
+      },
       "AccessBoundaryCondition": {
         "additionalProperties": false,
         "properties": {
@@ -1354,6 +1393,67 @@
         "title": "ControlAuditEntry",
         "type": "object"
       },
+      "CreateOrganizationRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "description": "A single-use sign-up code issued by the platform owner.",
+            "pattern": "^rh_inv_[A-Za-z0-9_-]{20,64}$",
+            "title": "Code",
+            "type": "string"
+          },
+          "name": {
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "slug": {
+            "anyOf": [
+              {
+                "pattern": "^[a-z0-9][a-z0-9-]{1,38}[a-z0-9]$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Optional. Made from the name when omitted.",
+            "title": "Slug"
+          }
+        },
+        "required": [
+          "name",
+          "code"
+        ],
+        "title": "CreateOrganizationRequest",
+        "type": "object"
+      },
+      "CreateOrganizationResponse": {
+        "properties": {
+          "organization_id": {
+            "format": "uuid",
+            "title": "Organization Id",
+            "type": "string"
+          },
+          "role": {
+            "const": "owner",
+            "default": "owner",
+            "title": "Role",
+            "type": "string"
+          },
+          "slug": {
+            "title": "Slug",
+            "type": "string"
+          }
+        },
+        "required": [
+          "organization_id",
+          "slug"
+        ],
+        "title": "CreateOrganizationResponse",
+        "type": "object"
+      },
       "DaySpendView": {
         "properties": {
           "calls": {
@@ -1404,6 +1504,103 @@
           "models"
         ],
         "title": "DaySpendView",
+        "type": "object"
+      },
+      "DeleteRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "confirm_slug": {
+            "maxLength": 40,
+            "minLength": 3,
+            "title": "Confirm Slug",
+            "type": "string"
+          }
+        },
+        "required": [
+          "confirm_slug"
+        ],
+        "title": "DeleteRequest",
+        "type": "object"
+      },
+      "DeletionRequested": {
+        "additionalProperties": false,
+        "properties": {
+          "already": {
+            "default": false,
+            "title": "Already",
+            "type": "boolean"
+          },
+          "purge_after": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Purge After"
+          },
+          "requested": {
+            "title": "Requested",
+            "type": "boolean"
+          },
+          "requested_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Requested At"
+          }
+        },
+        "required": [
+          "requested"
+        ],
+        "title": "DeletionRequested",
+        "type": "object"
+      },
+      "DeletionStatus": {
+        "additionalProperties": false,
+        "properties": {
+          "purge_after": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Purge After"
+          },
+          "requested": {
+            "title": "Requested",
+            "type": "boolean"
+          },
+          "requested_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Requested At"
+          }
+        },
+        "required": [
+          "requested"
+        ],
+        "title": "DeletionStatus",
         "type": "object"
       },
       "DestinationAddRequest": {
@@ -2755,6 +2952,157 @@
         "title": "HoneytokenView",
         "type": "object"
       },
+      "InviteCreateRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "expires_in_days": {
+            "default": 7,
+            "maximum": 30.0,
+            "minimum": 1.0,
+            "title": "Expires In Days",
+            "type": "integer"
+          },
+          "role": {
+            "enum": [
+              "admin",
+              "security_operator",
+              "viewer"
+            ],
+            "title": "Role",
+            "type": "string"
+          }
+        },
+        "required": [
+          "role"
+        ],
+        "title": "InviteCreateRequest",
+        "type": "object"
+      },
+      "InviteCreated": {
+        "properties": {
+          "invite": {
+            "$ref": "#/components/schemas/InviteView"
+          },
+          "join_path": {
+            "description": "Append to the dashboard address: the page that accepts the invite.",
+            "title": "Join Path",
+            "type": "string"
+          },
+          "token": {
+            "description": "Shown once. Send it to the person; RedHand keeps only a hash.",
+            "title": "Token",
+            "type": "string"
+          }
+        },
+        "required": [
+          "token",
+          "join_path",
+          "invite"
+        ],
+        "title": "InviteCreated",
+        "type": "object"
+      },
+      "InviteList": {
+        "properties": {
+          "invites": {
+            "items": {
+              "$ref": "#/components/schemas/InviteView"
+            },
+            "title": "Invites",
+            "type": "array"
+          },
+          "max_pending": {
+            "default": 20,
+            "title": "Max Pending",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "invites"
+        ],
+        "title": "InviteList",
+        "type": "object"
+      },
+      "InviteRevokeResponse": {
+        "properties": {
+          "changed": {
+            "title": "Changed",
+            "type": "boolean"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "changed"
+        ],
+        "title": "InviteRevokeResponse",
+        "type": "object"
+      },
+      "InviteView": {
+        "properties": {
+          "created_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "expires_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires At"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "role": {
+            "enum": [
+              "admin",
+              "security_operator",
+              "viewer"
+            ],
+            "title": "Role",
+            "type": "string"
+          },
+          "state": {
+            "enum": [
+              "pending",
+              "used",
+              "revoked",
+              "expired"
+            ],
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "role",
+          "state",
+          "created_at",
+          "expires_at"
+        ],
+        "title": "InviteView",
+        "type": "object"
+      },
       "KeyRotationResponse": {
         "properties": {
           "agent_key": {
@@ -3147,6 +3495,138 @@
           "is_active"
         ],
         "title": "McpServerView",
+        "type": "object"
+      },
+      "MeResponse": {
+        "description": "Who the signed-in person is and what they may do: the dashboard uses it to show only the actions their role allows (the server still decides).",
+        "properties": {
+          "deletion_purge_after": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deletion Purge After"
+          },
+          "email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email"
+          },
+          "organization_id": {
+            "format": "uuid",
+            "title": "Organization Id",
+            "type": "string"
+          },
+          "organization_name": {
+            "title": "Organization Name",
+            "type": "string"
+          },
+          "organization_slug": {
+            "default": "",
+            "title": "Organization Slug",
+            "type": "string"
+          },
+          "role": {
+            "enum": [
+              "owner",
+              "admin",
+              "security_operator",
+              "viewer"
+            ],
+            "title": "Role",
+            "type": "string"
+          },
+          "user_id": {
+            "format": "uuid",
+            "title": "User Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "user_id",
+          "email",
+          "organization_id",
+          "organization_name",
+          "role"
+        ],
+        "title": "MeResponse",
+        "type": "object"
+      },
+      "MemberList": {
+        "properties": {
+          "members": {
+            "items": {
+              "$ref": "#/components/schemas/MemberView"
+            },
+            "title": "Members",
+            "type": "array"
+          }
+        },
+        "required": [
+          "members"
+        ],
+        "title": "MemberList",
+        "type": "object"
+      },
+      "MemberView": {
+        "properties": {
+          "email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email"
+          },
+          "joined_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Joined At"
+          },
+          "role": {
+            "enum": [
+              "owner",
+              "admin",
+              "security_operator",
+              "viewer"
+            ],
+            "title": "Role",
+            "type": "string"
+          },
+          "user_id": {
+            "format": "uuid",
+            "title": "User Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "user_id",
+          "email",
+          "role",
+          "joined_at"
+        ],
+        "title": "MemberView",
         "type": "object"
       },
       "ModelUseView": {
@@ -4015,6 +4495,25 @@
           "note"
         ],
         "title": "ReadinessResponse",
+        "type": "object"
+      },
+      "RemoveMemberResponse": {
+        "properties": {
+          "removed": {
+            "title": "Removed",
+            "type": "boolean"
+          },
+          "user_id": {
+            "format": "uuid",
+            "title": "User Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "user_id",
+          "removed"
+        ],
+        "title": "RemoveMemberResponse",
         "type": "object"
       },
       "RenewRequest": {
@@ -4987,6 +5486,62 @@
         "title": "SelfTestResponse",
         "type": "object"
       },
+      "SetRoleRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "confirm": {
+            "default": false,
+            "description": "Required to give the owner role.",
+            "title": "Confirm",
+            "type": "boolean"
+          },
+          "role": {
+            "enum": [
+              "owner",
+              "admin",
+              "security_operator",
+              "viewer"
+            ],
+            "title": "Role",
+            "type": "string"
+          }
+        },
+        "required": [
+          "role"
+        ],
+        "title": "SetRoleRequest",
+        "type": "object"
+      },
+      "SetRoleResponse": {
+        "properties": {
+          "changed": {
+            "title": "Changed",
+            "type": "boolean"
+          },
+          "role": {
+            "enum": [
+              "owner",
+              "admin",
+              "security_operator",
+              "viewer"
+            ],
+            "title": "Role",
+            "type": "string"
+          },
+          "user_id": {
+            "format": "uuid",
+            "title": "User Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "user_id",
+          "changed",
+          "role"
+        ],
+        "title": "SetRoleResponse",
+        "type": "object"
+      },
       "SeverityLevel": {
         "enum": [
           "low",
@@ -4996,6 +5551,53 @@
         ],
         "title": "SeverityLevel",
         "type": "string"
+      },
+      "SignupCodeCreated": {
+        "properties": {
+          "code": {
+            "description": "Shown once.",
+            "title": "Code",
+            "type": "string"
+          },
+          "expires_at": {
+            "format": "date-time",
+            "title": "Expires At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "expires_at"
+        ],
+        "title": "SignupCodeCreated",
+        "type": "object"
+      },
+      "SignupCodeRequest": {
+        "additionalProperties": false,
+        "description": "Issued by the platform owner with the internal service token (scripts/issue_signup_code.py), never from the dashboard.",
+        "properties": {
+          "expires_in_days": {
+            "default": 14,
+            "maximum": 90.0,
+            "minimum": 1.0,
+            "title": "Expires In Days",
+            "type": "integer"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          }
+        },
+        "title": "SignupCodeRequest",
+        "type": "object"
       },
       "SpendLimitRequest": {
         "additionalProperties": false,
@@ -6176,6 +6778,65 @@
         "summary": "Healthcheck",
         "tags": [
           "System"
+        ]
+      }
+    },
+    "/internal/v1/signup-codes": {
+      "post": {
+        "operationId": "issue_signup_code_internal_v1_signup_codes_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SignupCodeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SignupCodeCreated"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Issue Signup Code",
+        "tags": [
+          "Onboarding"
         ]
       }
     },
@@ -8696,6 +9357,65 @@
         ]
       }
     },
+    "/v1/invites/accept": {
+      "post": {
+        "operationId": "accept_invite_v1_invites_accept_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AcceptInviteRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AcceptInviteResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Accept Invite",
+        "tags": [
+          "Onboarding"
+        ]
+      }
+    },
     "/v1/mcp-servers": {
       "get": {
         "operationId": "list_mcp_servers_v1_mcp_servers_get",
@@ -9236,6 +9956,71 @@
         ]
       }
     },
+    "/v1/me": {
+      "get": {
+        "operationId": "get_me_v1_me_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-RedHand-Org",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Redhand-Org"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MeResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Me",
+        "tags": [
+          "Onboarding"
+        ]
+      }
+    },
     "/v1/organization/approved-models": {
       "get": {
         "operationId": "get_approved_models_v1_organization_approved_models_get",
@@ -9510,6 +10295,708 @@
         "summary": "Set Budget Default",
         "tags": [
           "Budget Guard"
+        ]
+      }
+    },
+    "/v1/organization/delete-request": {
+      "post": {
+        "operationId": "post_delete_request_v1_organization_delete_request_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-RedHand-Org",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Redhand-Org"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeleteRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeletionRequested"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Post Delete Request",
+        "tags": [
+          "Tenant lifecycle"
+        ]
+      }
+    },
+    "/v1/organization/delete-request/cancel": {
+      "post": {
+        "operationId": "post_cancel_delete_request_v1_organization_delete_request_cancel_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-RedHand-Org",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Redhand-Org"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeletionStatus"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Post Cancel Delete Request",
+        "tags": [
+          "Tenant lifecycle"
+        ]
+      }
+    },
+    "/v1/organization/deletion": {
+      "get": {
+        "operationId": "get_deletion_v1_organization_deletion_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-RedHand-Org",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Redhand-Org"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeletionStatus"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Deletion",
+        "tags": [
+          "Tenant lifecycle"
+        ]
+      }
+    },
+    "/v1/organization/export": {
+      "get": {
+        "operationId": "get_export_v1_organization_export_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-RedHand-Org",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Redhand-Org"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {}
+            },
+            "description": "The organization's data."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Export",
+        "tags": [
+          "Tenant lifecycle"
+        ]
+      }
+    },
+    "/v1/organization/invites": {
+      "get": {
+        "operationId": "get_invites_v1_organization_invites_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-RedHand-Org",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Redhand-Org"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InviteList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Invites",
+        "tags": [
+          "Onboarding"
+        ]
+      },
+      "post": {
+        "operationId": "post_invite_v1_organization_invites_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-RedHand-Org",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Redhand-Org"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InviteCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InviteCreated"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Post Invite",
+        "tags": [
+          "Onboarding"
+        ]
+      }
+    },
+    "/v1/organization/invites/{invite_id}": {
+      "delete": {
+        "operationId": "delete_invite_v1_organization_invites__invite_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "invite_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Invite Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-RedHand-Org",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Redhand-Org"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InviteRevokeResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Invite",
+        "tags": [
+          "Onboarding"
+        ]
+      }
+    },
+    "/v1/organization/members": {
+      "get": {
+        "operationId": "get_members_v1_organization_members_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-RedHand-Org",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Redhand-Org"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemberList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Members",
+        "tags": [
+          "Onboarding"
+        ]
+      }
+    },
+    "/v1/organization/members/{user_id}": {
+      "delete": {
+        "operationId": "delete_member_v1_organization_members__user_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "user_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "User Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-RedHand-Org",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Redhand-Org"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RemoveMemberResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Member",
+        "tags": [
+          "Onboarding"
+        ]
+      },
+      "put": {
+        "operationId": "put_member_role_v1_organization_members__user_id__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "user_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "User Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-RedHand-Org",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Redhand-Org"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetRoleRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SetRoleResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Put Member Role",
+        "tags": [
+          "Onboarding"
         ]
       }
     },
@@ -9882,6 +11369,65 @@
         ]
       }
     },
+    "/v1/organizations": {
+      "post": {
+        "operationId": "create_organization_v1_organizations_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateOrganizationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreateOrganizationResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Organization",
+        "tags": [
+          "Onboarding"
+        ]
+      }
+    },
     "/v1/passports": {
       "get": {
         "operationId": "list_passports_v1_passports_get",
@@ -9951,6 +11497,7 @@
         ]
       },
       "post": {
+        "description": "Registering an agent issues its key, so it is a credential-issuing action: admin (owner's decision, 2026-11-17).",
         "operationId": "register_agent_v1_passports_post",
         "parameters": [
           {
@@ -10949,6 +12496,7 @@
     },
     "/v1/passports/{agent_id}/rotate-key": {
       "post": {
+        "description": "A new agent key is a working credential: admin (owner's decision, 2026-11-17).",
         "operationId": "rotate_agent_key_v1_passports__agent_id__rotate_key_post",
         "parameters": [
           {

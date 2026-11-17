@@ -3,6 +3,8 @@
 - **Date:** 2026-11-14. **Written by:** Claude Code. **Run by:** Antigravity with the owner. **One branch:** `feat/h4-enforcement-tightening` (it contains `test/night-1` and PRs 57 to 72, so one deploy covers every part; nothing on `main` changes; the owner merges the real PRs one by one afterwards, in the order in the handoff).
 - **What this is:** the list of every test that is open, with the file that holds its steps. The steps themselves are **not** copied here: open the file and follow it exactly. Each part stands alone; a failure in one does not stop the others.
 
+> **2026-11-17 update:** the next run is **`docs/testing/briefs/2026-11-18-test-day.md`** (deploy of C1 and D1, Parts Q, R, S, T and the leftovers N7, O8, P5, P8). It replaces the tonight checklist. Parts listed below that already passed stay passed.
+
 ## Read first (the owner's rules, they apply to every part)
 1. Do **NOT** create sessions as the owner (no admin-API magic links, no minting tokens). Do **NOT** read shell history or look for keys. Do **NOT** deploy anything yourself. Do **NOT** change settings, agents, scopes, hosts or switches that a brief does not name.
 2. Never paste a key, token or secret into chat or into a result. Write "set", "worked" or "refused". Keys go only into the terminal, at a hidden prompt.

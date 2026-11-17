@@ -1,6 +1,6 @@
 # ADR 0025: Model proxy prototype in the gateway (Phase 4.5 B5): measured, off by default, not approved for release
 
-**Status:** Proposed (2026-11-17). A **prototype** built at the owner's request to produce numbers for a go/no-go decision. It is behind a kill switch that is off, it is a
+**Status:** Proposed (2026-11-17); landed on `main` as dormant code on the owner's "yes B5a" (2026-11-17), still **not approved for release**. A **prototype** built at the owner's request to produce numbers for a go/no-go decision. It is behind a kill switch that is off, it is a
 draft pull request, and nothing in this ADR is approved. Earlier analysis: `docs/plans/phase4.5-model-proxy.md` (options A to D) and `docs/plans/phase4.5-build-plan.md`.
 
 ## Context
@@ -30,6 +30,10 @@ No prompt or completion text is read for any purpose except counting tokens in e
 See that file for the full table. In summary the gateway adds about **2 to 3 ms (p50) and under 10 ms (p99)** to a non-stream call and about **7 ms to the first byte** of a stream; the gaps between stream
 events are unchanged and the stream arrives byte for byte identical; 100 concurrent streams completed with no errors and the gateway grew by about 7 MB (97 to 104 MB, transient). This is inside the 10 ms / 50 ms budget CLAUDE.md section 8 sets
 for the tool route. It says nothing about a real provider or network, which add their own time and dominate.
+
+## Production guard (added when it landed on main)
+`AGENTWALL_MODEL_PROXY_ENABLED=true` **refuses to start** unless `ENVIRONMENT` is `development`, `dev`, `test`, `local` or `staging` (an allowlist, so a typo such as `prod` also refuses). The reason is the one-key custody
+limit below: until per-tenant, envelope-encrypted key custody exists, the proxy must not carry customers' traffic. The flag is off by default and, when off, the route does not exist.
 
 ## What is NOT built (each is a decision, not a detail)
 - **Provider-key custody.** The prototype holds ONE deployment-level key in an environment variable. A customer product needs per-tenant keys, envelope-encrypted, never returned, with rotation (CLAUDE.md 5.2, 5.5):

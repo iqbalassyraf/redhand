@@ -11,3 +11,5 @@ How to read it:
 - **When core stops answering** the gateway refuses (HTTP 503), never allows, and recovers by itself when core is back. **Core killed: first refusal after 1.8 s. Core hanging (paused): 4.3 s** (the 2 s cache lifetime plus the 2 s timeout of the lookup). That is inside the 5 s promise with only about 0.7 s to spare, on a machine with no network latency. **Follow-up worth doing:** lower the lookup timeout (or cap total time at the cache lifetime plus 1 s) so the margin does not depend on the network.
 - **Upstream (MCP server) killed:** every answer was 502 within 10 ms, the gateway stayed healthy.
 - **Not measured:** several gateway instances (the bound is per instance), real network and Cloud Run, expired agent tokens (core's shortest lifetime is 60 s; the verifier has unit tests).
+
+After the gateway lookup timeout change (D1 PR 4): [`2026-11-17-revocation-drill-after-lookup-timeout.md`](2026-11-17-revocation-drill-after-lookup-timeout.md).

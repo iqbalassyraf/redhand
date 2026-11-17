@@ -24,6 +24,8 @@ from redhand_core.routers.agent_auth import require_internal_service
 from redhand_core.routers.agent_auth import router as agent_auth_router
 from redhand_core.routers.dev import router as dev_router
 from redhand_core.routers.hitl import router as hitl_router
+from redhand_core.routers.lifecycle import router as lifecycle_router
+from redhand_core.routers.onboarding import router as onboarding_router
 from redhand_core.routers.passports import router as passports_router
 from redhand_core.routers.iam_broker import get_sts_downscoper, router as iam_broker_router
 from redhand_core.routers.scim import router as scim_router
@@ -108,17 +110,30 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         await downscoper.aclose()
 
 
+def api_docs_urls(environment: str) -> dict[str, str | None]:
+    """Where FastAPI serves /docs, /redoc and /openapi.json: nowhere in production, the defaults elsewhere."""
+    if environment == "production":
+        return {"docs_url": None, "redoc_url": None, "openapi_url": None}
+    return {"docs_url": "/docs", "redoc_url": "/redoc", "openapi_url": "/openapi.json"}
+
+
 def create_app(settings: Settings | None = None) -> FastAPI:
     """
     Constructs and configures the production FastAPI instance for `redhand-core`.
     """
     active_settings = settings or get_settings()
+    docs_urls = api_docs_urls(active_settings.ENVIRONMENT)
 
     app = FastAPI(
         title=active_settings.APP_NAME,
         description="Agentic Security Posture Management (ASPM) & Runtime Protection Engine",
         version=active_settings.APP_VERSION,
         lifespan=lifespan,
+        # Production serves no interactive API pages or schema: they are not secret (the repository is public), but a stranger has no need to browse the routes.
+        # The schema is still generated from code for docs/api (app.openapi() does not need the URL).
+        docs_url=docs_urls["docs_url"],
+        redoc_url=docs_urls["redoc_url"],
+        openapi_url=docs_urls["openapi_url"],
     )
 
     async def _provide_supabase_service_client(request: Request) -> Any:
@@ -168,6 +183,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(approved_models_router)
     app.include_router(sdk_keys_router)
     app.include_router(timeline_router)
+    app.include_router(onboarding_router)
+    app.include_router(lifecycle_router)
     if (
         active_settings.ENVIRONMENT == "development"
         and active_settings.uses_local_store
