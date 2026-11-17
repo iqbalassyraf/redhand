@@ -25,7 +25,7 @@ import logging
 from typing import Annotated, Any, Protocol
 from uuid import UUID
 
-from fastapi import Depends, Header, HTTPException, status
+from fastapi import Depends, Header, HTTPException, Request, status
 import jwt
 
 from redhand_core.auth import bearer_token
@@ -167,7 +167,36 @@ async def resolve_membership(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied.") from exc
 
 
+# While an organization's deletion is pending (the 7-day grace period) its operators may only look at the status, export their data and cancel. Everything else
+# is refused here, in the one dependency every operator route passes through, so a new route is closed by default. Matched on the route's path template.
+PENDING_DELETION_ALLOWED: frozenset[tuple[str, str]] = frozenset({
+    ("GET", "/v1/me"),
+    ("GET", "/v1/organization/deletion"),
+    ("GET", "/v1/organization/export"),
+    ("POST", "/v1/organization/delete-request"),
+    ("POST", "/v1/organization/delete-request/cancel"),
+})
+
+
+async def _refuse_if_deletion_pending(supabase: _SupabaseLike, request: Request, organization_id: UUID) -> None:
+    res = await supabase.table("organizations").select("deletion_requested_at").eq("id", str(organization_id)).execute()
+    rows = list(res.data or [])
+    if len(rows) != 1:
+        # A membership with no organization row, or a read that returned nothing: deny rather than guess.
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied.")
+    if rows[0].get("deletion_requested_at") is None:
+        return
+    route = request.scope.get("route")
+    path = getattr(route, "path", None)
+    if (request.method, path) not in PENDING_DELETION_ALLOWED:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="This organization is scheduled for deletion. You can export your data or cancel the deletion.",
+        )
+
+
 async def get_operator(
+    request: Request,
     authorization: Annotated[str | None, Header(alias="Authorization")] = None,
     x_redhand_org: Annotated[str | None, Header(alias="X-RedHand-Org")] = None,
     settings: Settings = Depends(get_settings),
@@ -186,6 +215,7 @@ async def get_operator(
         raise _unauthorized("Invalid operator identity.") from exc
 
     org_id, role = await resolve_membership(supabase, user_id, requested_org)
+    await _refuse_if_deletion_pending(supabase, request, org_id)
     email = claims.get("email")
     return OperatorContext(
         user_id=user_id,
@@ -267,3 +297,4 @@ OperatorDep = Annotated[OperatorContext, Depends(get_operator)]
 ViewerDep = Annotated[OperatorContext, Depends(require_role(Role.VIEWER))]
 SecurityOperatorDep = Annotated[OperatorContext, Depends(require_role(Role.SECURITY_OPERATOR))]
 AdminDep = Annotated[OperatorContext, Depends(require_role(Role.ADMIN))]
+OwnerDep = Annotated[OperatorContext, Depends(require_role(Role.OWNER))]
