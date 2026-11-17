@@ -195,6 +195,7 @@ PROMISES = [
     ("An agent's SDK reported a model that is not on the approved list.", "apps/redhand-ui/src/lib/radarRules.ts"),
     ("Model alert:", "services/redhand-core/src/redhand_core/approved/service.py"),
     ("Recorded only: nothing was refused.", "services/redhand-core/src/redhand_core/approved/service.py"),
+    ("Model not on the approved list", "services/redhand-core/src/redhand_core/approved/service.py"),
 ]
 
 
