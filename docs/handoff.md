@@ -13,6 +13,13 @@ Both tools work on RedHand and its demo projects. This file is how each learns w
 
 ---
 
+## 2026-11-17, Claude Code: test day brief and the last product gaps (for Antigravity and the owner)
+- **Next run:** `docs/testing/briefs/2026-11-18-test-day.md` (about 2 hours): Part 0 deploy (four migrations `20261127` to `20261130`, core, gateway, dashboard, `smoke.sh` and `scripts/smoke_launch.py`), Part Q (C1, unchanged),
+  Part R onboarding with two fresh e-mail addresses, Part S export and deletion on the throwaway "Night Test Org" only, Part T freeze timing and the first call after idle, leftovers N7, O8, P5, P8, clean-up.
+  Every promised string and command is guarded by `agentwall/tests/test_test_day_brief.py`.
+- **Also open (Claude Code):** #104 (no API pages in production), #105 (Organization data page). Both are needed before the run (Part S uses #105's page).
+- **Not done by me:** anything on staging. The purge rehearsal waits 7 days after S10; I will write its exact steps then.
+
 ## 2026-11-17, Claude Code: D1 PR 4 launch kit and gateway lookup timeout (branch docs/d1-launch-kit)
 - **Built:** `docs/launch/*`, ADR 0028 (proposed), `scripts/smoke_launch.py` + `test_smoke_launch.py`, `test_launch_docs.py`; gateway `LOOKUP_TIMEOUT_SECONDS = 1.0`, `MAX_CONTEXT_TTL_SECONDS = 2.5` (setting cap lowered to match), new tests in `agentwall/tests/test_context_refresh.py`, one old test updated on purpose (`test_context_ttl_is_capped_to_meet_revocation_slo` pinned the old 4 s cap).
 - **Measured:** `docs/security/measurements/2026-11-17-revocation-drill-after-lookup-timeout.md` (local): core paused first refusal 3.33 s (was 4.32 s); normal freeze/revoke unchanged (about 0.4 s).
