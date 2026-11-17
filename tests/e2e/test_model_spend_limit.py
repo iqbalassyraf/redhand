@@ -89,12 +89,14 @@ def test_an_agent_is_refused_after_its_measured_spend_crosses_the_daily_limit_an
     assert wait_for(lambda: measured_micro(op, agent_id) >= CALL_MICRO_USD, 10), "the proxy's usage never reached core's measured spend"
 
     statuses = [first.status_code]
-    deadline = time.monotonic() + 15
-    while time.monotonic() < deadline and statuses[-1] != 429:
+    started = time.monotonic()
+    while time.monotonic() - started < 20 and statuses[-1] != 429:
         time.sleep(0.2)
         statuses.append(post(stack, caller.token).status_code)
     assert statuses[-1] == 429, f"never refused: {statuses}"
-    assert 2 <= len(statuses) <= 8, f"refused only after too many calls (the lag is a few seconds, not unbounded): {statuses}"
+    assert statuses[:-1] == [200] * (len(statuses) - 1) and len(statuses) >= 4, f"a refusal before the third call finished would mean the limit was read wrong: {statuses}"
+    # The bound is time, not a call count: a slower machine makes more calls in the same few seconds of lag (flush 0.5 s + core + cache 0.5 s here).
+    assert time.monotonic() - started < 15, "the refusal came too late: the lag is a few seconds, not unbounded"
     refused = post(stack, caller.token)
     assert refused.status_code == 429 and "daily model spend limit" in refused.json()["error"]["message"]
     assert str(LIMIT_MICRO_USD) not in refused.text, "the refusal leaks no figure"
