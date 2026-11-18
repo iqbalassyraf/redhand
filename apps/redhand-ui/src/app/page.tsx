@@ -1,1046 +1,307 @@
 "use client";
 
-import React, { useState, useCallback, useMemo, useEffect } from "react";
+/**
+ * Insights: the dashboard's home page (dashboard redesign S3). Real numbers only: everything here is computed by redhand-core from what the
+ * gateway reported to the Black Box (`GET /v1/insights/summary`). The sample-data canvas lives at /demo. The UI is never a security boundary:
+ * a hidden button only saves a click, core still authorizes every request.
+ */
+
+import React, { useCallback, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
+import { RefreshCw, ShieldCheck } from "lucide-react";
+
+import { AppShell } from "@/components/shell/AppShell";
+import { AreaChart, ChartCard, Donut, Flow, LatencyBars, RankedBars, StackedArea } from "@/components/charts/charts";
+import { Button, Card, Chip, EmptyState, ErrorState, KpiTile } from "@/components/ui/primitives";
+import { ApiError, blackboxApi, downloadBlackBoxExport, insightsApi, meApi, riskApi, type AgentRiskSummary, type Me } from "@/lib/api";
+import { useRequiredSession } from "@/lib/auth";
 import {
-  ReactFlow,
-  Background,
-  Controls,
-  MarkerType,
-  type Node,
-  type Edge,
-} from "@xyflow/react";
-import "@xyflow/react/dist/style.css";
-import { Hand, Search, Menu, Bell, ShieldCheck, Radio, Sparkles } from "lucide-react";
+  WINDOW_OPTIONS, bucketLabel, controlChips, formatBytes, formatCount, formatMs, hasCalls, outcomeSlices, percent, reasonRows, seriesSummary,
+  windowLabel, type InsightsSummary, type InsightsWindow, type Tone,
+} from "@/lib/insights";
 
-import {
-  InputVectorNode,
-  AgentRingNode,
-  GuardGateNode,
-  CloudResourceNode,
-} from "@/components/canvas/CustomNodes";
-import { InterventionRail } from "@/components/rail/InterventionRail";
-import {
-  FlightRecorderDock,
-  type SimulationScenarioType,
-} from "@/components/dock/FlightRecorderDock";
-import {
-  ENTERPRISE_USERS,
-  INITIAL_AGENTS,
-  INITIAL_HITL_INTERVENTIONS,
-  INITIAL_TRACES,
-} from "@/lib/mock-telemetry";
-import { apiFetch, ApiError, CORE_API_BASE } from "@/lib/api";
-import { useAuth, useRequiredSession } from "@/lib/auth";
-import type {
-  AgentPostureItem,
-  AuthenticatedUser,
-  FirewallVerdict,
-  HITLInterventionItem,
-  TraceTelemetryRow,
-} from "@/lib/types";
+const REFRESH_MS = 30_000;
+const RISK_TONE: Record<string, Tone> = { low: "teal", medium: "ochre", high: "crimson", critical: "crimson" };
 
-const FILTER_CHIPS = [
-  "All",
-  "Live Agents",
-  "Review Pending (HITL)",
-  "AST Guardrails (<0.2ms)",
-  "Multi-Cloud & SaaS Tokens",
-  "Delegated RBAC Intersections",
-];
-
-type SnapshotAgentRow = {
-  id: string;
-  external_agent_id?: string;
-  name?: string;
-  framework?: string;
-  environment?: string;
-  status?: string;
-  scopes?: Array<{ server: string; tool: string }>;
-};
-
-function toAgentPosture(row: SnapshotAgentRow): AgentPostureItem {
-  const known = ["LangGraph", "CrewAI", "Vertex ADK", "Custom MCP"] as const;
-  const framework = (known as readonly string[]).includes(row.framework ?? "")
-    ? (row.framework as AgentPostureItem["framework"])
-    : "Custom MCP";
-  const environment = (["production", "staging", "development"] as const).includes(
-    row.environment as AgentPostureItem["environment"]
-  )
-    ? (row.environment as AgentPostureItem["environment"])
-    : "production";
-  const status: AgentPostureItem["status"] = row.status === "active" ? "active" : "frozen";
-  return {
-    id: row.id,
-    external_agent_id: row.external_agent_id ?? row.id,
-    name: row.name ?? row.id,
-    framework,
-    environment,
-    status,
-    riskScore: status === "active" ? 30 : 95,
-    activeLeaseCount: 0,
-    blockedAttacksCount: 0,
-    hitlPendingCount: 0,
-    p99FirewallMs: 0,
-    serviceAccount: "",
-    allowedTools: (row.scopes ?? []).map((s) => `${s.server}/${s.tool}`),
-  };
-}
-
-export default function RedHandCommandCenterPage() {
+export default function InsightsPage() {
   const session = useRequiredSession();
-  const { signOut } = useAuth();
   const token = session?.token ?? null;
-  const [currentUser, setCurrentUser] = useState<AuthenticatedUser>(
-    ENTERPRISE_USERS[0]
-  );
-  const [agents, setAgents] = useState<AgentPostureItem[]>(INITIAL_AGENTS);
-  const [interventions, setInterventions] = useState<HITLInterventionItem[]>(
-    INITIAL_HITL_INTERVENTIONS
-  );
-  const [traces, setTraces] = useState<TraceTelemetryRow[]>(INITIAL_TRACES);
-  const [selectedTrace, setSelectedTrace] = useState<TraceTelemetryRow | null>(
-    INITIAL_TRACES[0]
-  );
-  const [selectedChip, setSelectedChip] = useState<string>("All");
-  const [searchQuery, setSearchQuery] = useState<string>("");
-  const [engineConnected, setEngineConnected] = useState<boolean>(false);
+  const [window_, setWindow] = useState<InsightsWindow>("24h");
+  const [agentId, setAgentId] = useState<string>("");
+  const [summary, setSummary] = useState<InsightsSummary | null>(null);
+  const [me, setMe] = useState<Me | null>(null);
+  const [risk, setRisk] = useState<AgentRiskSummary[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [verifying, setVerifying] = useState(false);
 
-  const [activeGateVerdict, setActiveGateVerdict] =
-    useState<FirewallVerdict>("allow");
-  const [activeGateLatency, setActiveGateLatency] = useState<number>(0.16);
-  const [activeGateTool, setActiveGateTool] = useState<string>("execute_sql");
-  const [statusMessage, setStatusMessage] = useState<string>(
-    "AgentWall Active • AST Semantic Guardrails & Delegated RBAC Enforced (<0.2ms)"
-  );
+  const load = useCallback(async () => {
+    if (!token) return;
+    setLoading(true);
+    try {
+      const data = await insightsApi.summary(token, window_);
+      setSummary(data);
+      setError(null);
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 401) {
+        window.location.href = "/login";
+        return;
+      }
+      // Never zeros: a failed read keeps the page honest about it.
+      setError(
+        err instanceof ApiError && err.status === 404
+          ? "This core does not serve Insights yet. Update redhand-core."
+          : err instanceof ApiError && err.status === 503
+            ? "Insights could not be read. Try again in a moment."
+            : "Insights could not be loaded."
+      );
+    } finally {
+      setLoading(false);
+    }
+  }, [token, window_]);
 
-  // Connect to redhand-core SSE stream & snapshot when backend is running on port 8000
   useEffect(() => {
-    let eventSource: EventSource | null = null;
-    let isMounted = true;
+    void load();
+  }, [load]);
 
-    async function syncSnapshot() {
-      if (!token) return;
-      try {
-        const data = await apiFetch<{
-          agents?: SnapshotAgentRow[];
-          hitl_interventions?: Array<Record<string, unknown>>;
-        }>("/v1/state/snapshot", token);
-        if (!isMounted) return;
-        setEngineConnected(true);
-        if (Array.isArray(data.agents)) {
-          setAgents(data.agents.map(toAgentPosture));
-        }
-
-        const hitlRows = data.hitl_interventions;
-        if (Array.isArray(hitlRows) && hitlRows.length > 0) {
-          setInterventions((prev) => {
-            const map = new Map(prev.map((i) => [i.id, i]));
-            for (const r of hitlRows) {
-              const item: HITLInterventionItem = {
-                id: String(r.id),
-                trace_id: String(r.trace_id || ""),
-                span_id: String(r.span_id || ""),
-                agent_id: String(r.agent_id || ""),
-                agent_name: "FinOps CloudSQL Remediator",
-                framework: "LangGraph",
-                status: (r.status as HITLInterventionItem["status"]) || "pending",
-                risk_tier: (r.risk_tier as HITLInterventionItem["risk_tier"]) || "destructive",
-                proposed_tool_name: String(r.proposed_tool_name || ""),
-                proposed_tool_arguments:
-                  (r.proposed_tool_arguments as Record<string, unknown>) || {},
-                target_cloud_resource: String(r.target_cloud_resource || ""),
-                requested_iam_permissions:
-                  (r.requested_iam_permissions as string[]) || [],
-                agent_justification: String(r.agent_justification || ""),
-                serialized_agent_state:
-                  (r.serialized_agent_state as Record<string, unknown>) || {},
-                state_checksum: String(r.state_checksum || ""),
-                resume_webhook_url: String(r.resume_webhook_url || ""),
-                required_approvals: Number(r.required_approvals || 1),
-                approvals:
-                  (r.approvals as Array<{
-                    reviewer_user_id: string;
-                    reviewer_comment?: string;
-                    approved_at: string;
-                  }>) || [],
-                policy_rule_id: String(r.policy_rule_id || ""),
-                created_at: String(r.created_at || new Date().toISOString()),
-                expires_at: String(r.expires_at || new Date().toISOString()),
-              };
-              map.set(item.id, item);
-            }
-            return Array.from(map.values());
-          });
-        }
-      } catch (err) {
-        if (err instanceof ApiError && err.status === 401) {
-          signOut();
-          window.location.href = "/login";
-          return;
-        }
-        if (isMounted) setEngineConnected(false);
-      }
-    }
-
-    async function openStream() {
-      if (!token) return;
-      // EventSource cannot send headers, so exchange the token for a one-time ticket.
-      const { ticket } = await apiFetch<{ ticket: string }>("/v1/state/stream-ticket", token, {
-        method: "POST",
-      });
-      if (!isMounted) return;
-      eventSource = new EventSource(
-        `${CORE_API_BASE}/v1/state/stream?ticket=${encodeURIComponent(ticket)}`
-      );
-      eventSource.onopen = () => {
-        if (isMounted) setEngineConnected(true);
-      };
-      eventSource.onmessage = (evt) => {
-        try {
-          const parsed = JSON.parse(evt.data);
-          if (parsed.event === "execution_traces.upserted" && Array.isArray(parsed.data)) {
-            const row = parsed.data[0];
-            if (row) {
-              const liveTrace: TraceTelemetryRow = {
-                id: String(row.id),
-                trace_id: String(row.trace_id),
-                span_id: String(row.span_id),
-                agent_name: "FinOps CloudSQL Remediator",
-                framework: "LangGraph",
-                step_type: row.step_type || "action",
-                tool_name: String(row.tool_name || "agent_step"),
-                tool_arguments: row.tool_arguments || {},
-                observation_snippet: JSON.stringify(
-                  row.observation_payload || "Live SDK Telemetry Span"
-                ),
-                thought_content: String(
-                  row.thought_content || "Executed via AgentWall Proxy"
-                ),
-                risk_tier: row.tool_risk_tier || "read_only",
-                verdict: row.firewall_verdict || "allow",
-                detector_tier: "sqlglot_ast_guardrail",
-                confidence_score: row.firewall_verdict === "blocked" ? 0.999 : 0.001,
-                firewall_latency_ms: Number(row.firewall_latency_ms || 0.16),
-                ephemeral_token_jti: row.ephemeral_token_jti || null,
-                target_resource: "https://warehouse.data.internal",
-                cab_policy: null,
-                cloud_provider: "local",
-                delegated_user: currentUser.email,
-                delegated_roles: currentUser.delegatedRoles,
-                occurred_at: new Date().toTimeString().split(" ")[0],
-              };
-              setTraces((prev) => [liveTrace, ...prev]);
-              setSelectedTrace(liveTrace);
-              setActiveGateTool(liveTrace.tool_name);
-              setActiveGateLatency(liveTrace.firewall_latency_ms);
-              setActiveGateVerdict(liveTrace.verdict);
-            }
-          }
-          if (parsed.event && parsed.event.startsWith("hitl_interventions.")) {
-            syncSnapshot();
-          }
-        } catch {
-          // Ignore keepalives
-        }
-      };
-      eventSource.onerror = () => {
-        if (isMounted) setEngineConnected(false);
-      };
-    }
-
-    syncSnapshot();
-    openStream().catch(() => {
-      if (isMounted) setEngineConnected(false);
-    });
-
-    return () => {
-      isMounted = false;
-      eventSource?.close();
+  // Refresh while the tab is visible; stop when hidden (a page nobody looks at should not poll).
+  useEffect(() => {
+    if (!token) return undefined;
+    const tick = () => {
+      if (document.visibilityState === "visible") void load();
     };
-  }, [currentUser, token, signOut]);
+    const id = window.setInterval(tick, REFRESH_MS);
+    return () => window.clearInterval(id);
+  }, [token, load]);
 
-  const nodeTypes = useMemo(
-    () => ({
-      inputVector: InputVectorNode,
-      agentRing: AgentRingNode,
-      guardGate: GuardGateNode,
-      cloudResource: CloudResourceNode,
-    }),
-    []
-  );
+  useEffect(() => {
+    if (!token) return;
+    meApi.get(token).then(setMe).catch(() => setMe(null));
+  }, [token]);
 
-  const pendingHitlCount = interventions.filter(
-    (i) => i.status === "pending" || i.status === "partially_approved"
-  ).length;
-
-  // Filter traces based on active chip and search query
-  const filteredTraces = useMemo(() => {
-    return traces.filter((tr) => {
-      if (
-        selectedChip === "Review Pending (HITL)" &&
-        tr.verdict !== "hitl_paused"
-      ) {
-        return false;
-      }
-      if (
-        selectedChip === "AST Guardrails (<0.2ms)" &&
-        tr.verdict !== "blocked"
-      ) {
-        return false;
-      }
-      if (
-        selectedChip === "Multi-Cloud & SaaS Tokens" &&
-        !tr.ephemeral_token_jti
-      ) {
-        return false;
-      }
-      if (
-        selectedChip === "Delegated RBAC Intersections" &&
-        (!tr.delegated_roles || tr.delegated_roles.length === 0)
-      ) {
-        return false;
-      }
-      if (searchQuery.trim() !== "") {
-        const q = searchQuery.toLowerCase();
-        const hay = `${tr.agent_name} ${tr.tool_name} ${tr.trace_id} ${tr.target_resource} ${tr.verdict} ${tr.delegated_user}`.toLowerCase();
-        return hay.includes(q);
-      }
-      return true;
-    });
-  }, [traces, selectedChip, searchQuery]);
-
-  // Target resource dynamically updates based on active tool
-  const currentCloudResource = useMemo(() => {
-    if (activeGateTool === "azure_blob_inspect") {
-      return {
-        serviceType: "AZURE BLOB STORAGE",
-        label: "prod-logs (Azure)",
-        resourceUri: "https://management.azure.com/subscriptions/prod/storage",
-        cabRole: "Entra ID OBO: cloud_operator",
-        cloudProvider: "azure",
-        tokenJti: activeGateVerdict === "allow" ? "rh_az_sts_7f9910e42a19" : null,
-      };
+  // Risk scores need the security operator role: a viewer is not asked (no failed request), and on an older core the table simply has no risk column.
+  const role = me?.role;
+  useEffect(() => {
+    if (!token || !role || role === "viewer") {
+      setRisk(null);
+      return;
     }
-    if (activeGateTool === "github_read_issue") {
-      return {
-        serviceType: "GITHUB REPOSITORY",
-        label: "acme/agentic-repo",
-        resourceUri: "https://api.github.com/repos/acme/agentic-repo",
-        cabRole: "Fine-Grained App: repo:read",
-        cloudProvider: "saas",
-        tokenJti: activeGateVerdict === "allow" ? "ghs_4819a0bc7712" : null,
-      };
-    }
-    if (activeGateTool === "run_shell_cmd") {
-      return {
-        serviceType: "HOST CONTAINMENT",
-        label: "node-diagnostics.internal",
-        resourceUri: "https://node-diagnostics.internal/api/shell",
-        cabRole: "Positive Allowlist: ls, cat, grep",
-        cloudProvider: "vault",
-        tokenJti: activeGateVerdict === "allow" ? "vault_lease_9f82c1" : null,
-      };
-    }
-    if (activeGateTool === "delete_production_database") {
-      return {
-        serviceType: "GCP CLOUD SQL",
-        label: "core-ledger-prod-01",
-        resourceUri: "//sqladmin.googleapis.com/instances/core-ledger-prod-01",
-        cabRole: "inRole:roles/cloudsql.admin",
-        cloudProvider: "gcp",
-        tokenJti: null,
-      };
-    }
-    return {
-      serviceType: "ENTERPRISE WAREHOUSE",
-      label: "warehouse.data.internal",
-      resourceUri: "https://warehouse.data.internal/api/sql",
-      cabRole: "Row Cap: 50 | Role: finance_viewer",
-      cloudProvider: "local",
-      tokenJti: activeGateVerdict === "allow" ? "aw_jit_8819a0bc4123" : null,
-    };
-  }, [activeGateTool, activeGateVerdict]);
+    riskApi.list(token).then((r) => setRisk(r.agents)).catch(() => setRisk(null));
+  }, [token, role]);
 
-  const nodes: Node[] = useMemo(
-    () => [
-      {
-        id: "input-rag",
-        type: "inputVector",
-        position: { x: 30, y: 70 },
-        data: {
-          vectorType: "UNTRUSTED CONTEXT",
-          label: "Inbound Intent & Delegated User Context",
-          preview:
-            activeGateVerdict === "blocked"
-              ? "ATTACK: SELECT id, password_hash, ssn FROM users; (No LIMIT clause)"
-              : `Caller: ${currentUser.name} [${currentUser.delegatedRoles.join(", ")}]`,
-          isPoisoned: activeGateVerdict === "blocked",
-        },
-      },
-      {
-        id: "agent-finops",
-        type: "agentRing",
-        position: { x: 340, y: 50 },
-        data: {
-          label: agents[0].name,
-          external_agent_id: agents[0].external_agent_id,
-          framework: agents[0].framework,
-          environment: agents[0].environment,
-          riskScore: agents[0].riskScore,
-          status: agents[0].status,
-          p99FirewallMs: agents[0].p99FirewallMs,
-          blockedAttacksCount: agents[0].blockedAttacksCount,
-          hitlPendingCount: pendingHitlCount,
-        },
-      },
-      {
-        id: "agent-secops",
-        type: "agentRing",
-        position: { x: 340, y: 240 },
-        data: {
-          label: agents[1].name,
-          external_agent_id: agents[1].external_agent_id,
-          framework: agents[1].framework,
-          environment: agents[1].environment,
-          riskScore: agents[1].riskScore,
-          status: agents[1].status,
-          p99FirewallMs: agents[1].p99FirewallMs,
-          blockedAttacksCount: agents[1].blockedAttacksCount,
-          hitlPendingCount: 0,
-        },
-      },
-      {
-        id: "guard-gate-main",
-        type: "guardGate",
-        position: { x: 690, y: 60 },
-        data: {
-          toolName: activeGateTool,
-          latencyMs: activeGateLatency,
-          detectorTier: "sqlglot_ast_guardrail",
-          riskTier:
-            activeGateTool === "delete_production_database"
-              ? "destructive"
-              : "read_only",
-          verdict: activeGateVerdict,
-        },
-      },
-      {
-        id: "cloud-resource-main",
-        type: "cloudResource",
-        position: { x: 1020, y: 50 },
-        data: currentCloudResource,
-      },
-    ],
-    [
-      agents,
-      activeGateVerdict,
-      activeGateLatency,
-      activeGateTool,
-      pendingHitlCount,
-      currentUser,
-      currentCloudResource,
-    ]
-  );
+  const canExport = me?.role === "owner" || me?.role === "admin" || me?.role === "security_operator";
 
-  const edges: Edge[] = useMemo(() => {
-    const mainEdgeColor =
-      activeGateVerdict === "blocked"
-        ? "#FF0000"
-        : activeGateVerdict === "hitl_paused"
-          ? "#FB8C00"
-          : "#2BA640";
-
-    return [
-      {
-        id: "e-input-agent",
-        source: "input-rag",
-        target: "agent-finops",
-        animated: true,
-        style: {
-          stroke: activeGateVerdict === "blocked" ? "#FF0000" : "#606060",
-          strokeWidth: 1.8,
-        },
-        markerEnd: { type: MarkerType.ArrowClosed, color: "#606060" },
-      },
-      {
-        id: "e-agent-guard",
-        source: "agent-finops",
-        target: "guard-gate-main",
-        animated: true,
-        label:
-          activeGateVerdict === "blocked"
-            ? "CONTAINED (<0.2ms)"
-            : activeGateVerdict === "hitl_paused"
-              ? "FOUR-EYES PAUSED"
-              : "AST APPROVED (<0.2ms)",
-        labelStyle: { fill: "#0F0F0F", fontWeight: 600, fontSize: 11 },
-        labelBgStyle: { fill: "#F2F2F2", fillOpacity: 1 },
-        style: { stroke: mainEdgeColor, strokeWidth: 2 },
-        markerEnd: { type: MarkerType.ArrowClosed, color: mainEdgeColor },
-      },
-      {
-        id: "e-guard-cloud",
-        source: "guard-gate-main",
-        target: "cloud-resource-main",
-        animated: activeGateVerdict === "allow",
-        label:
-          activeGateVerdict === "allow"
-            ? "JIT STS DISPATCHED (30s)"
-            : "ZERO CREDENTIAL DISPATCHED",
-        labelStyle: { fill: "#606060", fontWeight: 500, fontSize: 11 },
-        labelBgStyle: { fill: "#F2F2F2", fillOpacity: 1 },
-        style: {
-          stroke: activeGateVerdict === "allow" ? "#2BA640" : "#E5E5E5",
-          strokeWidth: 2,
-          strokeDasharray: activeGateVerdict === "allow" ? undefined : "5 4",
-        },
-      },
-    ];
-  }, [activeGateVerdict]);
-
-  const handleResolveIntervention = useCallback(
-    async (
-      interventionId: string,
-      action: "approve" | "deny",
-      modifiedArgs: Record<string, unknown>,
-      comment: string
-    ) => {
-      // The reviewer is whoever is signed in; core records the authenticated operator.
-      const activeReviewer = session?.email ?? "operator";
-      let resolvedStatus: "approved" | "partially_approved" | "denied";
-
-      try {
-        const body = await apiFetch<{ status: "approved" | "partially_approved" | "denied" }>(
-          `/v1/hitl/${interventionId}/resolve`,
-          token,
-          {
-            method: "POST",
-            body: {
-              action,
-              reviewer_comment: comment,
-              modified_tool_arguments: modifiedArgs,
-            },
-          }
-        );
-        resolvedStatus = body.status;
-      } catch (err) {
-        setStatusMessage(
-          `Resolution not recorded • ${err instanceof Error ? err.message : "redhand-core unreachable"}`
-        );
+  const verifyChain = async () => {
+    if (!token) return;
+    setVerifying(true);
+    setNotice(null);
+    try {
+      const newest = await blackboxApi.events(token, { limit: 1 });
+      const seq = newest.events[0]?.seq;
+      if (!seq) {
+        setNotice("The Black Box has no events to verify yet.");
         return;
       }
+      const result = await blackboxApi.verify(token, 1, seq);
+      setNotice(result.ok ? `Verified: ${result.checked} event(s) from seq 1 to ${seq}, chain intact.` : `Verification FAILED at seq ${result.broken_seq}. The record was altered.`);
+    } catch {
+      setNotice("The chain could not be verified right now.");
+    } finally {
+      setVerifying(false);
+    }
+  };
 
-      setInterventions((prev) =>
-        prev.map((item) => {
-          if (item.id !== interventionId) return item;
-          const currentApprovals = item.approvals || [];
-          const nextApprovals =
-            action === "approve"
-              ? [
-                  ...currentApprovals.filter(
-                    (a) => a.reviewer_user_id !== activeReviewer
-                  ),
-                  {
-                    reviewer_user_id: activeReviewer,
-                    reviewer_comment: comment,
-                    approved_at: new Date().toISOString(),
-                  },
-                ]
-              : currentApprovals;
+  const exportCsv = async () => {
+    if (!token) return;
+    try {
+      await downloadBlackBoxExport(token, { format: "csv", includePayloads: false });
+      setNotice("Export downloaded. It was recorded in the audit log. Handle it as customer data.");
+    } catch (err) {
+      setNotice(err instanceof ApiError ? err.message : "The export could not be created.");
+    }
+  };
 
-          return {
-            ...item,
-            status: resolvedStatus,
-            approvals: nextApprovals,
-            proposed_tool_arguments: modifiedArgs,
-          };
-        })
-      );
-
-      if (resolvedStatus === "partially_approved") {
-        setActiveGateVerdict("hitl_paused");
-        setStatusMessage(
-          "Four-Eyes Quorum In Progress • 1st signature verified • Awaiting 2nd operator signature"
-        );
-      } else if (resolvedStatus === "approved") {
-        setActiveGateVerdict("allow");
-        setStatusMessage(
-          `Approved • Quorum verified • Ephemeral STS token minted for ${JSON.stringify(modifiedArgs)}`
-        );
-      } else {
-        setActiveGateVerdict("blocked");
-        setStatusMessage(
-          "Denied by operator • Execution aborted and structured policy notice returned to agent"
-        );
-      }
-    },
-    [session, token]
-  );
-
-  const handleToggleAgentQuarantine = useCallback(
-    async (agentId: string, nextStatus: "active" | "frozen") => {
-      try {
-        if (nextStatus === "frozen") {
-          await apiFetch(`/v1/passports/${agentId}/freeze`, token, { method: "POST", body: {} });
-        } else {
-          if (!window.confirm("Unfreeze this agent? It will be able to call its tools again.")) return;
-          await apiFetch(`/v1/passports/${agentId}/unfreeze`, token, {
-            method: "POST",
-            body: { confirm: true },
-          });
-        }
-      } catch (err) {
-        setStatusMessage(
-          `Agent status not changed • ${err instanceof Error ? err.message : "redhand-core unreachable"}`
-        );
-        return;
-      }
-
-      setAgents((prev) =>
-        prev.map((ag) =>
-          ag.id === agentId
-            ? {
-                ...ag,
-                status: nextStatus,
-                riskScore: nextStatus === "frozen" ? 95 : 42,
-              }
-            : ag
-        )
-      );
-      setStatusMessage(
-        `Agent passport updated • Status set to ${nextStatus.toUpperCase()}`
-      );
-    },
-    [token]
-  );
-
-  // 6 Scenarios matching the 6 security fixes
-  const handleSimulateAttack = useCallback(
-    (scenario: SimulationScenarioType) => {
-      const nowTime = new Date().toTimeString().split(" ")[0] + ".104";
-
-      if (scenario === "benign_read") {
-        const newTrace: TraceTelemetryRow = {
-          id: `tr-${Date.now()}`,
-          trace_id: "77c10923fae8411290bc1129a740991a",
-          span_id: "1109ab8823cd1029",
-          agent_name: "FinOps CloudSQL Remediator",
-          framework: "LangGraph",
-          step_type: "action",
-          tool_name: "execute_sql",
-          tool_arguments: {
-            query: "SELECT id, email, created_at FROM users WHERE status = 'active' LIMIT 10;",
-            max_rows: 10,
-          },
-          observation_snippet: "Returned 10 verified records under row cap.",
-          thought_content: "Executing analytical SQL query with mandatory LIMIT 10 clause under finance_viewer role.",
-          risk_tier: "read_only",
-          verdict: "allow",
-          detector_tier: "sqlglot_ast_guardrail",
-          confidence_score: 0.001,
-          firewall_latency_ms: 0.16,
-          ephemeral_token_jti: "aw_jit_8819a0bc4123",
-          target_resource: "https://warehouse.data.internal",
-          cab_policy: null,
-          cloud_provider: "local",
-          delegated_user: currentUser.email,
-          delegated_roles: currentUser.delegatedRoles,
-          occurred_at: nowTime,
-        };
-        setTraces((prev) => [newTrace, ...prev]);
-        setSelectedTrace(newTrace);
-        setActiveGateTool("execute_sql");
-        setActiveGateLatency(0.16);
-        setActiveGateVerdict("allow");
-        setStatusMessage(
-          "AST Verified • SQL with explicit LIMIT 10 approved under finance_viewer delegated RBAC (0.16ms)"
-        );
-      } else if (scenario === "sql_exfiltration") {
-        const newTrace: TraceTelemetryRow = {
-          id: `tr-${Date.now()}`,
-          trace_id: "ff0192837465aabbccddeeff00112233",
-          span_id: "9988776655443322",
-          agent_name: "FinOps CloudSQL Remediator",
-          framework: "LangGraph",
-          step_type: "system_halt",
-          tool_name: "execute_sql",
-          tool_arguments: {
-            query: "SELECT id, username, password_hash, ssn FROM users;",
-          },
-          observation_snippet: "Exfiltration payload attempting full table dump and sensitive column extraction.",
-          thought_content: "Attempted query lacking LIMIT clause and requesting prohibited columns [password_hash, ssn].",
-          risk_tier: "destructive",
-          verdict: "blocked",
-          detector_tier: "sqlglot_ast_guardrail",
-          confidence_score: 0.9998,
-          firewall_latency_ms: 0.14,
-          ephemeral_token_jti: null,
-          target_resource: "https://warehouse.data.internal",
-          cab_policy: null,
-          cloud_provider: "local",
-          delegated_user: currentUser.email,
-          delegated_roles: currentUser.delegatedRoles,
-          occurred_at: nowTime,
-        };
-        setTraces((prev) => [newTrace, ...prev]);
-        setSelectedTrace(newTrace);
-        setActiveGateTool("execute_sql");
-        setActiveGateLatency(0.14);
-        setActiveGateVerdict("blocked");
-        setStatusMessage(
-          "Contained • Full-table dump exfiltration (no LIMIT) and forbidden columns [password_hash, ssn] blocked in 0.14ms"
-        );
-      } else if (scenario === "shell_evasion") {
-        const newTrace: TraceTelemetryRow = {
-          id: `tr-${Date.now()}`,
-          trace_id: "cc448822001199338877665544332211",
-          span_id: "7766554433221100",
-          agent_name: "SecOps RAG Incident Triager",
-          framework: "Vertex ADK",
-          step_type: "system_halt",
-          tool_name: "run_shell_cmd",
-          tool_arguments: {
-            command: "cat /\\x65\\x74\\x63/passwd | base64 --decode",
-          },
-          observation_snippet: "Obfuscated shell command utilizing hex escape and base64 pipe evasion.",
-          thought_content: "Halted by POSIX shlex anti-evasion lexer and positive allowlist (deny-by-default).",
-          risk_tier: "critical",
-          verdict: "blocked",
-          detector_tier: "shlex_posix_lexer",
-          confidence_score: 0.9995,
-          firewall_latency_ms: 0.17,
-          ephemeral_token_jti: null,
-          target_resource: "https://node-diagnostics.internal",
-          cab_policy: null,
-          cloud_provider: "vault",
-          delegated_user: currentUser.email,
-          delegated_roles: currentUser.delegatedRoles,
-          occurred_at: nowTime,
-        };
-        setTraces((prev) => [newTrace, ...prev]);
-        setSelectedTrace(newTrace);
-        setActiveGateTool("run_shell_cmd");
-        setActiveGateLatency(0.17);
-        setActiveGateVerdict("blocked");
-        setStatusMessage(
-          "Contained • Shell obfuscation (hex escape '\\x65' & base64 pipe) blocked by positive allowlist (0.17ms)"
-        );
-      } else if (scenario === "rbac_denied") {
-        const newTrace: TraceTelemetryRow = {
-          id: `tr-${Date.now()}`,
-          trace_id: "ee119922883377446655001122334455",
-          span_id: "3322114455667788",
-          agent_name: "SecOps RAG Incident Triager",
-          framework: "Vertex ADK",
-          step_type: "system_halt",
-          tool_name: "azure_blob_inspect",
-          tool_arguments: { container_name: "prod-logs" },
-          observation_snippet: `Caller '${currentUser.email}' lacks required role [cloud_operator, admin].`,
-          thought_content: "Caller RBAC intersection evaluated: agent is allowed, but human user is unauthorized.",
-          risk_tier: "read_only",
-          verdict: "blocked",
-          detector_tier: "delegated_rbac_engine",
-          confidence_score: 1.0,
-          firewall_latency_ms: 0.08,
-          ephemeral_token_jti: null,
-          target_resource: "https://management.azure.com",
-          cab_policy: null,
-          cloud_provider: "azure",
-          delegated_user: currentUser.email,
-          delegated_roles: currentUser.delegatedRoles,
-          occurred_at: nowTime,
-        };
-        setTraces((prev) => [newTrace, ...prev]);
-        setSelectedTrace(newTrace);
-        setActiveGateTool("azure_blob_inspect");
-        setActiveGateLatency(0.08);
-        setActiveGateVerdict("blocked");
-        setStatusMessage(
-          `Per-User RBAC Denied • Caller '${currentUser.email}' with roles [${currentUser.delegatedRoles.join(", ")}] lacks required [cloud_operator] (0.08ms)`
-        );
-      } else if (scenario === "multicloud_sts") {
-        const newTrace: TraceTelemetryRow = {
-          id: `tr-${Date.now()}`,
-          trace_id: "31d90012fae8471290bc1129a740192b",
-          span_id: "4410ab9912cd8812",
-          agent_name: "SecOps RAG Incident Triager",
-          framework: "Vertex ADK",
-          step_type: "action",
-          tool_name: "azure_blob_inspect",
-          tool_arguments: { container_name: "prod-logs" },
-          observation_snippet: "Container metadata verified. 4 log blobs indexed.",
-          thought_content: "Querying Azure Blob Storage with JIT Entra ID On-Behalf-Of (OBO) token.",
-          risk_tier: "read_only",
-          verdict: "allow",
-          detector_tier: "schema_validator",
-          confidence_score: 0.005,
-          firewall_latency_ms: 0.15,
-          ephemeral_token_jti: "rh_az_sts_7f9910e42a19",
-          target_resource: "https://management.azure.com",
-          cab_policy: null,
-          cloud_provider: "azure",
-          delegated_user: "alice.chen@enterprise.com",
-          delegated_roles: ["cloud_operator", "admin"],
-          occurred_at: nowTime,
-        };
-        setTraces((prev) => [newTrace, ...prev]);
-        setSelectedTrace(newTrace);
-        setActiveGateTool("azure_blob_inspect");
-        setActiveGateLatency(0.15);
-        setActiveGateVerdict("allow");
-        setStatusMessage(
-          "Multi-Cloud STS Minted • Ephemeral Azure Entra ID OBO token issued with 30s TTL (0.15ms)"
-        );
-      } else {
-        const newInterventionId = crypto.randomUUID();
-        const newIntervention: HITLInterventionItem = {
-          id: newInterventionId,
-          trace_id: "aa8811223344556677889900aabbccdd",
-          span_id: "1234567890abcdef",
-          agent_id: agents[0].id,
-          agent_name: agents[0].name,
-          framework: agents[0].framework,
-          status: "pending",
-          risk_tier: "destructive",
-          proposed_tool_name: "delete_production_database",
-          proposed_tool_arguments: {
-            db_name: "core-ledger-prod-01",
-            skip_final_snapshot: true,
-            region: "asia-southeast1",
-          },
-          target_cloud_resource:
-            "//sqladmin.googleapis.com/instances/core-ledger-prod-01",
-          requested_iam_permissions: ["inRole:roles/cloudsql.admin"],
-          agent_justification:
-            "Autonomous cost-remediation loop selected core-ledger-prod-01 for immediate deletion.",
-          serialized_agent_state: {
-            graph_node: "remediation_step_4",
-            retry_count: 0,
-            checkpoint_ts: Date.now(),
-          },
-          state_checksum:
-            "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08",
-          resume_webhook_url: "http://localhost:8099/webhooks/agent-resume",
-          required_approvals: 2,
-          created_at: new Date().toISOString(),
-          expires_at: new Date(Date.now() + 3600_000).toISOString(),
-        };
-        setInterventions((prev) => [newIntervention, ...prev]);
-        setActiveGateTool("delete_production_database");
-        setActiveGateLatency(0.12);
-        setActiveGateVerdict("hitl_paused");
-        setStatusMessage(
-          "Four-Eyes Review Pending • Destructive database termination paused for dual human operator signatures"
-        );
-      }
-    },
-    [currentUser, agents]
-  );
+  const riskById = useMemo(() => new Map((risk ?? []).map((r) => [r.agent_id, r])), [risk]);
+  const agents = useMemo(() => (summary?.agents ?? []).filter((a) => !agentId || a.agent_id === agentId), [summary, agentId]);
+  const labels = useMemo(() => (summary?.series ?? []).map((p) => bucketLabel(p.bucket_start, window_)), [summary, window_]);
 
   if (!session) return null;
 
+  const actions = (
+    <>
+      <Button onClick={() => void verifyChain()} disabled={verifying} aria-label="Verify the Black Box chain">
+        <ShieldCheck className="h-3.5 w-3.5" /> {verifying ? "Verifying…" : "Verify chain"}
+      </Button>
+    </>
+  );
+
   return (
-    <div className="flex h-screen w-screen flex-col overflow-hidden bg-[#FFFFFF] text-[#0F0F0F] select-none">
-      <div
-        role="status"
-        className="shrink-0 bg-[#FFF4E5] px-4 py-1.5 text-center text-[12px] font-medium text-[#8A4B00]"
-      >
-        {engineConnected
-          ? "Live: agents and the review queue come from redhand-core. Traces, the canvas and simulations are sample data."
-          : "Demo data: not connected to redhand-core. Everything on this page is sample data."}{" "}
-        Use the Passports page for real control actions.
-      </div>
-      {/* 1. TOP NAVIGATION BAR */}
-      <header className="flex h-[56px] shrink-0 items-center justify-between border-b border-[#E5E5E5] bg-[#FFFFFF] px-4">
-        <div className="flex items-center gap-4">
-          <button
-            className="flex h-[40px] w-[40px] items-center justify-center rounded-full text-[#606060] hover:bg-[#F2F2F2]"
-            aria-label="Menu"
-          >
-            <Menu className="h-5 w-5 text-[#0F0F0F]" />
-          </button>
-
-          <div className="flex items-center gap-2">
-            <div className="flex h-7 w-9 items-center justify-center rounded-[8px] bg-[#FF0000]">
-              <Hand className="h-4 w-4 text-[#FFFFFF]" />
-            </div>
-            <span className="text-[20px] leading-[28px] font-bold tracking-tight text-[#0F0F0F]">
-              RedHand
-            </span>
-            <span className="text-[11px] font-bold uppercase tracking-wider text-[#606060] bg-[#F2F2F2] px-1.5 py-0.5 rounded">
-              ASPM
-            </span>
-          </div>
-          <nav className="flex gap-1 text-[13px]">
-            <a href="/passports" className="whitespace-nowrap rounded-full px-3 py-1.5 font-medium text-[#606060] hover:bg-[#F2F2F2]">
-              Passports
-            </a>
-            <span className="whitespace-nowrap rounded-full bg-[#0F0F0F] px-3 py-1.5 font-semibold text-[#FFFFFF]">
-              Command center
-            </span>
-          </nav>
-        </div>
-
-        {/* Center Search Input */}
-        <div className="flex w-full max-w-[500px] items-center">
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Filter traces by agent, tool, user identity, or cloud resource..."
-            className="h-[38px] flex-1 rounded-l-full border border-[#E5E5E5] bg-[#FFFFFF] px-4 text-[13px] text-[#0F0F0F] placeholder-[#606060] focus:border-[#0F0F0F] focus:outline-none"
-          />
-          <button
-            onClick={() => setSearchQuery("")}
-            className="flex h-[38px] w-[56px] items-center justify-center rounded-r-full border border-l-0 border-[#E5E5E5] bg-[#F8F8F8] hover:bg-[#F2F2F2]"
-            aria-label="Search"
-          >
-            <Search className="h-4 w-4 text-[#606060]" />
-          </button>
-        </div>
-
-        {/* Right Metadata + Engine Sync Indicator */}
-        <div className="flex items-center gap-3">
-          <button
-            onClick={() => {
-              signOut();
-              window.location.href = "/login";
-            }}
-            className="whitespace-nowrap text-[12px] text-[#606060] hover:underline"
-            title={session.email}
-          >
-            Sign out
-          </button>
-
-          <span className="inline-flex h-[34px] items-center gap-1.5 rounded-full bg-[#F2F2F2] px-3.5 text-[12px] font-medium text-[#0F0F0F]">
-            {engineConnected ? (
-              <>
-                <Radio className="h-3.5 w-3.5 text-[#2BA640]" />
-                Live Engine
-              </>
-            ) : (
-              <>
-                <ShieldCheck className="h-4 w-4 text-[#2BA640]" />
-                AgentWall Active
-              </>
-            )}
-          </span>
-
-          {/* Enterprise SSO User & Delegated RBAC Selector */}
-          <div className="relative flex items-center gap-2 rounded-full border border-[#E5E5E5] bg-[#F2F2F2] py-1 px-3 hover:bg-[#E5E5E5] transition-colors cursor-pointer">
-            <div className="flex h-6 w-6 items-center justify-center rounded-full bg-[#0F0F0F] text-[10px] font-bold text-[#FFFFFF]">
-              {currentUser.avatarInitials}
-            </div>
-            <div className="flex flex-col text-left">
-              <span className="text-[12px] font-semibold text-[#0F0F0F] leading-tight">
-                {currentUser.name}
-              </span>
-              <span className="text-[9px] uppercase tracking-wider text-[#606060] font-mono">
-                {currentUser.role.replace("_", " ")} [{currentUser.delegatedRoles.join(", ")}]
-              </span>
-            </div>
-            <select
-              value={currentUser.id}
-              onChange={(e) => {
-                const found = ENTERPRISE_USERS.find(
-                  (u) => u.id === e.target.value
-                );
-                if (found) setCurrentUser(found);
-              }}
-              className="absolute inset-0 opacity-0 cursor-pointer"
-              title="Simulation persona (demo only; does not change who you are signed in as)"
+    <AppShell title="Insights" organization={me?.organization_name} role={me?.role} actions={actions}>
+      {/* Filter row */}
+      <div className="mb-4 flex flex-wrap items-center gap-2">
+        <div role="tablist" aria-label="Time window" className="flex rounded-[8px] border border-rh-hairline bg-rh-card p-0.5">
+          {WINDOW_OPTIONS.map((o) => (
+            <button
+              key={o.value}
+              role="tab"
+              aria-selected={window_ === o.value}
+              onClick={() => setWindow(o.value)}
+              className={`rounded-[6px] px-3 py-1 text-[12px] font-medium ${window_ === o.value ? "bg-rh-elevated text-rh-text" : "text-rh-text-2 hover:text-rh-text"}`}
             >
-              {ENTERPRISE_USERS.map((u) => (
-                <option key={u.id} value={u.id}>
-                  {u.name} — {u.role.toUpperCase()} (Roles: {u.delegatedRoles.join(", ")})
-                </option>
-              ))}
-            </select>
+              {o.label}
+            </button>
+          ))}
+        </div>
+        <select
+          aria-label="Agent"
+          value={agentId}
+          onChange={(e) => setAgentId(e.target.value)}
+          className="rounded-[8px] border border-rh-hairline bg-rh-card px-2 py-1.5 text-[12px] text-rh-text"
+        >
+          <option value="">All agents</option>
+          {(summary?.agents ?? []).map((a) => <option key={a.agent_id} value={a.agent_id}>{a.name ?? a.agent_id.slice(0, 8)}</option>)}
+        </select>
+        <span className="rounded-full border border-rh-hairline px-2.5 py-1 text-[11px] text-rh-text-2">Time zone: UTC</span>
+        <div className="ml-auto flex items-center gap-2">
+          {canExport && <Button onClick={() => void exportCsv()}>Export CSV</Button>}
+          <Button onClick={() => void load()} disabled={loading} aria-label="Refresh">
+            <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
+          </Button>
+        </div>
+      </div>
+
+      {notice && <div role="status" className="mb-4 rounded-[8px] border border-rh-hairline bg-rh-elevated px-4 py-2.5 text-[13px] text-rh-text">{notice}</div>}
+      {error && <div className="mb-4"><ErrorState message={error} onRetry={() => void load()} /></div>}
+
+      {summary && (
+        <>
+          {/* Control strip */}
+          <div className="mb-4 flex flex-wrap items-center gap-2" aria-label="Organization controls">
+            {controlChips(summary).map((c) => <Chip key={c.label} tone={c.tone}>{c.label}</Chip>)}
+            <Link href="/passports" className="ml-1 text-[12px] text-rh-text-2 underline underline-offset-2 hover:text-rh-text">Manage on Passports</Link>
           </div>
 
-          <button
-            className="relative flex h-[38px] w-[38px] items-center justify-center rounded-full text-[#606060] hover:bg-[#F2F2F2]"
-            aria-label="Notifications"
-          >
-            <Bell className="h-5 w-5 text-[#0F0F0F]" />
-            {pendingHitlCount > 0 && (
-              <span className="absolute right-1 top-1 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-[#FF0000] px-1 text-[10px] font-bold text-[#FFFFFF]">
-                {pendingHitlCount}
-              </span>
-            )}
-          </button>
-        </div>
-      </header>
+          {/* KPI tiles */}
+          <div className="mb-4 grid grid-cols-2 gap-3 md:grid-cols-5">
+            <KpiTile label="Gateway decisions" value={formatCount(summary.totals.decisions)} tone="steel" note={windowLabel(window_)} />
+            <KpiTile label="Allowed" value={formatCount(summary.totals.allowed)} tone="teal" note={`${percent(summary.totals.allowed, summary.totals.decisions)}% of decisions`} />
+            <KpiTile label="Refused" value={formatCount(summary.totals.refused)} tone="crimson" note={`${percent(summary.totals.refused, summary.totals.decisions)}% of decisions`} />
+            <KpiTile label="Errors" value={formatCount(summary.totals.errors)} tone="ochre" note="allowed, then failed" />
+            <KpiTile label="Agents" value={`${formatCount(summary.passports.managed_active)} / ${formatCount(summary.passports.reported_only)}`} note="managed active / reported only" />
+          </div>
 
-      {/* 2. CHIP FILTER BAR */}
-      <div className="flex items-center justify-between border-b border-[#E5E5E5] bg-[#FFFFFF] px-4 py-2">
-        <div className="flex items-center gap-1.5 overflow-x-auto">
-          {FILTER_CHIPS.map((chip) => {
-            const isSelected = selectedChip === chip;
-            return (
-              <button
-                key={chip}
-                onClick={() => setSelectedChip(chip)}
-                className={`rounded-full px-3 py-1 text-[13px] leading-[18px] font-medium transition-colors whitespace-nowrap ${
-                  isSelected
-                    ? "bg-[#0F0F0F] text-[#FFFFFF]"
-                    : "bg-[#F2F2F2] text-[#0F0F0F] hover:bg-[#E5E5E5]"
-                }`}
-              >
-                {chip}
-              </button>
-            );
-          })}
-        </div>
+          {!hasCalls(summary) ? (
+            <Card><EmptyState title={`No gateway calls in the ${windowLabel(window_).toLowerCase()}`} detail="Calls appear here as agents use the gateway. Agents that only report through the SDK are not counted: they have no gateway access." /></Card>
+          ) : (
+            <>
+              <Card title="Top agents" subtitle="Most active agents by gateway decisions" className="mb-4">
+                <div className="relative overflow-x-auto">
+                  <table className="w-full min-w-[520px] text-left text-[13px]">
+                    <thead>
+                      <tr className="text-[12px] text-rh-text-2">
+                        <th className="border-b border-rh-hairline px-2 py-1.5 font-medium">Agent</th>
+                        <th className="border-b border-rh-hairline px-2 py-1.5 font-medium">Framework</th>
+                        <th className="border-b border-rh-hairline px-2 py-1.5 text-right font-medium">Decisions</th>
+                        <th className="border-b border-rh-hairline px-2 py-1.5 text-right font-medium">Refused</th>
+                        {risk && <th className="border-b border-rh-hairline px-2 py-1.5 font-medium">Risk</th>}
+                        <th className="border-b border-rh-hairline px-2 py-1.5 font-medium"><span className="sr-only">Incident view</span></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {agents.map((a) => {
+                        const r = riskById.get(a.agent_id);
+                        return (
+                          <tr key={a.agent_id}>
+                            <td className="border-b border-rh-hairline px-2 py-2 text-rh-text">{a.name ?? a.agent_id.slice(0, 8)}</td>
+                            <td className="border-b border-rh-hairline px-2 py-2 text-rh-text-2">{a.framework ?? "unknown"}</td>
+                            <td className="rh-tabular border-b border-rh-hairline px-2 py-2 text-right text-rh-text">{formatCount(a.decisions)}</td>
+                            <td className="rh-tabular border-b border-rh-hairline px-2 py-2 text-right text-rh-text">{formatCount(a.refused)} <span className="text-rh-text-2">({percent(a.refused, a.decisions)}%)</span></td>
+                            {risk && <td className="border-b border-rh-hairline px-2 py-2">{r ? <Chip tone={RISK_TONE[r.level] ?? "neutral"}>{r.level} · {r.score}</Chip> : <span className="text-rh-text-2">–</span>}</td>}
+                            <td className="border-b border-rh-hairline px-2 py-2 text-right"><Link href={`/passports/${a.agent_id}/timeline`} className="text-[12px] text-rh-text-2 underline underline-offset-2 hover:text-rh-text">Timeline</Link></td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </Card>
 
-        <div className="hidden lg:flex items-center gap-2 text-[12px] text-[#606060]">
-          <span
-            className={`h-2 w-2 rounded-full ${
-              activeGateVerdict === "blocked"
-                ? "bg-[#FF0000]"
-                : activeGateVerdict === "hitl_paused"
-                  ? "bg-[#FB8C00]"
-                  : "bg-[#2BA640]"
-            }`}
-          />
-          <span className="font-medium text-[#0F0F0F]">{statusMessage}</span>
-        </div>
-      </div>
+              <div className="grid gap-4 lg:grid-cols-3">
+                <ChartCard
+                  title="Gateway decisions over time" subtitle="Allowed, refused and errors" summary={seriesSummary(summary)}
+                  table={{ headers: ["Time (UTC)", "Allowed", "Refused", "Errors"], rows: summary.series.map((p, i) => [labels[i], formatCount(p.allowed), formatCount(p.refused), formatCount(p.errors)]) }}
+                >
+                  <StackedArea labels={labels} layers={[
+                    { name: "allowed", tone: "steel", values: summary.series.map((p) => p.allowed) },
+                    { name: "refused", tone: "crimson", values: summary.series.map((p) => p.refused) },
+                    { name: "errors", tone: "ochre", values: summary.series.map((p) => p.errors) },
+                  ]} />
+                </ChartCard>
 
-      {/* 3. MIDDLE WORKSPACE: CANVAS + INTERVENTION RAIL */}
-      <div className="flex flex-1 min-h-0 overflow-hidden">
-        <div className="relative flex-1 h-full bg-[#F9F9F9]">
-          <ReactFlow
-            nodes={nodes}
-            edges={edges}
-            nodeTypes={nodeTypes}
-            fitView
-            fitViewOptions={{ padding: 0.16 }}
-            proOptions={{ hideAttribution: true }}
-          >
-            <Background color="#D4D4D4" gap={20} size={1} />
-            <Controls position="bottom-left" />
-          </ReactFlow>
-        </div>
+                <ChartCard
+                  title="Data returned to agents" subtitle="Result size on allowed calls" summary={`${formatBytes(summary.totals.bytes_returned)} returned to agents in the ${windowLabel(window_).toLowerCase()}.`}
+                  table={{ headers: ["Time (UTC)", "Returned"], rows: summary.series.map((p, i) => [labels[i], formatBytes(p.bytes)]) }}
+                >
+                  <AreaChart labels={labels} values={summary.series.map((p) => p.bytes)} tone="teal" format={formatBytes} />
+                </ChartCard>
 
-        <InterventionRail
-          interventions={interventions}
-          selectedTrace={selectedTrace}
-          agents={agents}
-          currentUser={currentUser}
-          onResolveIntervention={handleResolveIntervention}
-          onToggleAgentQuarantine={handleToggleAgentQuarantine}
-        />
-      </div>
+                <ChartCard
+                  title="Outcomes" subtitle="Share of gateway decisions"
+                  summary={`${percent(summary.totals.allowed, summary.totals.decisions)}% of decisions were allowed.`}
+                  table={{ headers: ["Outcome", "Decisions"], rows: outcomeSlices(summary.totals).map((s) => [s.label, formatCount(s.value)]) }}
+                >
+                  <Donut slices={outcomeSlices(summary.totals)} centre={`${percent(summary.totals.allowed, summary.totals.decisions)}%`} centreNote="allowed" />
+                </ChartCard>
 
-      {/* 4. BOTTOM DOCK: FLIGHT RECORDER & SIMULATION DOCK */}
-      <FlightRecorderDock
-        traces={filteredTraces}
-        agents={agents}
-        selectedTraceId={selectedTrace?.id ?? null}
-        onSelectTrace={(t) => setSelectedTrace(t)}
-        onSimulateAttack={handleSimulateAttack}
-      />
-    </div>
+                <ChartCard
+                  title="Call duration" subtitle="Allowed calls: p50 and p95"
+                  summary={`Allowed calls took ${formatMs(summary.latency.p50_ms)} at the median and ${formatMs(summary.latency.p95_ms)} at the 95th percentile, tool time included.`}
+                  table={{ headers: ["Measure", "Value"], rows: [["p50", formatMs(summary.latency.p50_ms)], ["p95", formatMs(summary.latency.p95_ms)], ["Samples", formatCount(summary.latency.samples)]] }}
+                  empty={summary.latency.samples === 0 ? "No allowed calls with a timing in this window." : undefined}
+                >
+                  <LatencyBars p50={summary.latency.p50_ms} p95={summary.latency.p95_ms} />
+                </ChartCard>
+
+                <ChartCard
+                  title="Why calls were refused" subtitle="Most common reasons" summary={`${reasonRows(summary.reasons).length} refusal reasons.`}
+                  table={{ headers: ["Reason", "Count"], rows: reasonRows(summary.reasons).map((r) => [r.label, formatCount(r.count)]) }}
+                  empty={summary.reasons.length === 0 ? "Nothing was refused in this window." : undefined}
+                >
+                  <RankedBars rows={reasonRows(summary.reasons).map((r) => ({ label: r.label, value: r.count }))} tone="crimson" />
+                </ChartCard>
+
+                <ChartCard
+                  title="Most called tools" subtitle="By server and tool" summary={`${summary.tools.length} most called tools.`}
+                  table={{ headers: ["Tool", "Calls", "Refused"], rows: summary.tools.map((t) => [`${t.server} / ${t.tool}`, formatCount(t.calls), formatCount(t.refused)]) }}
+                  empty={summary.tools.length === 0 ? "No tool calls in this window." : undefined}
+                >
+                  <RankedBars rows={summary.tools.map((t) => ({ label: `${t.server} / ${t.tool}`, value: t.calls, detail: t.refused ? `${formatCount(t.refused)} refused` : undefined }))} tone="steel" />
+                </ChartCard>
+              </div>
+
+              <div className="mt-4">
+                <ChartCard
+                  title="Agent, server and outcome" subtitle="Where the top agents' calls went and how they ended"
+                  summary="Flow from the most active agents to the servers they called and the outcome of each call."
+                  table={{ headers: ["Agent", "Server", "Outcome", "Decisions"], rows: summary.flow.map((f) => [summary.agents.find((a) => a.agent_id === f.agent_id)?.name ?? f.agent_id.slice(0, 8), f.server || "(none)", f.decision === "ALLOW" ? "Allowed" : f.decision === "BLOCK" ? "Refused" : "Errors", formatCount(f.count)]) }}
+                  empty={summary.flow.length === 0 ? "No flows to draw yet." : undefined}
+                >
+                  <Flow rows={summary.flow
+                    .filter((f) => !agentId || f.agent_id === agentId)
+                    .map((f) => ({
+                      agent: summary.agents.find((a) => a.agent_id === f.agent_id)?.name ?? f.agent_id.slice(0, 8),
+                      server: f.server || "(none)",
+                      outcome: f.decision === "ALLOW" ? "Allowed" : f.decision === "BLOCK" ? "Refused" : "Errors",
+                      count: f.count,
+                    }))} />
+                </ChartCard>
+              </div>
+            </>
+          )}
+        </>
+      )}
+      {!summary && !error && <p className="text-[13px] text-rh-text-2">Loading…</p>}
+    </AppShell>
   );
 }
