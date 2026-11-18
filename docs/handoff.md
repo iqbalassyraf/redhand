@@ -2,6 +2,9 @@
 
 Both tools work on RedHand and its demo projects. This file is how each learns what the other did. Newest entry first.
 
+## 2026-11-18, Claude Code: tonight's brief
+`docs/testing/briefs/2026-11-18-tonight.md` for owner + Antigravity: Part 0 (migration 20261201, core then gateway then dashboard, Supabase Site URL, smoke with the new 404 checks), Parts R and S (copied word for word), Q5, Q9, J2/J2b, T1/T3, clean-up. Guarded by `agentwall/tests/test_tonight_brief.py`. Results on `docs/test-results-2026-11-18-tonight`. Leave Night Test Org pending: purge rehearsal 2026-11-25.
+
 ## 2026-11-18, Claude Code: one audit trail (ADR 0030), gateway ledger retired
 Removed `agentwall/src/telemetry/audit_logger.py`, `/v1/audit/logs`, `/v1/audit/verify`, `AGENTWALL_AUDIT_LOG_FILE`. Black Box is the only trail. Tests moved to the recorder (`Harness.decisions()`), e2e done-tests read `agent_events`. Smoke scripts expect 404 at the old path: deploy the new gateway BEFORE running them. Night brief J2 now uses "Verify chain" (+ J2b curl expects 404). Not run: staging. CLAUDE.md wording proposed in the PR, not applied.
 
