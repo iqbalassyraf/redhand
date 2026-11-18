@@ -72,7 +72,7 @@ export function ChartCard({ title, subtitle, summary, table, empty, children }: 
 
 const W = 360;
 const H = 160;
-const PAD = { left: 38, right: 8, top: 8, bottom: 22 };
+const PAD = { left: 52, right: 8, top: 8, bottom: 22 };
 
 function axisLabels(labels: string[], maxLabels: number): { i: number; text: string }[] {
   if (labels.length === 0) return [];
@@ -104,7 +104,7 @@ export function StackedArea({ labels, layers, format = formatCount }: {
         <path key={layers[i].name} d={bandPath(xs, band.lower, band.upper, y)} style={{ fill: TONE_VAR[layers[i].tone], fillOpacity: 0.55, stroke: TONE_VAR[layers[i].tone] }} strokeWidth={1} />
       ))}
       {axisLabels(labels, 6).map(({ i, text }) => (
-        <text key={i} x={xs[i]} y={H - 6} textAnchor="middle" className="rh-tabular" style={{ fill: "var(--rh-text-secondary)", fontSize: 10 }}>{text}</text>
+        <text key={i} x={xs[i]} y={H - 6} textAnchor={i === labels.length - 1 ? "end" : i === 0 ? "start" : "middle"} className="rh-tabular" style={{ fill: "var(--rh-text-secondary)", fontSize: 10 }}>{text}</text>
       ))}
     </svg>
   );
@@ -126,7 +126,7 @@ export function AreaChart({ labels, values, tone, format = formatCount }: { labe
       <path d={areaPath(points, y(0))} style={{ fill: TONE_VAR[tone], fillOpacity: 0.3 }} />
       <path d={linePath(points)} fill="none" style={{ stroke: TONE_VAR[tone] }} strokeWidth={1.5} />
       {axisLabels(labels, 6).map(({ i, text }) => (
-        <text key={i} x={x(i)} y={H - 6} textAnchor="middle" className="rh-tabular" style={{ fill: "var(--rh-text-secondary)", fontSize: 10 }}>{text}</text>
+        <text key={i} x={x(i)} y={H - 6} textAnchor={i === labels.length - 1 ? "end" : i === 0 ? "start" : "middle"} className="rh-tabular" style={{ fill: "var(--rh-text-secondary)", fontSize: 10 }}>{text}</text>
       ))}
     </svg>
   );
@@ -200,9 +200,9 @@ export function LatencyBars({ p50, p95 }: { p50: number | null; p95: number | nu
 const OUTCOME_TONE: Record<string, Tone> = { Allowed: "teal", Refused: "crimson", Errors: "ochre" };
 
 export function Flow({ rows }: { rows: FlowInput[] }) {
-  const width = 600;
-  const height = 200;
-  const layout = flowLayout(rows, { width, height, nodeWidth: 10, gap: 6, minHeight: 4 });
+  const width = 1000;
+  const height = 260;
+  const layout = flowLayout(rows, { width, height, nodeWidth: 12, gap: 8, minHeight: 5 });
   return (
     <svg viewBox={`0 0 ${width} ${height}`} className="h-auto w-full" aria-hidden>
       {layout.links.map((l, i) => {
@@ -216,8 +216,8 @@ export function Flow({ rows }: { rows: FlowInput[] }) {
         return (
           <g key={n.id}>
             <rect x={x} y={n.y} width={layout.nodeWidth} height={n.height} rx={2} style={{ fill: n.column === 2 ? TONE_VAR[OUTCOME_TONE[n.label] ?? "neutral"] : "var(--rh-text-secondary)" }} />
-            <text x={tx} y={n.y + n.height / 2 + 3} textAnchor={anchor} style={{ fill: "var(--rh-text-primary)", fontSize: 10 }}>
-              {n.label.length > 22 ? `${n.label.slice(0, 21)}…` : n.label}
+            <text x={tx} y={n.y + n.height / 2 + 3} textAnchor={anchor} style={{ fill: "var(--rh-text-primary)", fontSize: 13 }}>
+              {n.label.length > 28 ? `${n.label.slice(0, 27)}…` : n.label}
             </text>
           </g>
         );

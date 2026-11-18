@@ -78,9 +78,17 @@ export default function InsightsPage() {
   useEffect(() => {
     if (!token) return;
     meApi.get(token).then(setMe).catch(() => setMe(null));
-    // Risk scores need the security operator role: for anyone below it, or on an older core, the table simply shows no risk column.
-    riskApi.list(token).then((r) => setRisk(r.agents)).catch(() => setRisk(null));
   }, [token]);
+
+  // Risk scores need the security operator role: a viewer is not asked (no failed request), and on an older core the table simply has no risk column.
+  const role = me?.role;
+  useEffect(() => {
+    if (!token || !role || role === "viewer") {
+      setRisk(null);
+      return;
+    }
+    riskApi.list(token).then((r) => setRisk(r.agents)).catch(() => setRisk(null));
+  }, [token, role]);
 
   const canExport = me?.role === "owner" || me?.role === "admin" || me?.role === "security_operator";
 
@@ -188,7 +196,7 @@ export default function InsightsPage() {
           ) : (
             <>
               <Card title="Top agents" subtitle="Most active agents by gateway decisions" className="mb-4">
-                <div className="overflow-x-auto">
+                <div className="relative overflow-x-auto">
                   <table className="w-full min-w-[520px] text-left text-[13px]">
                     <thead>
                       <tr className="text-[12px] text-rh-text-2">
