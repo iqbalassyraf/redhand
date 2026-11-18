@@ -8,7 +8,7 @@
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { Hand, LogOut, OctagonX, Plus, RefreshCw, Trash2 } from "lucide-react";
+import { OctagonX, Plus, RefreshCw, Trash2 } from "lucide-react";
 
 import {
   ApiError,
@@ -31,6 +31,7 @@ import {
   telegramApi,
 } from "@/lib/api";
 import { useAuth, useRequiredSession } from "@/lib/auth";
+import { AppShell } from "@/components/shell/AppShell";
 import { LEVEL_LABEL, LEVEL_STYLE, automaticActorLabel } from "@/lib/riskForm";
 import { type AgentSpend, type SpendToday, spendCell } from "@/lib/spend";
 import { DestinationsPanel } from "./DestinationsPanel";
@@ -49,10 +50,10 @@ const SYSTEM_ACTOR_ID = "00000000-0000-0000-0000-000000000000";
 const FRAMEWORKS = ["n8n", "Claude", "LangGraph", "CrewAI", "custom"];
 
 const STATUS_STYLE: Record<PassportStatus, string> = {
-  active: "bg-[#E6F4EA] text-[#1E7B34]",
-  frozen: "bg-[#E8F0FE] text-[#1A56DB]",
-  revoked: "bg-[#FDECEC] text-[#B42318]",
-  expired: "bg-[#F2F2F2] text-[#606060]",
+  active: "bg-rh-teal-wash text-rh-teal-text",
+  frozen: "bg-rh-steel-wash text-rh-steel-text",
+  revoked: "bg-rh-crimson-wash text-rh-crimson-text",
+  expired: "bg-rh-elevated text-rh-text-2",
 };
 
 function daysUntil(iso: string): number {
@@ -204,62 +205,10 @@ export default function PassportsPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#F8F8F8] text-[#0F0F0F]">
-      <header className="flex h-[56px] items-center justify-between border-b border-[#E5E5E5] bg-[#FFFFFF] px-4">
-        <div className="flex min-w-0 items-center gap-4">
-          <div className="flex items-center gap-2">
-            <div className="flex h-7 w-9 items-center justify-center rounded-[8px] bg-[#FF0000]">
-              <Hand className="h-4 w-4 text-[#FFFFFF]" />
-            </div>
-            <span className="text-[20px] font-bold tracking-tight">RedHand</span>
-          </div>
-          <nav className="flex gap-1 overflow-x-auto whitespace-nowrap text-[13px]">
-            <Link href="/passports" className="rounded-full bg-[#0F0F0F] px-3 py-1.5 font-semibold text-[#FFFFFF]">
-              Passports
-            </Link>
-            <Link href="/blackbox" className="rounded-full px-3 py-1.5 font-medium text-[#606060] hover:bg-[#F2F2F2]">
-              Black Box
-            </Link>
-            <Link href="/honeytokens" className="rounded-full px-3 py-1.5 font-medium text-[#606060] hover:bg-[#F2F2F2]">
-              Honeytokens
-            </Link>
-            <Link href="/scanner" className="rounded-full px-3 py-1.5 font-medium text-[#606060] hover:bg-[#F2F2F2]">
-              MCP Scanner
-            </Link>
-            <Link href="/radar" className="rounded-full px-3 py-1.5 font-medium text-[#606060] hover:bg-[#F2F2F2]">
-              Radar
-            </Link>
-            <Link href="/coverage" className="rounded-full px-3 py-1.5 font-medium text-[#606060] hover:bg-[#F2F2F2]">
-              Coverage
-            </Link>
-            <Link href="/organization" className="rounded-full px-3 py-1.5 font-medium text-[#606060] hover:bg-[#F2F2F2]">
-              Organization
-            </Link>
-            <Link href="/demo" className="rounded-full px-3 py-1.5 font-medium text-[#606060] hover:bg-[#F2F2F2]">
-              Command center (demo)
-            </Link>
-          </nav>
-        </div>
-        <div className="flex items-center gap-3 text-[12px]">
-          <span className="hidden text-[#606060] sm:inline">
-            {session.email}
-            {me ? ` · ${me.organization_name} · ${me.role.replace("_", " ")}` : session.role ? ` · ${session.role.replace("_", " ")}` : ""}
-            {session.mode === "development" ? " · dev login" : ""}
-          </span>
-          <button
-            onClick={() => {
-              signOut();
-              window.location.href = "/login";
-            }}
-            className="flex items-center gap-1 rounded-full px-3 py-1.5 hover:bg-[#F2F2F2]"
-          >
-            <LogOut className="h-3.5 w-3.5" /> Sign out
-          </button>
-        </div>
-      </header>
+    <AppShell title="Passports" organization={me?.organization_name} role={me?.role}>
 
-      <main className="mx-auto flex max-w-[1200px] flex-col gap-6 px-4 py-6">
-        <section className="flex flex-wrap items-center justify-between gap-4 rounded-[12px] border border-[#E5E5E5] bg-[#FFFFFF] p-4">
+      <div className="mx-auto flex max-w-[1200px] flex-col gap-6 px-4 py-6">
+        <section className="flex flex-wrap items-center justify-between gap-4 rounded-[12px] border border-rh-hairline bg-rh-card p-4">
           <div className="flex flex-wrap gap-4 text-[13px]">
             {(Object.keys(counts) as PassportStatus[]).map((s) => (
               <span key={s} className="flex items-center gap-1.5">
@@ -271,7 +220,7 @@ export default function PassportsPage() {
           <div className="flex items-center gap-2 text-[13px]">
             <span
               className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${
-                orgSafeMode ? "bg-[#FFF4E5] text-[#8A4B00]" : "bg-[#F2F2F2] text-[#606060]"
+                orgSafeMode ? "bg-rh-ochre-wash text-rh-ochre" : "bg-rh-elevated text-rh-text-2"
               }`}
               title="While on, agents can use only tools their scopes declare as read. You declare read or write; RedHand cannot verify it."
             >
@@ -280,7 +229,7 @@ export default function PassportsPage() {
             <button
               onClick={onOrgSafeMode}
               disabled={busy}
-              className="rounded-full border border-[#E5E5E5] px-3 py-1.5 text-[12px] font-medium hover:bg-[#F2F2F2] disabled:opacity-40"
+              className="rounded-full border border-rh-hairline px-3 py-1.5 text-[12px] font-medium hover:bg-rh-elevated disabled:opacity-40"
             >
               {orgSafeMode ? "Turn off" : "Turn on"}
             </button>
@@ -288,31 +237,31 @@ export default function PassportsPage() {
           <div className="flex items-center gap-2">
             <button
               onClick={refresh}
-              className="flex items-center gap-1 rounded-full border border-[#E5E5E5] px-3 py-2 text-[13px] hover:bg-[#F2F2F2]"
+              className="flex items-center gap-1 rounded-full border border-rh-hairline px-3 py-2 text-[13px] hover:bg-rh-elevated"
             >
               <RefreshCw className="h-3.5 w-3.5" /> Refresh
             </button>
             <button
               onClick={onFreezeAll}
               disabled={busy || counts.active === 0}
-              className="flex items-center gap-1.5 rounded-full bg-[#FF0000] px-4 py-2 text-[13px] font-bold text-[#FFFFFF] hover:bg-[#CC0000] disabled:opacity-40"
+              className="flex items-center gap-1.5 rounded-full bg-rh-crimson px-4 py-2 text-[13px] font-bold text-rh-canvas hover:bg-rh-crimson disabled:opacity-40"
             >
               <OctagonX className="h-4 w-4" /> Freeze all agents
             </button>
           </div>
         </section>
 
-        <p className="text-[12px] text-[#606060]">
+        <p className="text-[12px] text-rh-text-2">
           RedHand controls agents that connect through the RedHand gateway. Agents holding raw API keys
           or direct access outside the gateway are not covered.
         </p>
 
         {error && (
-          <div role="alert" className="rounded-[8px] bg-[#FDECEC] p-3 text-[13px] text-[#B42318]">
+          <div role="alert" className="rounded-[8px] bg-rh-crimson-wash p-3 text-[13px] text-rh-crimson-text">
             {error}
           </div>
         )}
-        {notice && <div className="rounded-[8px] bg-[#E6F4EA] p-3 text-[13px] text-[#1E7B34]">{notice}</div>}
+        {notice && <div className="rounded-[8px] bg-rh-teal-wash p-3 text-[13px] text-rh-teal-text">{notice}</div>}
 
         {risk && token && (
           <RiskLadderCard
@@ -325,23 +274,23 @@ export default function PassportsPage() {
         )}
 
         {revealedKey && (
-          <div className="rounded-[12px] border-2 border-[#0F0F0F] bg-[#FFFFFF] p-4">
+          <div className="rounded-[12px] border-2 border-rh-strong bg-rh-card p-4">
             <p className="text-[13px] font-semibold">Agent key for {revealedKey.name}</p>
-            <p className="mt-1 text-[12px] text-[#606060]">
+            <p className="mt-1 text-[12px] text-rh-text-2">
               Shown once. Store it in the agent&apos;s secret store; RedHand keeps only a hash. The agent
               exchanges it at <code>/v1/agent-auth/token</code> for a 10-minute access token.
             </p>
             <div className="mt-3 flex items-center gap-2">
-              <code className="flex-1 break-all rounded-[8px] bg-[#F2F2F2] p-2 text-[12px]">{revealedKey.key}</code>
+              <code className="flex-1 break-all rounded-[8px] bg-rh-elevated p-2 text-[12px]">{revealedKey.key}</code>
               <button
                 onClick={() => navigator.clipboard.writeText(revealedKey.key)}
-                className="rounded-full border border-[#E5E5E5] px-3 py-1.5 text-[12px] hover:bg-[#F2F2F2]"
+                className="rounded-full border border-rh-hairline px-3 py-1.5 text-[12px] hover:bg-rh-elevated"
               >
                 Copy
               </button>
               <button
                 onClick={() => setRevealedKey(null)}
-                className="rounded-full bg-[#0F0F0F] px-3 py-1.5 text-[12px] font-semibold text-[#FFFFFF]"
+                className="rounded-full bg-rh-teal px-3 py-1.5 text-[12px] font-semibold text-rh-canvas"
               >
                 I&apos;ve stored it
               </button>
@@ -478,8 +427,8 @@ export default function PassportsPage() {
 
         <div className="grid gap-6 lg:grid-cols-2">
           {me && !admin ? (
-            <section className="rounded-[12px] border border-[#E5E5E5] bg-[#FFFFFF] p-4 text-[13px] text-[#606060]">
-              <h2 className="text-[15px] font-semibold text-[#111111]">Register an agent</h2>
+            <section className="rounded-[12px] border border-rh-hairline bg-rh-card p-4 text-[13px] text-rh-text-2">
+              <h2 className="text-[15px] font-semibold text-rh-text">Register an agent</h2>
               <p className="mt-1">Registering an agent issues its key, so it needs an admin. Ask one of your admins to register it.</p>
             </section>
           ) : <RegisterAgentForm
@@ -533,8 +482,8 @@ export default function PassportsPage() {
         )}
 
         <AuditPanel entries={audit} passports={passports} servers={servers} />
-      </main>
-    </div>
+      </div>
+    </AppShell>
   );
 }
 
@@ -564,9 +513,9 @@ function PassportTable(props: {
   const usageByAgent = new Map<string, AgentUsage>((props.usage?.agents ?? []).map((u) => [u.agent_id, u]));
   const spendByAgent = new Map<string, AgentSpend>((props.spend?.agents ?? []).map((s) => [s.agent_id, s]));
   return (
-    <section className="overflow-x-auto rounded-[12px] border border-[#E5E5E5] bg-[#FFFFFF]">
+    <section className="overflow-x-auto rounded-[12px] border border-rh-hairline bg-rh-card">
       <table className="w-full min-w-[900px] text-left text-[13px]">
-        <thead className="border-b border-[#E5E5E5] text-[11px] uppercase tracking-wider text-[#606060]">
+        <thead className="border-b border-rh-hairline text-[11px] uppercase tracking-wider text-rh-text-2">
           <tr>
             <th className="p-3">Agent</th>
             <th className="p-3">Status</th>
@@ -582,7 +531,7 @@ function PassportTable(props: {
         <tbody>
           {passports.length === 0 && (
             <tr>
-              <td colSpan={9} className="p-6 text-center text-[#606060]">
+              <td colSpan={9} className="p-6 text-center text-rh-text-2">
                 No agents yet. Register one below.
               </td>
             </tr>
@@ -590,10 +539,10 @@ function PassportTable(props: {
           {passports.map((p) => {
             const days = daysUntil(p.expires_at);
             return (
-              <tr key={p.id} className="border-b border-[#F2F2F2] align-top">
+              <tr key={p.id} className="border-b border-rh-hairline align-top">
                 <td className="p-3">
                   <div className="font-semibold">{p.name}</div>
-                  <div className="text-[11px] text-[#606060]">
+                  <div className="text-[11px] text-rh-text-2">
                     {p.external_agent_id} · {p.framework} · v{p.version}
                   </div>
                 </td>
@@ -601,7 +550,7 @@ function PassportTable(props: {
                   <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${STATUS_STYLE[p.status]}`}>
                     {p.status}
                   </span>
-                  {p.status_reason && <div className="mt-1 text-[11px] text-[#606060]">{p.status_reason}</div>}
+                  {p.status_reason && <div className="mt-1 text-[11px] text-rh-text-2">{p.status_reason}</div>}
                   {(() => {
                     const r = riskByAgent.get(p.id);
                     if (!r) return null;  // no score: a role that cannot read risk, or an older core
@@ -619,14 +568,14 @@ function PassportTable(props: {
                   })()}
                   {p.reported_only === true && (
                     <div className="mt-1">
-                      <span title={REPORTED_ONLY_HELP} className="rounded-full bg-[#EEF2FF] px-2 py-0.5 text-[11px] font-semibold text-[#3730A3]">
+                      <span title={REPORTED_ONLY_HELP} className="rounded-full bg-rh-purple-wash px-2 py-0.5 text-[11px] font-semibold text-rh-purple-text">
                         {REPORTED_ONLY_LABEL}
                       </span>
                     </div>
                   )}
                   {p.status !== "revoked" && (p.safe_mode || props.orgSafeMode) && (
                     <div className="mt-1">
-                      <span className="rounded-full bg-[#FFF4E5] px-2 py-0.5 text-[11px] font-semibold text-[#8A4B00]">
+                      <span className="rounded-full bg-rh-ochre-wash px-2 py-0.5 text-[11px] font-semibold text-rh-ochre">
                         safe mode{props.orgSafeMode && !p.safe_mode ? " (all)" : ""}
                       </span>
                     </div>
@@ -634,17 +583,17 @@ function PassportTable(props: {
                 </td>
                 <td className="p-3 text-[12px]">
                   <div title={p.owner_id ?? ""}>{shortId(p.owner_id)}</div>
-                  <div className="text-[11px] text-[#606060]" title={p.backup_owner_id ?? ""}>
+                  <div className="text-[11px] text-rh-text-2" title={p.backup_owner_id ?? ""}>
                     backup {shortId(p.backup_owner_id)}
                   </div>
                 </td>
                 <td className="p-3">
                   <div className="flex max-w-[260px] flex-wrap gap-1">
-                    {p.scopes.length === 0 && <span className="text-[12px] text-[#606060]">none</span>}
+                    {p.scopes.length === 0 && <span className="text-[12px] text-rh-text-2">none</span>}
                     {p.scopes.map((s) => (
                       <span
                         key={`${s.server}/${s.tool}/${s.access}`}
-                        className={`rounded-[6px] bg-[#F2F2F2] px-1.5 py-0.5 font-mono text-[11px] ${
+                        className={`rounded-[6px] bg-rh-elevated px-1.5 py-0.5 font-mono text-[11px] ${
                           p.status !== "revoked" && (p.safe_mode || props.orgSafeMode) && s.access === "write" ? "line-through opacity-60" : ""
                         }`}
                         title={
@@ -653,7 +602,7 @@ function PassportTable(props: {
                             : undefined
                         }
                       >
-                        {s.server}/{s.tool} <span className="text-[#606060]">{s.access}</span>
+                        {s.server}/{s.tool} <span className="text-rh-text-2">{s.access}</span>
                       </span>
                     ))}
                   </div>
@@ -663,15 +612,15 @@ function PassportTable(props: {
                 </td>
                 <td className="p-3 text-[12px]">
                   {p.status === "revoked" || props.spend === null ? (
-                    <span className="text-[#606060]">-</span>
+                    <span className="text-rh-text-2">-</span>
                   ) : (
                     (() => {
                       const cell = spendCell(spendByAgent.get(p.id));
-                      const color = cell.tone === "alert" ? "text-[#B42318]" : cell.tone === "warn" ? "text-[#8A5A00]" : "";
+                      const color = cell.tone === "alert" ? "text-rh-crimson-text" : cell.tone === "warn" ? "text-rh-ochre" : "";
                       return (
                         <button onClick={() => props.onSpend(p)} className="text-left hover:underline" title="Estimated from what the agent's SDK reported. Click for detail.">
                           <div className={`font-semibold ${color}`}>{cell.headline}</div>
-                          {cell.detail && <div className="max-w-[180px] text-[11px] text-[#606060]">{cell.detail}</div>}
+                          {cell.detail && <div className="max-w-[180px] text-[11px] text-rh-text-2">{cell.detail}</div>}
                         </button>
                       );
                     })()
@@ -679,16 +628,16 @@ function PassportTable(props: {
                 </td>
                 <td className="p-3 text-[12px]">
                   <div>{new Date(p.expires_at).toLocaleDateString()}</div>
-                  <div className={`text-[11px] ${days <= 7 ? "text-[#B42318]" : "text-[#606060]"}`}>
+                  <div className={`text-[11px] ${days <= 7 ? "text-rh-crimson-text" : "text-rh-text-2"}`}>
                     {days > 0 ? `${days} days left` : "expired"}
                   </div>
                 </td>
-                <td className="p-3 text-[12px] text-[#606060]">{formatTime(p.last_seen_at)}</td>
+                <td className="p-3 text-[12px] text-rh-text-2">{formatTime(p.last_seen_at)}</td>
                 <td className="p-3">
                   <div className="flex flex-wrap justify-end gap-1">
                     <Link
                       href={`/passports/${p.id}/timeline`}
-                      className="rounded-full border border-[#E5E5E5] px-2.5 py-1 text-[12px] font-medium hover:bg-[#F2F2F2]"
+                      className="rounded-full border border-rh-hairline px-2.5 py-1 text-[12px] font-medium hover:bg-rh-elevated"
                     >
                       Timeline
                     </Link>
@@ -732,8 +681,8 @@ function ActionButton(props: { label: string; onClick: () => void; disabled?: bo
       disabled={props.disabled}
       className={`rounded-full border px-2.5 py-1 text-[12px] font-medium disabled:opacity-40 ${
         props.danger
-          ? "border-[#F5C2C0] text-[#B42318] hover:bg-[#FDECEC]"
-          : "border-[#E5E5E5] hover:bg-[#F2F2F2]"
+          ? "border-rh-crimson text-rh-crimson-text hover:bg-rh-crimson-wash"
+          : "border-rh-hairline hover:bg-rh-elevated"
       }`}
     >
       {props.label}
@@ -752,7 +701,7 @@ function RegisterAgentForm(props: {
   const [scopes, setScopes] = useState<Scope[]>([]);
 
   return (
-    <section className="rounded-[12px] border border-[#E5E5E5] bg-[#FFFFFF] p-4">
+    <section className="rounded-[12px] border border-rh-hairline bg-rh-card p-4">
       <h2 className="text-[15px] font-semibold">Register an agent</h2>
       <form
         className="mt-3 flex flex-col gap-3 text-[13px]"
@@ -775,19 +724,19 @@ function RegisterAgentForm(props: {
           placeholder="Agent name, e.g. Invoice follow-up bot"
           value={name}
           onChange={(e) => setName(e.target.value)}
-          className="h-[36px] rounded-[8px] border border-[#E5E5E5] px-3 focus:border-[#0F0F0F] focus:outline-none"
+          className="h-[36px] rounded-[8px] border border-rh-hairline px-3 focus:border-rh-strong focus:outline-none"
         />
         <div className="flex gap-2">
           <select
             value={framework}
             onChange={(e) => setFramework(e.target.value)}
-            className="h-[36px] flex-1 rounded-[8px] border border-[#E5E5E5] px-2"
+            className="h-[36px] flex-1 rounded-[8px] border border-rh-hairline px-2"
           >
             {FRAMEWORKS.map((f) => (
               <option key={f}>{f}</option>
             ))}
           </select>
-          <label className="flex items-center gap-2 text-[12px] text-[#606060]">
+          <label className="flex items-center gap-2 text-[12px] text-rh-text-2">
             Expires in
             <input
               type="number"
@@ -795,7 +744,7 @@ function RegisterAgentForm(props: {
               max={365}
               value={days}
               onChange={(e) => setDays(Number(e.target.value))}
-              className="h-[36px] w-[70px] rounded-[8px] border border-[#E5E5E5] px-2"
+              className="h-[36px] w-[70px] rounded-[8px] border border-rh-hairline px-2"
             />
             days
           </label>
@@ -803,7 +752,7 @@ function RegisterAgentForm(props: {
 
         <ScopeFields servers={props.servers} scopes={scopes} onChange={setScopes} />
         {scopes.length === 0 && (
-          <p role="note" className="rounded-[8px] bg-[#FFF4E5] p-2 text-[12px] text-[#8A4B00]">
+          <p role="note" className="rounded-[8px] bg-rh-ochre-wash p-2 text-[12px] text-rh-ochre">
             No scopes: this agent will be refused on every tool until you add some.
           </p>
         )}
@@ -811,7 +760,7 @@ function RegisterAgentForm(props: {
         <button
           type="submit"
           disabled={props.busy}
-          className="h-[36px] rounded-full bg-[#0F0F0F] font-semibold text-[#FFFFFF] disabled:opacity-40"
+          className="h-[36px] rounded-full bg-rh-teal font-semibold text-rh-canvas disabled:opacity-40"
         >
           Register and issue key
         </button>
@@ -830,7 +779,7 @@ function ScopeFields(props: { servers: McpServer[]; scopes: Scope[]; onChange: (
   return (
     <div className="flex flex-col gap-2">
       <div className="flex items-center justify-between">
-        <span className="text-[12px] font-semibold text-[#606060]">Scopes (what it may use)</span>
+        <span className="text-[12px] font-semibold text-rh-text-2">Scopes (what it may use)</span>
         <button
           type="button"
           // New scopes default to "write": an undeclared tool counts as write, so Safe Mode suspends it.
@@ -845,7 +794,7 @@ function ScopeFields(props: { servers: McpServer[]; scopes: Scope[]; onChange: (
           <select
             value={s.server}
             onChange={(e) => update(i, { server: e.target.value })}
-            className="h-[34px] w-[130px] rounded-[8px] border border-[#E5E5E5] px-2"
+            className="h-[34px] w-[130px] rounded-[8px] border border-rh-hairline px-2"
             required
           >
             <option value="" disabled>
@@ -862,12 +811,12 @@ function ScopeFields(props: { servers: McpServer[]; scopes: Scope[]; onChange: (
             placeholder="tool name or *"
             value={s.tool}
             onChange={(e) => update(i, { tool: e.target.value })}
-            className="h-[34px] flex-1 rounded-[8px] border border-[#E5E5E5] px-2 font-mono text-[12px]"
+            className="h-[34px] flex-1 rounded-[8px] border border-rh-hairline px-2 font-mono text-[12px]"
           />
           <select
             value={s.access}
             onChange={(e) => update(i, { access: e.target.value as Scope["access"] })}
-            className="h-[34px] rounded-[8px] border border-[#E5E5E5] px-2"
+            className="h-[34px] rounded-[8px] border border-rh-hairline px-2"
             title="In Safe Mode only read tools work. You declare read or write; RedHand cannot verify it."
           >
             <option value="read">read</option>
@@ -877,22 +826,22 @@ function ScopeFields(props: { servers: McpServer[]; scopes: Scope[]; onChange: (
             type="button"
             aria-label="Remove scope"
             onClick={() => onChange(scopes.filter((_, idx) => idx !== i))}
-            className="px-1 text-[#606060] hover:text-[#B42318]"
+            className="px-1 text-rh-text-2 hover:text-rh-crimson-text"
           >
             <Trash2 className="h-4 w-4" />
           </button>
         </div>
       ))}
       {props.servers.length === 0 && (
-        <p className="text-[12px] text-[#606060]">Register an MCP server first to grant tool scopes.</p>
+        <p className="text-[12px] text-rh-text-2">Register an MCP server first to grant tool scopes.</p>
       )}
       {scopes.some((s) => s.tool === "*" && s.access === "read") && (
-        <p role="note" className="rounded-[8px] bg-[#FFF4E5] p-2 text-[12px] text-[#8A4B00]">
+        <p role="note" className="rounded-[8px] bg-rh-ochre-wash p-2 text-[12px] text-rh-ochre">
           A <code>*</code> scope declared read means every tool on that server counts as read-only in Safe Mode.
           Only do this if the server really has no write tools.
         </p>
       )}
-      <p className="text-[11px] text-[#606060]">
+      <p className="text-[11px] text-rh-text-2">
         The gateway enforces server and tool. In Safe Mode only scopes declared <strong>read</strong> work.
         You declare read or write: RedHand cannot verify that a tool really is read-only.
       </p>
@@ -910,7 +859,7 @@ function ScopeEditor(props: {
   const [scopes, setScopes] = useState<Scope[]>(props.passport.scopes);
   const [reason, setReason] = useState("");
   return (
-    <section className="rounded-[12px] border-2 border-[#0F0F0F] bg-[#FFFFFF] p-4">
+    <section className="rounded-[12px] border-2 border-rh-strong bg-rh-card p-4">
       <h2 className="text-[15px] font-semibold">Edit scopes for {props.passport.name}</h2>
       <form
         className="mt-3 flex flex-col gap-3 text-[13px]"
@@ -921,7 +870,7 @@ function ScopeEditor(props: {
       >
         <ScopeFields servers={props.servers} scopes={scopes} onChange={setScopes} />
         {scopes.length === 0 && (
-          <p role="note" className="rounded-[8px] bg-[#FFF4E5] p-2 text-[12px] text-[#8A4B00]">
+          <p role="note" className="rounded-[8px] bg-rh-ochre-wash p-2 text-[12px] text-rh-ochre">
             Saving with no scopes makes this agent refuse every tool.
           </p>
         )}
@@ -930,20 +879,20 @@ function ScopeEditor(props: {
           placeholder="Reason (recorded in the audit log)"
           value={reason}
           onChange={(e) => setReason(e.target.value)}
-          className="h-[34px] rounded-[8px] border border-[#E5E5E5] px-3"
+          className="h-[34px] rounded-[8px] border border-rh-hairline px-3"
         />
         <div className="flex gap-2">
           <button
             type="submit"
             disabled={props.busy}
-            className="h-[34px] flex-1 rounded-full bg-[#0F0F0F] font-semibold text-[#FFFFFF] disabled:opacity-40"
+            className="h-[34px] flex-1 rounded-full bg-rh-teal font-semibold text-rh-canvas disabled:opacity-40"
           >
             Save scopes (admin)
           </button>
           <button
             type="button"
             onClick={props.onCancel}
-            className="h-[34px] rounded-full border border-[#E5E5E5] px-4 hover:bg-[#F2F2F2]"
+            className="h-[34px] rounded-full border border-rh-hairline px-4 hover:bg-rh-elevated"
           >
             Cancel
           </button>
@@ -962,20 +911,20 @@ function McpServersPanel(props: {
   const [name, setName] = useState("");
   const [url, setUrl] = useState("");
   return (
-    <section className="rounded-[12px] border border-[#E5E5E5] bg-[#FFFFFF] p-4">
+    <section className="rounded-[12px] border border-rh-hairline bg-rh-card p-4">
       <h2 className="text-[15px] font-semibold">MCP servers</h2>
-      <p className="mt-1 text-[12px] text-[#606060]">
+      <p className="mt-1 text-[12px] text-rh-text-2">
         Agents reach a server at <code>/mcp/&lt;slug&gt;</code> on the RedHand gateway.
       </p>
       <ul className="mt-3 flex flex-col gap-1 text-[13px]">
-        {props.servers.length === 0 && <li className="text-[#606060]">None registered.</li>}
+        {props.servers.length === 0 && <li className="text-rh-text-2">None registered.</li>}
         {props.servers.map((s) => (
           <li key={s.id} className="flex items-center justify-between gap-2">
             <span>
               <span className="font-mono font-semibold">{s.slug}</span> · {s.name}
-              {!s.is_active && <span className="ml-1 text-[11px] text-[#606060]">(inactive)</span>}
+              {!s.is_active && <span className="ml-1 text-[11px] text-rh-text-2">(inactive)</span>}
             </span>
-            <span className="truncate text-[11px] text-[#606060]" title={s.url}>
+            <span className="truncate text-[11px] text-rh-text-2" title={s.url}>
               {s.url}
             </span>
           </li>
@@ -998,14 +947,14 @@ function McpServersPanel(props: {
             placeholder="slug (e.g. xero)"
             value={slug}
             onChange={(e) => setSlug(e.target.value)}
-            className="h-[34px] w-[140px] rounded-[8px] border border-[#E5E5E5] px-2 font-mono text-[12px]"
+            className="h-[34px] w-[140px] rounded-[8px] border border-rh-hairline px-2 font-mono text-[12px]"
           />
           <input
             required
             placeholder="Display name"
             value={name}
             onChange={(e) => setName(e.target.value)}
-            className="h-[34px] flex-1 rounded-[8px] border border-[#E5E5E5] px-2"
+            className="h-[34px] flex-1 rounded-[8px] border border-rh-hairline px-2"
           />
         </div>
         <input
@@ -1014,12 +963,12 @@ function McpServersPanel(props: {
           placeholder="https://mcp.example.com/..."
           value={url}
           onChange={(e) => setUrl(e.target.value)}
-          className="h-[34px] rounded-[8px] border border-[#E5E5E5] px-2"
+          className="h-[34px] rounded-[8px] border border-rh-hairline px-2"
         />
         <button
           type="submit"
           disabled={props.busy}
-          className="h-[34px] rounded-full border border-[#0F0F0F] font-semibold hover:bg-[#F2F2F2] disabled:opacity-40"
+          className="h-[34px] rounded-full border border-rh-strong font-semibold hover:bg-rh-elevated disabled:opacity-40"
         >
           Register server (admin)
         </button>
@@ -1038,19 +987,19 @@ function AuditPanel(props: { entries: ControlAuditEntry[]; passports: Passport[]
     return e.target_type;
   };
   return (
-    <section className="rounded-[12px] border border-[#E5E5E5] bg-[#FFFFFF] p-4">
+    <section className="rounded-[12px] border border-rh-hairline bg-rh-card p-4">
       <h2 className="text-[15px] font-semibold">Control audit log</h2>
-      <p className="mt-1 text-[12px] text-[#606060]">Append-only record of who changed what, and when.</p>
-      <ul className="mt-3 flex flex-col divide-y divide-[#F2F2F2] text-[13px]">
-        {props.entries.length === 0 && <li className="py-2 text-[#606060]">No control actions yet.</li>}
+      <p className="mt-1 text-[12px] text-rh-text-2">Append-only record of who changed what, and when.</p>
+      <ul className="mt-3 flex flex-col divide-y divide-rh-hairline text-[13px]">
+        {props.entries.length === 0 && <li className="py-2 text-rh-text-2">No control actions yet.</li>}
         {props.entries.map((e) => (
           <li key={e.id} className="flex flex-wrap items-baseline justify-between gap-2 py-2">
             <span>
               <span className="font-mono font-semibold">{e.action}</span>{" "}
               {targetLabel(e)}
-              {e.reason && <span className="text-[#606060]"> · {e.reason}</span>}
+              {e.reason && <span className="text-rh-text-2"> · {e.reason}</span>}
               {(e.action === "passport.budget_changed" || e.action === "organization.budget_default_changed") && (
-                <span className="text-[#606060]">
+                <span className="text-rh-text-2">
                   {" "}
                   · {e.action === "organization.budget_default_changed" ? "default limit" : "limit"}{" "}
                   {String(e.details?.old_limit ?? "none")} → {String(e.details?.new_limit ?? "none")}
@@ -1060,10 +1009,10 @@ function AuditPanel(props: { entries: ControlAuditEntry[]; passports: Passport[]
                 </span>
               )}
               {typeof e.details?.frozen_count === "number" && (
-                <span className="text-[#606060]"> · {String(e.details.frozen_count)} agents</span>
+                <span className="text-rh-text-2"> · {String(e.details.frozen_count)} agents</span>
               )}
             </span>
-            <span className="text-[11px] text-[#606060]">
+            <span className="text-[11px] text-rh-text-2">
               by {e.actor_user_id === SYSTEM_ACTOR_ID ? automaticActorLabel(e.reason) : shortId(e.actor_user_id)} ·{" "}
               {new Date(e.created_at).toLocaleString()}
             </span>
@@ -1132,24 +1081,24 @@ function TelegramPanel(props: {
   };
 
   return (
-    <section className="rounded-[12px] border border-[#E5E5E5] bg-[#FFFFFF] p-4">
+    <section className="rounded-[12px] border border-rh-hairline bg-rh-card p-4">
       <h2 className="text-[15px] font-semibold">Telegram panic command</h2>
-      <p className="mt-1 text-[12px] text-[#606060]">
+      <p className="mt-1 text-[12px] text-rh-text-2">
         Freeze agents from your phone with <code>/freeze_all</code> or <code>/freeze &lt;name&gt;</code>. Unfreezing
         and revoking stay in this dashboard, so a lost phone can stop agents but never start them.
       </p>
       {forbidden && (
-        <p role="note" className="mt-3 rounded-[8px] bg-[#FFF4E5] p-2 text-[12px] text-[#8A4B00]">
+        <p role="note" className="mt-3 rounded-[8px] bg-rh-ochre-wash p-2 text-[12px] text-rh-ochre">
           Only an owner or admin can link or manage phones.
         </p>
       )}
       {unavailable && (
-        <p role="note" className="mt-3 rounded-[8px] bg-[#FFF4E5] p-2 text-[12px] text-[#8A4B00]">
+        <p role="note" className="mt-3 rounded-[8px] bg-rh-ochre-wash p-2 text-[12px] text-rh-ochre">
           Telegram is not set up on this RedHand server yet.
         </p>
       )}
       <ul className="mt-3 flex flex-col gap-1 text-[13px]">
-        {links.length === 0 && <li className="text-[#606060]">No phone linked.</li>}
+        {links.length === 0 && <li className="text-rh-text-2">No phone linked.</li>}
         {links.map((l) => (
           <li key={l.id} className="flex items-center justify-between gap-2">
             <span>
@@ -1162,12 +1111,12 @@ function TelegramPanel(props: {
       <button
         onClick={createCode}
         disabled={forbidden}
-        className="mt-3 disabled:opacity-40 h-[34px] rounded-full border border-[#0F0F0F] px-4 text-[13px] font-semibold hover:bg-[#F2F2F2]"
+        className="mt-3 disabled:opacity-40 h-[34px] rounded-full border border-rh-strong px-4 text-[13px] font-semibold hover:bg-rh-elevated"
       >
         Link Telegram
       </button>
       {code && (
-        <div className="mt-3 rounded-[8px] bg-[#F2F2F2] p-3 text-[13px]">
+        <div className="mt-3 rounded-[8px] bg-rh-elevated p-3 text-[13px]">
           <p>
             Send this to the bot within 10 minutes: <code className="font-semibold">/link {code.code}</code>
           </p>
@@ -1180,7 +1129,7 @@ function TelegramPanel(props: {
               on your phone and tap Start.
             </p>
           )}
-          <p className="mt-1 text-[11px] text-[#606060]">The code works once. Anyone who has it can link their phone.</p>
+          <p className="mt-1 text-[11px] text-rh-text-2">The code works once. Anyone who has it can link their phone.</p>
         </div>
       )}
     </section>
@@ -1190,28 +1139,28 @@ function TelegramPanel(props: {
 /** Calls today against the limit. Counts tool calls through the gateway; never money. */
 function CallsCell(props: { passport: Passport; usage: AgentUsage | undefined }) {
   const { passport, usage } = props;
-  if (passport.status === "revoked") return <span className="text-[#606060]">-</span>;
+  if (passport.status === "revoked") return <span className="text-rh-text-2">-</span>;
   const calls = usage?.calls ?? 0;
   const limit = passport.daily_call_limit;
   if (limit === null) {
     return (
       <div>
         <div>{calls} calls</div>
-        <div className="text-[11px] text-[#8A4B00]">no limit set</div>
+        <div className="text-[11px] text-rh-ochre">no limit set</div>
       </div>
     );
   }
   const percent = Math.min(100, Math.floor((calls * 100) / limit));
-  const color = percent >= 100 ? "bg-[#B42318]" : percent >= 80 ? "bg-[#E8A33D]" : "bg-[#1E7B34]";
+  const color = percent >= 100 ? "bg-rh-crimson" : percent >= 80 ? "bg-rh-ochre" : "bg-rh-teal";
   return (
     <div className="min-w-[110px]">
       <div className="font-semibold">
         {calls} / {limit}
       </div>
-      <div className="mt-1 h-[6px] w-full rounded-full bg-[#F2F2F2]" role="progressbar" aria-valuenow={percent} aria-valuemin={0} aria-valuemax={100}>
+      <div className="mt-1 h-[6px] w-full rounded-full bg-rh-elevated" role="progressbar" aria-valuenow={percent} aria-valuemin={0} aria-valuemax={100}>
         <div className={`h-[6px] rounded-full ${color}`} style={{ width: `${percent}%` }} />
       </div>
-      <div className="mt-1 text-[11px] text-[#606060]">
+      <div className="mt-1 text-[11px] text-rh-text-2">
         {percent >= 100 ? "refused until tomorrow" : `${percent}%`}
         {passport.budget_action === "freeze" ? " · freezes at limit" : ""}
       </div>
@@ -1236,9 +1185,9 @@ function BudgetEditor(props: {
   // Raising or removing a limit, or turning auto-freeze off, relaxes the restriction: the server wants an admin and confirmation.
   const relaxes = (old !== null && (parsed === null || parsed > old)) || (passport.budget_action === "freeze" && action !== "freeze");
   return (
-    <section className="rounded-[12px] border-2 border-[#0F0F0F] bg-[#FFFFFF] p-4">
+    <section className="rounded-[12px] border-2 border-rh-strong bg-rh-card p-4">
       <h2 className="text-[15px] font-semibold">Daily limit for {passport.name}</h2>
-      <p className="mt-1 text-[12px] text-[#606060]">
+      <p className="mt-1 text-[12px] text-rh-text-2">
         A cap on tool calls this agent makes through the RedHand gateway per day (the day starts at midnight in your
         organization&apos;s time zone). It does not see LLM tokens or money.
       </p>
@@ -1258,16 +1207,16 @@ function BudgetEditor(props: {
             placeholder="blank = no limit"
             value={limit}
             onChange={(e) => setLimit(e.target.value)}
-            className="h-[34px] w-[160px] rounded-[8px] border border-[#E5E5E5] px-2"
+            className="h-[34px] w-[160px] rounded-[8px] border border-rh-hairline px-2"
           />
         </label>
-        {!valid && <p role="alert" className="text-[12px] text-[#B42318]">Enter a whole number from 1 to 10,000,000, or leave it blank.</p>}
+        {!valid && <p role="alert" className="text-[12px] text-rh-crimson-text">Enter a whole number from 1 to 10,000,000, or leave it blank.</p>}
         <label className="flex items-center gap-2">
           At the limit
           <select
             value={action}
             onChange={(e) => setAction(e.target.value as "deny" | "freeze")}
-            className="h-[34px] rounded-[8px] border border-[#E5E5E5] px-2"
+            className="h-[34px] rounded-[8px] border border-rh-hairline px-2"
           >
             <option value="deny">refuse further calls and alert me</option>
             <option value="freeze">refuse, alert me, and freeze the agent</option>
@@ -1278,10 +1227,10 @@ function BudgetEditor(props: {
           placeholder="Reason (recorded in the audit log)"
           value={reason}
           onChange={(e) => setReason(e.target.value)}
-          className="h-[34px] rounded-[8px] border border-[#E5E5E5] px-3"
+          className="h-[34px] rounded-[8px] border border-rh-hairline px-3"
         />
         {relaxes && (
-          <p role="note" className="rounded-[8px] bg-[#FFF4E5] p-2 text-[12px] text-[#8A4B00]">
+          <p role="note" className="rounded-[8px] bg-rh-ochre-wash p-2 text-[12px] text-rh-ochre">
             Raising or removing a limit needs an admin. You will be asked to confirm.
           </p>
         )}
@@ -1289,14 +1238,14 @@ function BudgetEditor(props: {
           <button
             type="submit"
             disabled={props.busy || !valid}
-            className="h-[34px] flex-1 rounded-full bg-[#0F0F0F] font-semibold text-[#FFFFFF] disabled:opacity-40"
+            className="h-[34px] flex-1 rounded-full bg-rh-teal font-semibold text-rh-canvas disabled:opacity-40"
           >
             Save limit
           </button>
           <button
             type="button"
             onClick={props.onCancel}
-            className="h-[34px] rounded-full border border-[#E5E5E5] px-4 hover:bg-[#F2F2F2]"
+            className="h-[34px] rounded-full border border-rh-hairline px-4 hover:bg-rh-elevated"
           >
             Cancel
           </button>
@@ -1330,10 +1279,10 @@ function BudgetDefaultPanel(props: {
     props.onChange(limit, reason, relaxes);
   };
   return (
-    <section className="flex flex-wrap items-center justify-between gap-3 rounded-[12px] border border-[#E5E5E5] bg-[#FFFFFF] p-4">
+    <section className="flex flex-wrap items-center justify-between gap-3 rounded-[12px] border border-rh-hairline bg-rh-card p-4">
       <div>
         <h2 className="text-[15px] font-semibold">Default daily limit for new agents</h2>
-        <p className="mt-1 text-[12px] text-[#606060]">
+        <p className="mt-1 text-[12px] text-rh-text-2">
           {current === null
             ? "No default: a new agent starts with no limit and is never stopped until you set one."
             : `New agents start with a limit of ${current} tool calls per day. You can change it per agent.`}{" "}
@@ -1343,7 +1292,7 @@ function BudgetDefaultPanel(props: {
       <button
         onClick={change}
         disabled={props.busy}
-        className="h-[34px] rounded-full border border-[#0F0F0F] px-4 text-[13px] font-semibold hover:bg-[#F2F2F2] disabled:opacity-40"
+        className="h-[34px] rounded-full border border-rh-strong px-4 text-[13px] font-semibold hover:bg-rh-elevated disabled:opacity-40"
       >
         Change (admin)
       </button>

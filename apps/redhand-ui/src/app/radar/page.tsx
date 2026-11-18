@@ -9,7 +9,7 @@
 
 import React, { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { Hand, LogOut, RefreshCw } from "lucide-react";
+import { RefreshCw } from "lucide-react";
 
 import {
   ApiError,
@@ -25,6 +25,7 @@ import {
   selfTestApi,
 } from "@/lib/api";
 import { useAuth, useRequiredSession } from "@/lib/auth";
+import { AppShell } from "@/components/shell/AppShell";
 import { ApprovedModelsCard } from "./ApprovedModelsCard";
 import { type BlockGate, isCoverageData } from "@/lib/coverage";
 import { DESTINATION_RULE_ID, EVASION_LABEL, LOOP_RULE_ID, describeRule } from "@/lib/radarRules";
@@ -71,16 +72,6 @@ function when(iso: string | null): string {
   }
 }
 
-function NavLink({ href, label, active }: { href: string; label: string; active?: boolean }) {
-  return (
-    <Link
-      href={href}
-      className={`rounded-full px-3 py-1.5 ${active ? "bg-[#0F0F0F] font-semibold text-[#FFFFFF]" : "font-medium text-[#606060] hover:bg-[#F2F2F2]"}`}
-    >
-      {label}
-    </Link>
-  );
-}
 
 export default function RadarPage() {
   const session = useRequiredSession();
@@ -337,51 +328,18 @@ export default function RadarPage() {
     });
   };
 
-  const field = "rounded-[8px] border border-[#E5E5E5] px-2 py-1 text-[12px]";
-  const button = "rounded-full border border-[#E5E5E5] bg-[#FFFFFF] px-3 py-1 text-[12px] font-semibold hover:bg-[#F2F2F2] disabled:opacity-50";
+  const field = "rounded-[8px] border border-rh-hairline px-2 py-1 text-[12px]";
+  const button = "rounded-full border border-rh-hairline bg-rh-card px-3 py-1 text-[12px] font-semibold hover:bg-rh-elevated disabled:opacity-50";
   const week = settings?.last_7_days ?? {};
 
   return (
-    <div className="min-h-screen bg-[#F8F8F8] text-[#0F0F0F]">
-      <header className="flex h-[56px] items-center justify-between border-b border-[#E5E5E5] bg-[#FFFFFF] px-4">
-        <div className="flex min-w-0 items-center gap-4">
-          <div className="flex items-center gap-2">
-            <div className="flex h-7 w-9 items-center justify-center rounded-[8px] bg-[#FF0000]">
-              <Hand className="h-4 w-4 text-[#FFFFFF]" />
-            </div>
-            <span className="text-[20px] font-bold tracking-tight">RedHand</span>
-          </div>
-          <nav className="flex gap-1 overflow-x-auto whitespace-nowrap text-[13px]">
-            <NavLink href="/passports" label="Passports" />
-            <NavLink href="/blackbox" label="Black Box" />
-            <NavLink href="/honeytokens" label="Honeytokens" />
-            <NavLink href="/scanner" label="MCP Scanner" />
-            <NavLink href="/radar" label="Radar" active />
-            <NavLink href="/coverage" label="Coverage" />
-          </nav>
-        </div>
-        <div className="flex items-center gap-3 text-[12px]">
-          <span className="hidden text-[#606060] sm:inline">
-            {session.email}
-            {session.role ? ` · ${session.role.replace("_", " ")}` : ""}
-          </span>
-          <button
-            onClick={() => {
-              signOut();
-              window.location.href = "/login";
-            }}
-            className="flex items-center gap-1 rounded-full px-3 py-1.5 hover:bg-[#F2F2F2]"
-          >
-            <LogOut className="h-3.5 w-3.5" /> Sign out
-          </button>
-        </div>
-      </header>
+    <AppShell title="Radar" role={session.role}>
 
-      <main className="mx-auto max-w-5xl px-4 py-6">
+      <div className="mx-auto max-w-5xl px-4 py-6">
         <div className="mb-4 flex items-center justify-between">
           <div>
             <h1 className="text-[18px] font-bold">Radar: injection and risky output</h1>
-            <p className="text-[12px] text-[#606060]">
+            <p className="text-[12px] text-rh-text-2">
               Looks at what tools answer, before the agent reads it. It only watches: nothing is blocked or changed. It sees only
               what passes through the RedHand gateway, and it does not store the text it scanned. It is a smoke detector, not a
               wall: on our unseen tests it finds most script-style output attacks, but only about 4 in 10 hidden instructions, and
@@ -393,20 +351,20 @@ export default function RadarPage() {
           </button>
         </div>
 
-        {error ? <div className="mb-3 rounded-[8px] border border-[#FDECEC] bg-[#FFF5F5] px-3 py-2 text-[12px] text-[#B42318]">{error}</div> : null}
-        {notice ? <div className="mb-3 rounded-[8px] border border-[#E6F4EA] bg-[#F3FBF5] px-3 py-2 text-[12px] text-[#1E7B34]">{notice}</div> : null}
+        {error ? <div className="mb-3 rounded-[8px] border border-rh-crimson bg-rh-crimson-wash px-3 py-2 text-[12px] text-rh-crimson-text">{error}</div> : null}
+        {notice ? <div className="mb-3 rounded-[8px] border border-rh-teal bg-rh-teal-wash px-3 py-2 text-[12px] text-rh-teal-text">{notice}</div> : null}
 
         {forbidden ? (
-          <div className="rounded-[10px] border border-[#E5E5E5] bg-[#FFFFFF] p-4 text-[12px]">
+          <div className="rounded-[10px] border border-rh-hairline bg-rh-card p-4 text-[12px]">
             Your role cannot see the Radar. Ask an owner or admin to give you the security operator role.
           </div>
         ) : (
           <>
-            <section className="mb-6 rounded-[10px] border border-[#E5E5E5] bg-[#FFFFFF] p-4 text-[12px]">
+            <section className="mb-6 rounded-[10px] border border-rh-hairline bg-rh-card p-4 text-[12px]">
               <h2 className="mb-3 text-[14px] font-semibold">Checks</h2>
               <div className="mb-3 flex flex-wrap items-end gap-4">
                 <label className="flex flex-col gap-1">
-                  <span className="text-[#606060]">Hidden instructions in tool answers</span>
+                  <span className="text-rh-text-2">Hidden instructions in tool answers</span>
                   <select
                     value={draftRadar}
                     disabled={!caps?.can_change_modes}
@@ -418,7 +376,7 @@ export default function RadarPage() {
                   </select>
                 </label>
                 <label className="flex flex-col gap-1">
-                  <span className="text-[#606060]">Risky output (script, odd links, internal addresses)</span>
+                  <span className="text-rh-text-2">Risky output (script, odd links, internal addresses)</span>
                   <select
                     value={draftOutput}
                     disabled={!caps?.can_change_modes}
@@ -434,10 +392,10 @@ export default function RadarPage() {
                     <button onClick={saveSettings} disabled={busy || unchanged} className={button}>
                       Save
                     </button>
-                    {unchanged ? null : <span className="font-semibold text-[#8A5A00]">Not saved yet: press Save to apply this change.</span>}
+                    {unchanged ? null : <span className="font-semibold text-rh-ochre">Not saved yet: press Save to apply this change.</span>}
                   </>
                 ) : (
-                  <span className="text-[#606060]">Only an admin can change these.</span>
+                  <span className="text-rh-text-2">Only an admin can change these.</span>
                 )}
               </div>
               {needsConfirm && caps?.can_change_modes ? (
@@ -446,19 +404,19 @@ export default function RadarPage() {
                   <span>I understand: while a check is off, RedHand stops recording what it would have found.</span>
                 </label>
               ) : null}
-              <p className="text-[#606060]">
+              <p className="text-rh-text-2">
                 Blocking is not available. It stays off until measured evidence shows it would not stop real work; the{" "}
                 <Link href="/coverage" className="font-semibold underline">Coverage page</Link> lists what is still missing, check by check.
                 {settings ? ` Injection check changed ${when(settings.radar_mode_changed_at)}; output check changed ${when(settings.output_check_mode_changed_at)}.` : ""}
               </p>
-              <div className="mt-3 flex flex-wrap gap-4 text-[#606060]">
+              <div className="mt-3 flex flex-wrap gap-4 text-rh-text-2">
                 <span>Last 7 days:</span>
-                <span><b className="text-[#0F0F0F]">{week.findings ?? 0}</b> findings</span>
-                <span><b className="text-[#0F0F0F]">{week.open ?? 0}</b> not reviewed</span>
-                <span><b className="text-[#0F0F0F]">{week.confirmed ?? 0}</b> real</span>
-                <span><b className="text-[#0F0F0F]">{week.false_alarm ?? 0}</b> false alarms</span>
+                <span><b className="text-rh-text">{week.findings ?? 0}</b> findings</span>
+                <span><b className="text-rh-text">{week.open ?? 0}</b> not reviewed</span>
+                <span><b className="text-rh-text">{week.confirmed ?? 0}</b> real</span>
+                <span><b className="text-rh-text">{week.false_alarm ?? 0}</b> false alarms</span>
                 <span title="Findings that were not low confidence. Nothing was blocked: the Radar only watches.">
-                  <b className="text-[#0F0F0F]">{week.would_block ?? 0}</b> strong findings
+                  <b className="text-rh-text">{week.would_block ?? 0}</b> strong findings
                 </span>
               </div>
             </section>
@@ -474,15 +432,15 @@ export default function RadarPage() {
               />
             )}
 
-            <section className="mb-6 rounded-[10px] border border-[#E5E5E5] bg-[#FFFFFF] p-4 text-[12px]" aria-label="Repeated calls">
+            <section className="mb-6 rounded-[10px] border border-rh-hairline bg-rh-card p-4 text-[12px]" aria-label="Repeated calls">
               <h2 className="mb-3 text-[14px] font-semibold">Repeated calls</h2>
               {loopUnavailable || !loop ? (
-                <p className="text-[#606060]">Repeated-call detection is not available from this server yet.</p>
+                <p className="text-rh-text-2">Repeated-call detection is not available from this server yet.</p>
               ) : (
                 <>
                   <div className="mb-3 flex flex-wrap items-end gap-4">
                     <label className="flex flex-col gap-1">
-                      <span className="text-[#606060]">When the same call is repeated</span>
+                      <span className="text-rh-text-2">When the same call is repeated</span>
                       <select
                         value={draftLoopMode}
                         disabled={!loop.capabilities.can_change_modes}
@@ -495,7 +453,7 @@ export default function RadarPage() {
                       </select>
                     </label>
                     <label className="flex flex-col gap-1">
-                      <span className="text-[#606060]">Calls that count as a loop ({LOOP_LIMIT_MIN} to {LOOP_LIMIT_MAX})</span>
+                      <span className="text-rh-text-2">Calls that count as a loop ({LOOP_LIMIT_MIN} to {LOOP_LIMIT_MAX})</span>
                       <input
                         type="number" min={LOOP_LIMIT_MIN} max={LOOP_LIMIT_MAX} value={draftLoopLimit}
                         disabled={!loop.capabilities.can_change_modes}
@@ -504,7 +462,7 @@ export default function RadarPage() {
                       />
                     </label>
                     <label className="flex flex-col gap-1">
-                      <span className="text-[#606060]">Within seconds ({LOOP_WINDOW_MIN} to {LOOP_WINDOW_MAX})</span>
+                      <span className="text-rh-text-2">Within seconds ({LOOP_WINDOW_MIN} to {LOOP_WINDOW_MAX})</span>
                       <input
                         type="number" min={LOOP_WINDOW_MIN} max={LOOP_WINDOW_MAX} value={draftLoopWindow}
                         disabled={!loop.capabilities.can_change_modes}
@@ -515,10 +473,10 @@ export default function RadarPage() {
                     {loop.capabilities.can_change_modes ? (
                       <>
                         <button onClick={saveLoop} disabled={busy || loopUnchanged} className={button}>Save</button>
-                        {loopUnchanged ? null : <span className="font-semibold text-[#8A5A00]">Not saved yet: press Save to apply this change.</span>}
+                        {loopUnchanged ? null : <span className="font-semibold text-rh-ochre">Not saved yet: press Save to apply this change.</span>}
                       </>
                     ) : (
-                      <span className="text-[#606060]">Only an admin can change these.</span>
+                      <span className="text-rh-text-2">Only an admin can change these.</span>
                     )}
                   </div>
                   {loopNeedsConfirm && loop.capabilities.can_change_modes ? (
@@ -527,94 +485,94 @@ export default function RadarPage() {
                       <span>{loopConfirmText(draftLoopMode)}</span>
                     </label>
                   ) : null}
-                  <p className="text-[#606060]">{LOOP_LIMITS_TEXT}</p>
-                  <div className="mt-3 flex flex-wrap gap-4 text-[#606060]">
+                  <p className="text-rh-text-2">{LOOP_LIMITS_TEXT}</p>
+                  <div className="mt-3 flex flex-wrap gap-4 text-rh-text-2">
                     <span>Last 7 days:</span>
-                    <span><b className="text-[#0F0F0F]">{loop.last_7_days.findings ?? 0}</b> repeated-call findings</span>
-                    <span><b className="text-[#0F0F0F]">{loop.last_7_days.open ?? 0}</b> not reviewed</span>
+                    <span><b className="text-rh-text">{loop.last_7_days.findings ?? 0}</b> repeated-call findings</span>
+                    <span><b className="text-rh-text">{loop.last_7_days.open ?? 0}</b> not reviewed</span>
                   </div>
                 </>
               )}
             </section>
 
-            <section className="mb-6 rounded-[10px] border border-[#E5E5E5] bg-[#FFFFFF] p-4 text-[12px]">
+            <section className="mb-6 rounded-[10px] border border-rh-hairline bg-rh-card p-4 text-[12px]">
               <h2 className="mb-1 text-[14px] font-semibold">Could blocking ever be switched on?</h2>
-              <p className="mb-3 text-[#606060]">
+              <p className="mb-3 text-rh-text-2">
                 Not today: blocking is not available. Two separate things must both look good before anyone could even consider it: our tests on
                 independent samples, and your own traffic. This panel shows both. It only reads numbers and changes nothing.
               </p>
               {readinessFailed ? (
-                <p className="rounded-[8px] border border-[#E5E5E5] bg-[#F8F8F8] px-3 py-2 text-[#606060]">
+                <p className="rounded-[8px] border border-rh-hairline bg-rh-subtle px-3 py-2 text-rh-text-2">
                   The figures from your traffic are not available right now. Nothing is wrong with your checks; try Refresh in a moment.
                 </p>
               ) : null}
               {readiness ? (
                 <div className="grid gap-3 sm:grid-cols-2">
                   {readiness.checks.map((check) => (
-                    <div key={check.kind} className="rounded-[8px] border border-[#E5E5E5] p-3">
+                    <div key={check.kind} className="rounded-[8px] border border-rh-hairline p-3">
                       <div className="mb-1 flex items-center justify-between gap-2">
                         <span className="text-[13px] font-semibold">{check.label}</span>
-                        <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold ${check.ready ? "bg-[#FFF8EC] text-[#8A5A00]" : "bg-[#F2F2F2] text-[#606060]"}`}>
+                        <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold ${check.ready ? "bg-rh-ochre-wash text-rh-ochre" : "bg-rh-elevated text-rh-text-2"}`}>
                           {check.ready ? "candidate" : "not yet"}
                         </span>
                       </div>
-                      <p className="mb-2 text-[#606060]">{headline(check)}</p>
+                      <p className="mb-2 text-rh-text-2">{headline(check)}</p>
                       <p className="mb-1 font-semibold">Your traffic, last {readiness.window_days} days</p>
-                      <p className="text-[#606060]">{trafficText(check)}</p>
-                      <p className="mb-2 text-[#606060]">{readinessFalseAlarmText(check)}</p>
+                      <p className="text-rh-text-2">{trafficText(check)}</p>
+                      <p className="mb-2 text-rh-text-2">{readinessFalseAlarmText(check)}</p>
                       <ul className="mb-2 space-y-1">
                         {check.conditions.map((c) => (
                           <li key={c.id} className="flex gap-2">
-                            <span className={`mt-0.5 h-fit shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold ${c.passed ? "bg-[#E6F4EA] text-[#1E7B34]" : "bg-[#FDECEC] text-[#B42318]"}`}>
+                            <span className={`mt-0.5 h-fit shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold ${c.passed ? "bg-rh-teal-wash text-rh-teal-text" : "bg-rh-crimson-wash text-rh-crimson-text"}`}>
                               {c.passed ? "pass" : "not yet"}
                             </span>
-                            <span className="text-[#606060]"><b className="text-[#0F0F0F]">{c.name}:</b> {c.detail}</span>
+                            <span className="text-rh-text-2"><b className="text-rh-text">{c.name}:</b> {c.detail}</span>
                           </li>
                         ))}
                       </ul>
                       <p className="mb-1 font-semibold">Our independent tests</p>
                       {evidenceFor(gate, check.kind).length > 0 ? (
-                        <ul className="text-[#606060]">
+                        <ul className="text-rh-text-2">
                           {evidenceFor(gate, check.kind).map((line) => (
                             <li key={line.label}>{line.label}: {line.passed} of {line.total} rules pass{line.eligible ? "" : " (not ready)"}</li>
                           ))}
                         </ul>
                       ) : (
-                        <p className="text-[#606060]">Not loaded.</p>
+                        <p className="text-rh-text-2">Not loaded.</p>
                       )}
                     </div>
                   ))}
                 </div>
               ) : null}
-              <p className="mt-3 text-[#606060]">
+              <p className="mt-3 text-rh-text-2">
                 {readiness?.note ?? "Blocking is not available and cannot be switched on."} Details of our tests are on the{" "}
                 <Link href="/coverage" className="font-semibold underline">Coverage page</Link>.
               </p>
             </section>
 
-            <section className="mb-6 rounded-[10px] border border-[#E5E5E5] bg-[#FFFFFF] p-4 text-[12px]">
+            <section className="mb-6 rounded-[10px] border border-rh-hairline bg-rh-card p-4 text-[12px]">
               <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
                 <h2 className="text-[14px] font-semibold">Self-test</h2>
                 <button onClick={runSelfTest} disabled={selfTestRunning} className={button}>
                   {selfTestRunning ? "Running…" : "Run self-test"}
                 </button>
               </div>
-              <p className="text-[#606060]">
+              <p className="text-rh-text-2">
                 Asks the gateway to run the Radar over {selfTest?.samples ?? "about 180"} of our own held-out test texts and shows how many it
                 catches. It proves the Radar code running in the gateway behaves as measured. It does not prove that your agents&apos; traffic
                 goes through the gateway, and it cannot show what these samples do not contain. You can run it once a minute.
               </p>
-              <p className="mt-2 rounded-[8px] border border-[#FFE0B2] bg-[#FFF8EC] px-3 py-2">
+              <p className="mt-2 rounded-[8px] border border-rh-ochre bg-rh-ochre-wash px-3 py-2">
                 <b>Do not read these numbers as how well the Radar works in real life.</b> These texts were written by the same team that
                 wrote the rules, so they flatter it. On text written by someone else, the Radar found about 4 in 10 hidden instructions.
                 See the <Link href="/coverage" className="font-semibold underline">Coverage page</Link> for the independent results.
               </p>
-              {selfTestError ? <div className="mt-3 rounded-[8px] border border-[#FDECEC] bg-[#FFF5F5] px-3 py-2 text-[#B42318]">{selfTestError}</div> : null}
+              {selfTestError ? <div className="mt-3 rounded-[8px] border border-rh-crimson bg-rh-crimson-wash px-3 py-2 text-rh-crimson-text">{selfTestError}</div> : null}
               {selfTest ? (
                 <div className="mt-3">
                   <div className="overflow-x-auto">
                     <table className="w-full min-w-[560px] text-left">
-                      <thead className="text-[#606060]">
+                      <thead className="text-rh-text-2">
                         <tr>
                           <th className="py-1 pr-3 font-medium">Check</th>
                           <th className="py-1 pr-3 font-medium">Attacks found</th>
@@ -623,7 +581,7 @@ export default function RadarPage() {
                       </thead>
                       <tbody>
                         {selfTest.categories.map((c) => (
-                          <tr key={c.category} className="border-t border-[#F2F2F2]">
+                          <tr key={c.category} className="border-t border-rh-hairline">
                             <td className="py-2 pr-3">{CHECK_LABEL[c.category] ?? c.category}</td>
                             <td className="py-2 pr-3">{foundText(c)}</td>
                             <td className="py-2">{falseAlarmText(c)}</td>
@@ -632,21 +590,21 @@ export default function RadarPage() {
                       </tbody>
                     </table>
                   </div>
-                  <p className="mt-2 text-[#606060]">
+                  <p className="mt-2 text-rh-text-2">
                     Ran {when(selfTest.ran_at)} on {selfTest.samples} texts in {Math.round(selfTest.duration_ms)} ms, sample set {selfTest.corpus}.
                     Helper model: {selfTest.model_enabled ? "on" : "off"}. Your switches right now: hidden instructions{" "}
-                    <b className="text-[#0F0F0F]">{selfTest.radar_mode === "observe" ? "watching" : selfTest.radar_mode}</b>, risky output{" "}
-                    <b className="text-[#0F0F0F]">{selfTest.output_check_mode === "observe" ? "watching" : selfTest.output_check_mode}</b>.
+                    <b className="text-rh-text">{selfTest.radar_mode === "observe" ? "watching" : selfTest.radar_mode}</b>, risky output{" "}
+                    <b className="text-rh-text">{selfTest.output_check_mode === "observe" ? "watching" : selfTest.output_check_mode}</b>.
                     {selfTest.radar_mode === "off" || selfTest.output_check_mode === "off"
                       ? " A switch that is off means the gateway is not scanning for you, even though the code works."
                       : ""}
                   </p>
-                  <p className="mt-1 text-[#606060]">{selfTest.limits}</p>
+                  <p className="mt-1 text-rh-text-2">{selfTest.limits}</p>
                 </div>
               ) : null}
             </section>
 
-            <section className="mb-6 rounded-[10px] border border-[#E5E5E5] bg-[#FFFFFF] p-4 text-[12px]">
+            <section className="mb-6 rounded-[10px] border border-rh-hairline bg-rh-card p-4 text-[12px]">
               <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
                 <h2 className="text-[14px] font-semibold">Findings</h2>
                 <div className="flex gap-2">
@@ -667,31 +625,31 @@ export default function RadarPage() {
                 </div>
               </div>
               {findings.length === 0 ? (
-                <p className="text-[#606060]">
+                <p className="text-rh-text-2">
                   No findings. That means the Radar saw nothing it recognises in what passed through the gateway, not that
                   nothing is wrong.
                 </p>
               ) : (
-                <ul className="divide-y divide-[#F2F2F2]">
+                <ul className="divide-y divide-rh-hairline">
                   {findings.map((f) => (
                     <li key={f.id} className="py-3">
                       <div className="flex flex-wrap items-center gap-2">
-                        <span className="rounded-full bg-[#0F0F0F] px-2 py-0.5 font-mono text-[11px] text-[#FFFFFF]">{f.rule_id}</span>
+                        <span className="rounded-full bg-rh-teal px-2 py-0.5 font-mono text-[11px] text-rh-canvas">{f.rule_id}</span>
                         <span className="font-semibold">{f.agent_name ?? f.agent_id.slice(0, 8)}</span>
-                        <span className="text-[#606060]">
+                        <span className="text-rh-text-2">
                           via {shorten(f.tool_name || "(unknown tool)")} on {shorten(f.server_slug || "(unknown server)")}
                         </span>
-                        <span className="ml-auto text-[#606060]">{when(f.last_seen_at)}</span>
+                        <span className="ml-auto text-rh-text-2">{when(f.last_seen_at)}</span>
                       </div>
                       <p className="mt-1">
                         {describeRule(f.rule_id)}
-                        {f.rule_id === DESTINATION_RULE_ID && f.detail ? <> Address: <code className="rounded bg-[#F2F2F2] px-1">{f.detail}</code>.</> : null}
+                        {f.rule_id === DESTINATION_RULE_ID && f.detail ? <> Address: <code className="rounded bg-rh-elevated px-1">{f.detail}</code>.</> : null}
                       </p>
-                      <p className="mt-1 text-[#606060]">
+                      <p className="mt-1 text-rh-text-2">
                         {f.severity} severity, {f.confidence} confidence, {PLACE_LABEL[f.place]}
                         {f.evasion.length ? `, tricks: ${f.evasion.map((e) => EVASION_LABEL[e] ?? e).join(", ")}` : ""}
                         {` · seen ${f.occurrences} time${f.occurrences === 1 ? "" : "s"}`}
-                        {f.would_block ? " · strong finding" : ""} · <b className="text-[#0F0F0F]">{STATUS_LABEL[f.review_status]}</b>
+                        {f.would_block ? " · strong finding" : ""} · <b className="text-rh-text">{STATUS_LABEL[f.review_status]}</b>
                         {f.review_note ? ` · note: ${shorten(f.review_note, 120)}` : ""}
                       </p>
                       {caps?.can_review || caps?.can_suppress ? (
@@ -731,11 +689,11 @@ export default function RadarPage() {
                             placeholder="Optional note, then press Real or False alarm"
                             className={`${field} w-96`}
                           />
-                          <span className="text-[#606060]">{note.length}/{NOTE_MAX}</span>
+                          <span className="text-rh-text-2">{note.length}/{NOTE_MAX}</span>
                         </div>
                       ) : null}
                       {silenceFor?.id === f.id ? (
-                        <div className="mt-2 rounded-[8px] border border-[#FFE0B2] bg-[#FFF8EC] p-3">
+                        <div className="mt-2 rounded-[8px] border border-rh-ochre bg-rh-ochre-wash p-3">
                           <p className="mb-2">
                             Stops the Radar recording <b>{f.rule_id}</b> for <b>{f.agent_name ?? "this agent"}</b>. Other rules and other
                             agents are not affected. It ends by itself.
@@ -743,11 +701,11 @@ export default function RadarPage() {
                           </p>
                           <div className="mb-2 flex flex-wrap items-end gap-3">
                             <label className="flex flex-col gap-1">
-                              <span className="text-[#606060]">Reason (required)</span>
+                              <span className="text-rh-text-2">Reason (required)</span>
                               <input value={silenceReason} maxLength={NOTE_MAX} onChange={(e) => setSilenceReason(e.target.value)} className={`${field} w-80`} />
                             </label>
                             <label className="flex flex-col gap-1">
-                              <span className="text-[#606060]">Days ({SUPPRESSION_DAYS_MIN} to {SUPPRESSION_DAYS_MAX})</span>
+                              <span className="text-rh-text-2">Days ({SUPPRESSION_DAYS_MIN} to {SUPPRESSION_DAYS_MAX})</span>
                               <input
                                 type="number"
                                 min={SUPPRESSION_DAYS_MIN}
@@ -780,18 +738,18 @@ export default function RadarPage() {
               ) : null}
             </section>
 
-            <section className="rounded-[10px] border border-[#E5E5E5] bg-[#FFFFFF] p-4 text-[12px]">
+            <section className="rounded-[10px] border border-rh-hairline bg-rh-card p-4 text-[12px]">
               <h2 className="mb-3 text-[14px] font-semibold">Active silences</h2>
               {silences.length === 0 ? (
-                <p className="text-[#606060]">None. Every rule is recording for every agent.</p>
+                <p className="text-rh-text-2">None. Every rule is recording for every agent.</p>
               ) : (
-                <ul className="divide-y divide-[#F2F2F2]">
+                <ul className="divide-y divide-rh-hairline">
                   {silences.map((s) => (
                     <li key={s.id} className="flex flex-wrap items-center gap-2 py-2">
-                      <span className="rounded-full bg-[#0F0F0F] px-2 py-0.5 font-mono text-[11px] text-[#FFFFFF]">{s.rule_id}</span>
+                      <span className="rounded-full bg-rh-teal px-2 py-0.5 font-mono text-[11px] text-rh-canvas">{s.rule_id}</span>
                       <span className="font-semibold">{s.agent_name ?? s.agent_id.slice(0, 8)}</span>
-                      <span className="text-[#606060]">{shorten(s.reason, 100)}</span>
-                      <span className="ml-auto text-[#606060]">ends {when(s.expires_at)}</span>
+                      <span className="text-rh-text-2">{shorten(s.reason, 100)}</span>
+                      <span className="ml-auto text-rh-text-2">ends {when(s.expires_at)}</span>
                       {caps?.can_suppress ? (
                         <button disabled={busy} onClick={() => run(async () => { await radarApi.removeSuppression(token, s.id); })} className={button}>
                           Remove
@@ -804,7 +762,7 @@ export default function RadarPage() {
             </section>
           </>
         )}
-      </main>
-    </div>
+      </div>
+    </AppShell>
   );
 }

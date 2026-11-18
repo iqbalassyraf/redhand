@@ -13,6 +13,7 @@ import { ArrowLeft, Download, OctagonX } from "lucide-react";
 
 import { ApiError, downloadTimelineExport, passportsApi, riskApi, timelineApi, type AgentRiskSummary } from "@/lib/api";
 import { useRequiredSession } from "@/lib/auth";
+import { AppShell } from "@/components/shell/AppShell";
 import { LEVEL_LABEL, LEVEL_STYLE } from "@/lib/riskForm";
 import {
   FILTERS,
@@ -28,10 +29,10 @@ import {
 } from "@/lib/timeline";
 
 const TONE_DOT: Readonly<Record<Tone, string>> = {
-  bad: "bg-[#B42318]",
-  warn: "bg-[#B54708]",
-  info: "bg-[#175CD3]",
-  quiet: "bg-[#C4C4C4]",
+  bad: "bg-rh-crimson",
+  warn: "bg-rh-ochre",
+  info: "bg-rh-steel",
+  quiet: "bg-rh-strong",
 };
 
 type LoadState = "loading" | "ready" | "forbidden" | "missing" | "failed";
@@ -132,27 +133,28 @@ export default function AgentTimelinePage() {
   if (!session) return null;
 
   return (
-    <main className="mx-auto max-w-[960px] px-4 py-6 text-[#0F0F0F]">
-      <Link href="/passports" className="mb-4 inline-flex items-center gap-1 text-[12px] text-[#606060] hover:text-[#0F0F0F]">
+    <AppShell title="Incident timeline" role={session.role}>
+    <div className="mx-auto max-w-[960px] text-rh-text">
+      <Link href="/passports" className="mb-4 inline-flex items-center gap-1 text-[12px] text-rh-text-2 hover:text-rh-text">
         <ArrowLeft className="h-3.5 w-3.5" /> Passports
       </Link>
 
       {state === "forbidden" && (
-        <div role="alert" className="rounded-[10px] border border-[#E5E5E5] p-4 text-[12px]">
+        <div role="alert" className="rounded-[10px] border border-rh-hairline p-4 text-[12px]">
           Your role cannot see the incident view. Ask an owner or admin to give you the security operator role.
         </div>
       )}
       {state === "missing" && (
-        <div role="alert" className="rounded-[10px] border border-[#E5E5E5] p-4 text-[12px]">
+        <div role="alert" className="rounded-[10px] border border-rh-hairline p-4 text-[12px]">
           This agent was not found in your organization.
         </div>
       )}
-      {state === "loading" && <p className="text-[12px] text-[#606060]">Loading the timeline…</p>}
+      {state === "loading" && <p className="text-[12px] text-rh-text-2">Loading the timeline…</p>}
       {error && (
-        <div role="alert" className="mb-3 rounded-[8px] border border-[#FDECEC] bg-[#FFF5F5] px-3 py-2 text-[12px] text-[#B42318]">{error}</div>
+        <div role="alert" className="mb-3 rounded-[8px] border border-rh-crimson bg-rh-crimson-wash px-3 py-2 text-[12px] text-rh-crimson-text">{error}</div>
       )}
       {notice && (
-        <div role="status" className="mb-3 rounded-[8px] border border-[#E6F4EA] bg-[#F3FBF5] px-3 py-2 text-[12px] text-[#1E7B34]">{notice}</div>
+        <div role="status" className="mb-3 rounded-[8px] border border-rh-teal bg-rh-teal-wash px-3 py-2 text-[12px] text-rh-teal-text">{notice}</div>
       )}
 
       {state === "ready" && data && (
@@ -161,14 +163,14 @@ export default function AgentTimelinePage() {
             <div className="min-w-0">
               <h1 className="break-words text-[20px] font-semibold">Timeline for {data.agent.name}</h1>
               <div className="mt-1 flex flex-wrap items-center gap-2 text-[12px]">
-                <span className="rounded-full border border-[#E5E5E5] px-2 py-0.5">{data.agent.status}</span>
+                <span className="rounded-full border border-rh-hairline px-2 py-0.5">{data.agent.status}</span>
                 {risk && (
                   <span className={`rounded-full px-2 py-0.5 ${LEVEL_STYLE[risk.level]}`}>
                     risk {risk.score} · {LEVEL_LABEL[risk.level]}
                   </span>
                 )}
                 {risk?.released_at && (
-                  <span className="text-[#606060]">A person released this agent on {new Date(risk.released_at).toLocaleString()}.</span>
+                  <span className="text-rh-text-2">A person released this agent on {new Date(risk.released_at).toLocaleString()}.</span>
                 )}
               </div>
             </div>
@@ -177,7 +179,7 @@ export default function AgentTimelinePage() {
                 <button
                   key={format}
                   onClick={() => void exportAs(format)}
-                  className="inline-flex items-center gap-1 rounded-full border border-[#E5E5E5] px-2.5 py-1 text-[12px] hover:bg-[#F2F2F2]"
+                  className="inline-flex items-center gap-1 rounded-full border border-rh-hairline px-2.5 py-1 text-[12px] hover:bg-rh-elevated"
                 >
                   <Download className="h-3.5 w-3.5" /> Export {format.toUpperCase()}
                 </button>
@@ -185,7 +187,7 @@ export default function AgentTimelinePage() {
             {data.agent.status === "active" && !freezing && (
               <button
                 onClick={() => setFreezing(true)}
-                className="inline-flex items-center gap-1.5 rounded-full border border-[#F5C2C0] px-3 py-1.5 text-[12px] font-medium text-[#B42318] hover:bg-[#FDECEC]"
+                className="inline-flex items-center gap-1.5 rounded-full border border-rh-crimson px-3 py-1.5 text-[12px] font-medium text-rh-crimson-text hover:bg-rh-crimson-wash"
               >
                 <OctagonX className="h-4 w-4" /> Freeze and review
               </button>
@@ -194,7 +196,7 @@ export default function AgentTimelinePage() {
           </header>
 
           {freezing && (
-            <section aria-label="Freeze and review" className="mb-4 rounded-[10px] border border-[#F5C2C0] bg-[#FFF5F5] p-3 text-[12px]">
+            <section aria-label="Freeze and review" className="mb-4 rounded-[10px] border border-rh-crimson bg-rh-crimson-wash p-3 text-[12px]">
               <p className="mb-2">
                 Freezing refuses every call from {data.agent.name}, from its next call. Nothing is deleted; you can unfreeze it on the Passports
                 page after your review.
@@ -205,17 +207,17 @@ export default function AgentTimelinePage() {
                 value={reason}
                 maxLength={500}
                 onChange={(e) => setReason(e.target.value)}
-                className="mb-2 w-full rounded-[6px] border border-[#E5E5E5] px-2 py-1"
+                className="mb-2 w-full rounded-[6px] border border-rh-hairline px-2 py-1"
               />
               <div className="flex gap-2">
                 <button
                   disabled={busy}
                   onClick={() => void freeze()}
-                  className="rounded-full bg-[#B42318] px-3 py-1 font-medium text-white disabled:opacity-40"
+                  className="rounded-full bg-rh-crimson px-3 py-1 font-medium text-rh-canvas disabled:opacity-40"
                 >
                   Freeze now
                 </button>
-                <button disabled={busy} onClick={() => setFreezing(false)} className="rounded-full border border-[#E5E5E5] px-3 py-1">
+                <button disabled={busy} onClick={() => setFreezing(false)} className="rounded-full border border-rh-hairline px-3 py-1">
                   Cancel
                 </button>
               </div>
@@ -229,7 +231,7 @@ export default function AgentTimelinePage() {
                 onClick={() => setFilter(f.id)}
                 aria-pressed={filter === f.id}
                 className={`rounded-full border px-2.5 py-1 text-[12px] ${
-                  filter === f.id ? "border-[#0F0F0F] bg-[#0F0F0F] text-white" : "border-[#E5E5E5] hover:bg-[#F2F2F2]"
+                  filter === f.id ? "border-rh-strong bg-rh-teal text-rh-canvas" : "border-rh-hairline hover:bg-rh-elevated"
                 }`}
               >
                 {f.label}
@@ -237,14 +239,14 @@ export default function AgentTimelinePage() {
             ))}
           </div>
 
-          <p className="mb-4 text-[11px] text-[#606060]">{TIMELINE_LIMITS_TEXT}</p>
+          <p className="mb-4 text-[11px] text-rh-text-2">{TIMELINE_LIMITS_TEXT}</p>
 
-          {days.length === 0 && <p className="text-[12px] text-[#606060]">Nothing to show for this filter.</p>}
+          {days.length === 0 && <p className="text-[12px] text-rh-text-2">Nothing to show for this filter.</p>}
           <ol aria-label="Timeline" className="space-y-4">
             {days.map((group) => (
               <li key={group.day}>
-                <h2 className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-[#606060]">{group.day}</h2>
-                <ol className="divide-y divide-[#F2F2F2] rounded-[10px] border border-[#E5E5E5]">
+                <h2 className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-rh-text-2">{group.day}</h2>
+                <ol className="divide-y divide-rh-hairline rounded-[10px] border border-rh-hairline">
                   {group.items.map((item, index) => {
                     const d = describeItem(item);
                     return (
@@ -253,11 +255,11 @@ export default function AgentTimelinePage() {
                         <div className="min-w-0 flex-1">
                           <div className="flex flex-wrap items-baseline justify-between gap-x-3">
                             <span className="break-words text-[13px] font-medium">{d.title}</span>
-                            <time dateTime={item.at} className="text-[11px] text-[#606060]">{new Date(item.at).toLocaleTimeString()}</time>
+                            <time dateTime={item.at} className="text-[11px] text-rh-text-2">{new Date(item.at).toLocaleTimeString()}</time>
                           </div>
-                          {d.detail && <p className="mt-0.5 break-words text-[12px] text-[#404040]">{d.detail}</p>}
+                          {d.detail && <p className="mt-0.5 break-words text-[12px] text-rh-text">{d.detail}</p>}
                           {d.link && (
-                            <Link href={d.link.href} className="mt-0.5 inline-block text-[12px] text-[#175CD3] hover:underline">
+                            <Link href={d.link.href} className="mt-0.5 inline-block text-[12px] text-rh-steel-text hover:underline">
                               {d.link.label}
                             </Link>
                           )}
@@ -274,13 +276,14 @@ export default function AgentTimelinePage() {
             <button
               disabled={loadingOlder}
               onClick={() => void loadOlder()}
-              className="mt-4 rounded-full border border-[#E5E5E5] px-3 py-1 text-[12px] hover:bg-[#F2F2F2] disabled:opacity-40"
+              className="mt-4 rounded-full border border-rh-hairline px-3 py-1 text-[12px] hover:bg-rh-elevated disabled:opacity-40"
             >
               {loadingOlder ? "Loading…" : "Load older"}
             </button>
           )}
         </>
       )}
-    </main>
+    </div>
+    </AppShell>
   );
 }

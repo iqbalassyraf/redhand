@@ -21,8 +21,8 @@ import {
   usableCount,
 } from "@/lib/sdkKeys";
 
-const button = "rounded-full border border-[#E5E5E5] bg-[#FFFFFF] px-3 py-1 text-[12px] font-semibold hover:bg-[#F2F2F2] disabled:opacity-50";
-const STATE_STYLE = { active: "bg-[#E7F5EA] text-[#1E7B34]", expired: "bg-[#F2F2F2] text-[#606060]", revoked: "bg-[#FDECEC] text-[#B42318]" } as const;
+const button = "rounded-full border border-rh-hairline bg-rh-card px-3 py-1 text-[12px] font-semibold hover:bg-rh-elevated disabled:opacity-50";
+const STATE_STYLE = { active: "bg-rh-teal-wash text-rh-teal-text", expired: "bg-rh-elevated text-rh-text-2", revoked: "bg-rh-crimson-wash text-rh-crimson-text" } as const;
 
 export function SdkKeysCard(props: { token: string; onUnauthorized: () => void }) {
   const { token } = props;
@@ -96,18 +96,18 @@ export function SdkKeysCard(props: { token: string; onUnauthorized: () => void }
   };
 
   return (
-    <section className="rounded-[12px] border border-[#E5E5E5] bg-[#FFFFFF] p-4 text-[12px]" aria-label="SDK keys">
+    <section className="rounded-[12px] border border-rh-hairline bg-rh-card p-4 text-[12px]" aria-label="SDK keys">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 className="text-[15px] font-semibold">SDK keys</h2>
         <button onClick={load} className={button}>Refresh</button>
       </div>
-      <p className="mt-1 text-[#606060]">{SDK_KEYS_TEXT}</p>
+      <p className="mt-1 text-rh-text-2">{SDK_KEYS_TEXT}</p>
 
       {shown && (
-        <div role="status" className="mt-3 rounded-[8px] border-2 border-[#0F0F0F] bg-[#FFF8E1] p-3">
+        <div role="status" className="mt-3 rounded-[8px] border-2 border-rh-strong bg-rh-ochre-wash p-3">
           <p className="font-semibold">New key for {shown.name}</p>
           <p className="mt-1">{SHOW_ONCE_TEXT}</p>
-          <code className="mt-2 block break-all rounded-[6px] bg-[#FFFFFF] p-2 font-mono text-[12px]">{shown.secret}</code>
+          <code className="mt-2 block break-all rounded-[6px] bg-rh-card p-2 font-mono text-[12px]">{shown.secret}</code>
           <div className="mt-2 flex gap-2">
             <button
               className={button}
@@ -127,20 +127,20 @@ export function SdkKeysCard(props: { token: string; onUnauthorized: () => void }
         </div>
       )}
 
-      {error && <p role="alert" className="mt-2 rounded-[8px] bg-[#FDECEC] p-2 text-[#B42318]">{error}</p>}
-      {notice && <p role="status" className="mt-2 rounded-[8px] bg-[#E7F5EA] p-2 text-[#1E7B34]">{notice}</p>}
+      {error && <p role="alert" className="mt-2 rounded-[8px] bg-rh-crimson-wash p-2 text-rh-crimson-text">{error}</p>}
+      {notice && <p role="status" className="mt-2 rounded-[8px] bg-rh-teal-wash p-2 text-rh-teal-text">{notice}</p>}
 
       {!list ? (
-        !error && <p className="mt-2 text-[#606060]">Loading…</p>
+        !error && <p className="mt-2 text-rh-text-2">Loading…</p>
       ) : (
         <>
           <p className="mt-3 font-semibold">{usableCount(list.keys)} of {list.max_active} active keys.</p>
           {list.keys.length === 0 ? (
-            <p className="mt-1 text-[#606060]">No SDK keys yet.</p>
+            <p className="mt-1 text-rh-text-2">No SDK keys yet.</p>
           ) : (
             <div className="mt-1 overflow-x-auto">
               <table className="w-full min-w-[560px] text-left">
-                <thead className="text-[11px] uppercase tracking-wider text-[#606060]">
+                <thead className="text-[11px] uppercase tracking-wider text-rh-text-2">
                   <tr>
                     <th className="py-1 pr-3">Name</th>
                     <th className="py-1 pr-3">Key</th>
@@ -152,7 +152,7 @@ export function SdkKeysCard(props: { token: string; onUnauthorized: () => void }
                 </thead>
                 <tbody>
                   {list.keys.map((k) => (
-                    <tr key={k.id} className="border-t border-[#F2F2F2]">
+                    <tr key={k.id} className="border-t border-rh-hairline">
                       <td className="py-1 pr-3">{k.name}</td>
                       <td className="py-1 pr-3 font-mono text-[11px]">{k.key_prefix}…</td>
                       <td className="py-1 pr-3">
@@ -180,18 +180,18 @@ export function SdkKeysCard(props: { token: string; onUnauthorized: () => void }
           >
             <label className="flex flex-col gap-1">
               Name
-              <input value={name} onChange={(e) => setName(e.target.value)} maxLength={100} placeholder="for example ci pipeline" className="h-[34px] w-[200px] rounded-[8px] border border-[#E5E5E5] px-2" />
+              <input value={name} onChange={(e) => setName(e.target.value)} maxLength={100} placeholder="for example ci pipeline" className="h-[34px] w-[200px] rounded-[8px] border border-rh-hairline px-2" />
             </label>
             <label className="flex flex-col gap-1">
               Expires after (days)
-              <input value={days} onChange={(e) => setDays(e.target.value)} inputMode="numeric" className="h-[34px] w-[90px] rounded-[8px] border border-[#E5E5E5] px-2" />
+              <input value={days} onChange={(e) => setDays(e.target.value)} inputMode="numeric" className="h-[34px] w-[90px] rounded-[8px] border border-rh-hairline px-2" />
             </label>
-            <button type="submit" disabled={busy || invalid} className="h-[34px] rounded-full bg-[#0F0F0F] px-4 font-semibold text-[#FFFFFF] disabled:opacity-40">
+            <button type="submit" disabled={busy || invalid} className="h-[34px] rounded-full bg-rh-teal px-4 font-semibold text-rh-canvas disabled:opacity-40">
               Create SDK key
             </button>
           </form>
-          {parsedDays === "invalid" && <p role="alert" className="mt-1 text-[#B42318]">Enter a whole number of days from 1 to 365.</p>}
-          <p className="mt-1 text-[#606060]">Creating and revoking keys needs an admin. Every change is recorded in the audit log.</p>
+          {parsedDays === "invalid" && <p role="alert" className="mt-1 text-rh-crimson-text">Enter a whole number of days from 1 to 365.</p>}
+          <p className="mt-1 text-rh-text-2">Creating and revoking keys needs an admin. Every change is recorded in the audit log.</p>
         </>
       )}
     </section>

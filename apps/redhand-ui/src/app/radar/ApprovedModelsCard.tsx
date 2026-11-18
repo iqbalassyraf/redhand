@@ -20,7 +20,7 @@ import {
   parseModelLines,
 } from "@/lib/approvedModels";
 
-const button = "rounded-full border border-[#E5E5E5] bg-[#FFFFFF] px-3 py-1 text-[12px] font-semibold hover:bg-[#F2F2F2] disabled:opacity-50";
+const button = "rounded-full border border-rh-hairline bg-rh-card px-3 py-1 text-[12px] font-semibold hover:bg-rh-elevated disabled:opacity-50";
 
 export function ApprovedModelsCard(props: { token: string; onUnauthorized: () => void; onSaved?: () => void }) {
   const { token } = props;
@@ -86,18 +86,18 @@ export function ApprovedModelsCard(props: { token: string; onUnauthorized: () =>
   };
 
   return (
-    <section className="mb-6 rounded-[10px] border border-[#E5E5E5] bg-[#FFFFFF] p-4 text-[12px]" aria-label="Approved models">
+    <section className="mb-6 rounded-[10px] border border-rh-hairline bg-rh-card p-4 text-[12px]" aria-label="Approved models">
       <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
         <h2 className="text-[14px] font-semibold">Approved models</h2>
         <button onClick={load} className={button}>Refresh</button>
       </div>
       {unavailable ? (
-        <p className="text-[#606060]">Approved models are not available from this server yet.</p>
+        <p className="text-rh-text-2">Approved models are not available from this server yet.</p>
       ) : !list ? (
-        !error && <p className="text-[#606060]">Loading…</p>
+        !error && <p className="text-rh-text-2">Loading…</p>
       ) : (
         <>
-          <p className="text-[#606060]">{APPROVED_MODELS_TEXT}</p>
+          <p className="text-rh-text-2">{APPROVED_MODELS_TEXT}</p>
           <p className="mt-2 font-semibold">
             {list.check_active ? `Check is on: ${list.items.length} approved model${list.items.length === 1 ? "" : "s"}.` : "Check is off: no list, nothing is flagged."}
           </p>
@@ -118,33 +118,33 @@ export function ApprovedModelsCard(props: { token: string; onUnauthorized: () =>
                   setText(e.target.value);
                 }}
                 placeholder="anthropic/claude-sonnet-5-5"
-                className="rounded-[8px] border border-[#E5E5E5] p-2 font-mono text-[12px]"
+                className="rounded-[8px] border border-rh-hairline p-2 font-mono text-[12px]"
                 spellCheck={false}
               />
             </label>
             {invalid ? (
-              <p role="alert" className="text-[#B42318]">{parsed}</p>
+              <p role="alert" className="text-rh-crimson-text">{parsed}</p>
             ) : (
-              <p className="text-[#606060]">{describeChange(list.items, parsed)}</p>
+              <p className="text-rh-text-2">{describeChange(list.items, parsed)}</p>
             )}
             <input
               maxLength={500}
               placeholder="Reason (recorded in the audit log)"
               value={reason}
               onChange={(e) => setReason(e.target.value)}
-              className="h-[34px] rounded-[8px] border border-[#E5E5E5] px-3"
+              className="h-[34px] rounded-[8px] border border-rh-hairline px-3"
             />
-            <p className="text-[#606060]">Changing the list needs an admin. A model name can be a dated version (…-20260301) of an approved one.</p>
+            <p className="text-rh-text-2">Changing the list needs an admin. A model name can be a dated version (…-20260301) of an approved one.</p>
             <div>
-              <button type="submit" disabled={busy || invalid} className="h-[34px] rounded-full bg-[#0F0F0F] px-4 font-semibold text-[#FFFFFF] disabled:opacity-40">
+              <button type="submit" disabled={busy || invalid} className="h-[34px] rounded-full bg-rh-teal px-4 font-semibold text-rh-canvas disabled:opacity-40">
                 Save approved models
               </button>
             </div>
           </form>
         </>
       )}
-      {error && <p role="alert" className="mt-2 rounded-[8px] bg-[#FDECEC] p-2 text-[#B42318]">{error}</p>}
-      {notice && <p role="status" className="mt-2 rounded-[8px] bg-[#E7F5EA] p-2 text-[#1E7B34]">{notice}</p>}
+      {error && <p role="alert" className="mt-2 rounded-[8px] bg-rh-crimson-wash p-2 text-rh-crimson-text">{error}</p>}
+      {notice && <p role="status" className="mt-2 rounded-[8px] bg-rh-teal-wash p-2 text-rh-teal-text">{notice}</p>}
     </section>
   );
 }

@@ -25,15 +25,15 @@ function Excerpt({ title, excerpt }: { title: string; excerpt: PayloadExcerpt | 
       <div className="mb-1 font-semibold">{title}</div>
       {excerpt ? (
         <>
-          <pre className="max-h-64 overflow-auto whitespace-pre-wrap break-all rounded-[8px] bg-[#F8F8F8] p-2 font-mono text-[11px]">
+          <pre className="max-h-64 overflow-auto whitespace-pre-wrap break-all rounded-[8px] bg-rh-subtle p-2 font-mono text-[11px]">
             {pretty(excerpt)}
           </pre>
           {excerpt.truncated ? (
-            <div className="mt-1 text-[#8A5A00]">Cut to 2 KB; the original was {excerpt.original_bytes} bytes.</div>
+            <div className="mt-1 text-rh-ochre">Cut to 2 KB; the original was {excerpt.original_bytes} bytes.</div>
           ) : null}
         </>
       ) : (
-        <div className="text-[#606060]">Not captured.</div>
+        <div className="text-rh-text-2">Not captured.</div>
       )}
     </div>
   );
@@ -74,21 +74,21 @@ export function EventDrawer({ event, token, canViewPayload, onClose, onUnauthori
   };
 
   return (
-    <aside className="fixed right-0 top-0 z-40 h-full w-full max-w-md overflow-auto border-l border-[#E5E5E5] bg-[#FFFFFF] p-4 text-[12px] shadow-lg" aria-label="Event detail">
+    <aside className="fixed right-0 top-0 z-40 h-full w-full max-w-md overflow-auto border-l border-rh-hairline bg-rh-card p-4 text-[12px]" aria-label="Event detail">
       <div className="mb-3 flex items-center justify-between">
         <h2 className="text-[15px] font-bold">Event {event.seq}</h2>
-        <button onClick={onClose} aria-label="Close" className="rounded-full p-1 hover:bg-[#F2F2F2]">
+        <button onClick={onClose} aria-label="Close" className="rounded-full p-1 hover:bg-rh-elevated">
           <X className="h-4 w-4" />
         </button>
       </div>
       <dl className="mb-4 grid grid-cols-[110px_1fr] gap-y-1">
-        <dt className="text-[#606060]">Time</dt><dd>{new Date(event.occurred_at).toLocaleString()}</dd>
-        <dt className="text-[#606060]">Decision</dt><dd>{event.decision}</dd>
-        <dt className="text-[#606060]">Server</dt><dd>{event.server || "—"}</dd>
-        <dt className="text-[#606060]">Tool</dt><dd className="font-mono">{event.tool_name || event.method}</dd>
-        <dt className="text-[#606060]">Reasons</dt><dd>{event.reasons.join("; ") || "—"}</dd>
-        <dt className="text-[#606060]">Upstream</dt><dd>{event.upstream_status ?? "—"}</dd>
-        <dt className="text-[#606060]">Argument names</dt><dd className="font-mono">{event.argument_keys.join(", ") || "—"}</dd>
+        <dt className="text-rh-text-2">Time</dt><dd>{new Date(event.occurred_at).toLocaleString()}</dd>
+        <dt className="text-rh-text-2">Decision</dt><dd>{event.decision}</dd>
+        <dt className="text-rh-text-2">Server</dt><dd>{event.server || "—"}</dd>
+        <dt className="text-rh-text-2">Tool</dt><dd className="font-mono">{event.tool_name || event.method}</dd>
+        <dt className="text-rh-text-2">Reasons</dt><dd>{event.reasons.join("; ") || "—"}</dd>
+        <dt className="text-rh-text-2">Upstream</dt><dd>{event.upstream_status ?? "—"}</dd>
+        <dt className="text-rh-text-2">Argument names</dt><dd className="font-mono">{event.argument_keys.join(", ") || "—"}</dd>
       </dl>
 
       {canViewPayload ? (
@@ -101,17 +101,17 @@ export function EventDrawer({ event, token, canViewPayload, onClose, onUnauthori
           <div>
             <button
               onClick={show} disabled={loading}
-              className="rounded-full border border-[#E5E5E5] px-3 py-1.5 font-semibold hover:bg-[#F2F2F2] disabled:opacity-50"
+              className="rounded-full border border-rh-hairline px-3 py-1.5 font-semibold hover:bg-rh-elevated disabled:opacity-50"
             >
               {loading ? "Loading…" : "Show captured payload"}
             </button>
-            <p className="mt-2 text-[#606060]">Viewing a payload is recorded in the audit log.</p>
+            <p className="mt-2 text-rh-text-2">Viewing a payload is recorded in the audit log.</p>
           </div>
         )
       ) : (
-        <p className="text-[#606060]">Only admins can read captured payloads.</p>
+        <p className="text-rh-text-2">Only admins can read captured payloads.</p>
       )}
-      {error ? <div className="mt-3 rounded-[8px] border border-[#FDECEC] bg-[#FFF5F5] px-3 py-2 text-[#B42318]">{error}</div> : null}
+      {error ? <div className="mt-3 rounded-[8px] border border-rh-crimson bg-rh-crimson-wash px-3 py-2 text-rh-crimson-text">{error}</div> : null}
     </aside>
   );
 }

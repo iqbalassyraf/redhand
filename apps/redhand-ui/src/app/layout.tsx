@@ -23,7 +23,7 @@ export default async function RootLayout({
   await connection();
   return (
     <html lang="en" className={`${sans.variable} ${mono.variable}`}>
-      <body className="bg-[#FFFFFF] text-[#0F0F0F] font-sans antialiased">
+      <body className="rh-dark font-sans antialiased">
         <AuthProvider>{children}</AuthProvider>
       </body>
     </html>

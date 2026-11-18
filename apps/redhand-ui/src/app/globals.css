@@ -42,6 +42,12 @@
   --rh-crimson-wash: rgba(200, 90, 83, 0.15);
   --rh-slate-purple: #8470B8;
   --rh-slate-purple-wash: rgba(132, 112, 184, 0.15);
+
+  /* Lighter siblings of the accents for small TEXT on cards and washes (the accents themselves stay for dots, bars and chart marks). */
+  --rh-teal-text: #5CBF9F;
+  --rh-crimson-text: #E4857E;
+  --rh-steel-text: #7DA7D1;
+  --rh-purple-text: #A99BD6;
 }
 
 /* Figures (latency, counts, ids, token totals) never shift width as they change. */
@@ -63,42 +69,31 @@
 }
 
 
-:root {
-  color-scheme: light;
+.react-flow__attribution {
+  display: none !important;
 }
 
-body {
-  background-color: #ffffff;
-  color: #0f0f0f;
-  font-family: var(--font-roboto), system-ui, -apple-system, sans-serif;
+/* Flow-diagram controls (the sample canvas at /demo) follow the tokens: flat, hairline, no shadow. */
+.react-flow__controls {
+  background: var(--rh-surface-card) !important;
+  border: 1px solid var(--rh-border-hairline) !important;
+  border-radius: 8px !important;
+  overflow: hidden;
+}
+
+.react-flow__controls-button {
+  background: var(--rh-surface-card) !important;
+  border-bottom: 1px solid var(--rh-border-hairline) !important;
+  fill: var(--rh-text-secondary) !important;
+}
+
+.react-flow__controls-button:hover {
+  background: var(--rh-surface-elevated) !important;
+  fill: var(--rh-text-primary) !important;
 }
 
 code,
 pre,
 .font-mono {
-  font-family: var(--font-roboto-mono), monospace;
-}
-
-/* React Flow Clean Broadcast Overrides (Level 0 / Flat 1px #E5E5E5 borders) */
-.react-flow__attribution {
-  display: none !important;
-}
-
-.react-flow__controls {
-  background: #ffffff !important;
-  border: 1px solid #e5e5e5 !important;
-  border-radius: 8px !important;
-  overflow: hidden;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1) !important;
-}
-
-.react-flow__controls-button {
-  background: #ffffff !important;
-  border-bottom: 1px solid #e5e5e5 !important;
-  fill: #606060 !important;
-}
-
-.react-flow__controls-button:hover {
-  background: #f2f2f2 !important;
-  fill: #0f0f0f !important;
+  font-family: var(--font-rh-mono), ui-monospace, monospace;
 }
