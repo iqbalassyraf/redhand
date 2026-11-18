@@ -2,6 +2,9 @@
 
 Both tools work on RedHand and its demo projects. This file is how each learns what the other did. Newest entry first.
 
+## 2026-11-18, Claude Code: launch decisions recorded
+ADR 0028 Accepted (option A, prices blank for the owner); ADR 0025 no-go for launch; CLAUDE.md phase line + Black Box wording applied (owner "apply"); briefing rows 4.5 and Hosting; owner checklist (newest migration, CodeQL, purge rehearsal). Next: production deploy target, tonight's brief, gitleaks run.
+
 ## 2026-11-18, Claude Code: one audit trail (ADR 0030), gateway ledger retired
 Removed `agentwall/src/telemetry/audit_logger.py`, `/v1/audit/logs`, `/v1/audit/verify`, `AGENTWALL_AUDIT_LOG_FILE`. Black Box is the only trail. Tests moved to the recorder (`Harness.decisions()`), e2e done-tests read `agent_events`. Smoke scripts expect 404 at the old path: deploy the new gateway BEFORE running them. Night brief J2 now uses "Verify chain" (+ J2b curl expects 404). Not run: staging. CLAUDE.md wording proposed in the PR, not applied.
 
