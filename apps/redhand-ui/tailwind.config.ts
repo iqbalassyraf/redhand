@@ -5,6 +5,7 @@ const config: Config = {
     "./src/pages/**/*.{js,ts,jsx,tsx,mdx}",
     "./src/components/**/*.{js,ts,jsx,tsx,mdx}",
     "./src/app/**/*.{js,ts,jsx,tsx,mdx}",
+    "./src/lib/**/*.{js,ts,jsx,tsx,mdx}",
   ],
   theme: {
     extend: {
@@ -39,6 +40,46 @@ const config: Config = {
           "steel-text": "var(--rh-steel-text)",
           "purple-text": "var(--rh-purple-text)",
         },
+        // Agent Control Room dark glass surface tokens (.rh-control-room in src/app/globals.css).
+        control: {
+          base: "var(--rh-bg-base)",
+          elevated: "var(--rh-bg-elevated)",
+          rail: "var(--rh-bg-rail)",
+          glass: "var(--rh-glass-bg)",
+          glassHover: "var(--rh-glass-bg-hover)",
+          border: "var(--rh-glass-border)",
+          borderStrong: "var(--rh-glass-border-strong)",
+          crimson: "var(--rh-accent-crimson)",
+          crimsonBright: "var(--rh-accent-crimson-bright)",
+          crimsonSoft: "var(--rh-accent-crimson-soft)",
+          allowed: "var(--rh-status-allowed)",
+          flagged: "var(--rh-status-flagged)",
+          blocked: "var(--rh-status-blocked)",
+          pending: "var(--rh-status-pending)",
+          text: "var(--rh-text-primary)",
+          muted: "var(--rh-text-secondary)",
+          subtle: "var(--rh-text-muted)",
+        },
+      },
+      borderRadius: {
+        "rh-sm": "var(--rh-radius-sm)",
+        "rh-md": "var(--rh-radius-md)",
+        "rh-lg": "var(--rh-radius-lg)",
+        "rh-xl": "var(--rh-radius-xl)",
+      },
+      boxShadow: {
+        "rh-glass": "var(--rh-glass-glow)",
+        "rh-crimson": "var(--rh-glow-crimson)",
+        "rh-allowed": "var(--rh-glow-allowed)",
+        "rh-flagged": "var(--rh-glow-flagged)",
+        "rh-blocked": "var(--rh-glow-blocked)",
+      },
+      transitionTimingFunction: {
+        "rh-out": "var(--rh-ease-out)",
+      },
+      transitionDuration: {
+        "rh-fast": "var(--rh-duration-fast)",
+        "rh-normal": "var(--rh-duration-normal)",
       },
       fontFamily: {
         sans: ["var(--font-rh-sans)", "system-ui", "-apple-system", "sans-serif"],
