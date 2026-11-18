@@ -144,7 +144,7 @@ def check_gateway(client: httpx.Client, base: str) -> list[Result]:
         metrics = client.get(base + "/metrics")
         out.append(Result("gateway /metrics refuses a stranger", metrics.status_code in (401, 403, 503), f"status {metrics.status_code}"))
         audit = client.get(base + "/v1/audit/logs")
-        out.append(Result("gateway audit log refuses a stranger", _refused(audit.status_code), f"status {audit.status_code}"))
+        out.append(Result("gateway has no audit-ledger route (the Black Box in core is the audit trail)", audit.status_code == 404, f"status {audit.status_code}"))
     except httpx.HTTPError as exc:
         out.append(Result("gateway answers", False, type(exc).__name__))
     return out

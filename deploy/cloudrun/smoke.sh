@@ -54,7 +54,7 @@ check "gateway refuses MCP calls without an agent token" 401 \
   "$(status -X POST -H 'Content-Type: application/json' -d '{"jsonrpc":"2.0","id":1,"method":"ping"}' "$GATEWAY/mcp/example")"
 check "gateway refuses a fake agent token" 401 \
   "$(status -X POST -H 'Authorization: Bearer not-a-token' -H 'Content-Type: application/json' -d '{"jsonrpc":"2.0","id":1,"method":"ping"}' "$GATEWAY/mcp/example")"
-check "gateway audit log needs the service token" 401 "$(status "$GATEWAY/v1/audit/logs")"
+check "gateway keeps no audit ledger of its own (the Black Box in core is the audit trail)" 404 "$(status "$GATEWAY/v1/audit/logs")"
 check "gateway metrics need the service token" 401 "$(status "$GATEWAY/metrics")"
 
 check "core metrics need the service token" 401 "$(status "$CORE/metrics")"

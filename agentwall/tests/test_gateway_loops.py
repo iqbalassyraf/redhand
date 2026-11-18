@@ -181,22 +181,22 @@ async def test_refusals_reach_the_ledger_once_a_minute_and_are_always_counted() 
         await send(h, token, id=1)
     for _ in range(40):
         assert refused(await send(h, token, id=1))
-    blocks = [r for r in h.audit.get_recent(200) if r["firewall_decision"] == "BLOCK"]
+    blocks = [r for r in h.full_rows(200) if r["decision"] == "BLOCK"]
     assert len(blocks) == 1  # one ledger record for forty refusals
     assert 'reason="loop_throttled"} 40' in h.gateway.metrics.render()
     h.gateway._loop_refusal_logged[next(iter(h.gateway._loop_refusal_logged))] -= 61.0
     await send(h, token, id=1)
-    assert len([r for r in h.audit.get_recent(200) if r["firewall_decision"] == "BLOCK"]) == 2
+    assert len([r for r in h.full_rows(200) if r["decision"] == "BLOCK"]) == 2
 
 
 async def test_a_loop_refusal_has_its_own_ledger_record_and_does_not_silence_a_budget_refusal() -> None:
     h, token = wired("throttle", daily=1)
     await send(h, token, id=1)  # uses the one allowed call
     assert refused(await send(h, token, id=2))  # budget refusal: its own ledger record
-    assert len([r for r in h.audit.get_recent(200) if r["firewall_decision"] == "BLOCK"]) == 1
+    assert len([r for r in h.full_rows(200) if r["decision"] == "BLOCK"]) == 1
     for _ in range(LIMIT - 1):  # the loop check runs before Budget Guard, so these budget-refused calls are counted as repeats too
         assert refused(await send(h, token, id=2))
-    blocks = [r for r in h.audit.get_recent(200) if r["firewall_decision"] == "BLOCK"]
+    blocks = [r for r in h.full_rows(200) if r["decision"] == "BLOCK"]
     assert len(blocks) == 2  # the budget's one record, and the loop's own (the loop's ledger limit is separate from the budget's)
     assert 'reason="loop_throttled"} 1' in h.gateway.metrics.render() and 'reason="budget_exceeded"} 4' in h.gateway.metrics.render()
 

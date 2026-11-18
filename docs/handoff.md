@@ -2,6 +2,9 @@
 
 Both tools work on RedHand and its demo projects. This file is how each learns what the other did. Newest entry first.
 
+## 2026-11-18, Claude Code: one audit trail (ADR 0030), gateway ledger retired
+Removed `agentwall/src/telemetry/audit_logger.py`, `/v1/audit/logs`, `/v1/audit/verify`, `AGENTWALL_AUDIT_LOG_FILE`. Black Box is the only trail. Tests moved to the recorder (`Harness.decisions()`), e2e done-tests read `agent_events`. Smoke scripts expect 404 at the old path: deploy the new gateway BEFORE running them. Night brief J2 now uses "Verify chain" (+ J2b curl expects 404). Not run: staging. CLAUDE.md wording proposed in the PR, not applied.
+
 ## 2026-11-18, Claude Code: picomatch accepted, CI dev-audit gate loosened (owner approved)
 Main's Dashboard job was red since the B5c merge (`npm audit` also checked dev dependencies; picomatch has no fixed release). `.github/workflows/ci.yml`: production audit gates (`--omit=dev`), dev audit informational. Revert when picomatch > 4.0.7 exists. Details in `docs/release-readiness.md` 3.2.
 

@@ -41,7 +41,6 @@ from agentwall.src.gateway.recorder import EventRecorder
 from agentwall.src.gateway.service import McpGateway
 from agentwall.src.gateway.trips import TripDispatcher
 from agentwall.src.gateway.upstream import UpstreamForwarder
-from agentwall.src.telemetry.audit_logger import TamperEvidentAuditLogger
 
 ORG = str(uuid4())
 AGENT = str(uuid4())
@@ -120,7 +119,6 @@ def build(ttl: float) -> tuple[McpGateway, str]:
             http_client=httpx.AsyncClient(transport=httpx.MockTransport(upstream_handler)),
         ),
         firewall=FirewallPolicyEngine("agentwall/config/policies.yaml"),
-        audit_logger=TamperEvidentAuditLogger(),
         metrics=GatewayMetrics(),
         budget=BudgetMeter(instance_id="benchmark-gateway-0001", reporter=_NullReporter()),
         recorder=EventRecorder(instance_id="benchmark-gateway-0001", reporter=_NullEventReporter()),

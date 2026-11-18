@@ -51,7 +51,7 @@ def test_the_real_gateway_sets_them_on_health_a_refusal_and_a_tool_call() -> Non
     for response in (
         client.get("/health"),
         client.post("/mcp/xero", json={"jsonrpc": "2.0", "id": 1, "method": "tools/list"}),  # no token: refused
-        client.get("/v1/audit/verify"),  # no service token: refused
+        client.get("/v1/policies"),  # no service token: refused
     ):
         assert response.headers["x-content-type-options"] == "nosniff", response.request.url
         assert response.headers["cache-control"] == "no-store", response.request.url
