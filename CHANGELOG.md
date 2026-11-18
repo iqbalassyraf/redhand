@@ -2,6 +2,8 @@
 
 ## Unreleased: Phase 3 (See things), in progress
 
+- Dashboard redesign, docs (slice 6): `docs/design/matte-executive-dark.md` (tokens, meanings, rules, accessibility) and ADR 0031 (design system and the Insights summary).
+
 - Dashboard redesign, slice 3: **Insights** is now the home page (`/`), built only from real data (`GET /v1/insights/summary`): a control strip (Safe Mode, Radar mode, frozen and revoked counts), window and agent filters, five KPI tiles, a top-agents table with risk chips (security operator and above), and charts for decisions over time, data returned, outcomes, call duration (p50 and p95, labelled as tool time included), refusal reasons, most-called tools and an agent-server-outcome flow. Every chart has a text summary and a "View as table" toggle; empty and failed reads say so (never zeros). Charts are hand-drawn SVG with tested geometry (no chart library, no new dependency). Refresh every 30 s while the tab is visible. Owners, admins and security operators get **Export CSV** (the existing audited Black Box export). The old sample canvas moved to `/demo`. Real-browser run (owner and viewer, 1280 and 375 px): no overflow, no console errors.
 
 - Dashboard redesign, slice 1 (design system "Matte Executive Dark"): colour tokens as CSS variables mapped to Tailwind `rh-*` colours, Inter and JetBrains Mono through Next.js's built-in font loader (served from our own origin, CSP unchanged, no new dependency), a new `AppShell` (pine-slate rail, header band, phone menu) and small UI primitives (card, KPI tile, chip, button, empty and error states). Nothing uses them yet: pages migrate in later slices. A contrast test fails if a text pair drops below WCAG AA or a shadow, glow, gradient or pure black appears in the tokens.
