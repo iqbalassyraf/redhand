@@ -1,307 +1,578 @@
 "use client";
 
-/**
- * Insights: the dashboard's home page (dashboard redesign S3). Real numbers only: everything here is computed by redhand-core from what the
- * gateway reported to the Black Box (`GET /v1/insights/summary`). The sample-data canvas lives at /demo. The UI is never a security boundary:
- * a hidden button only saves a click, core still authorizes every request.
- */
-
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { RefreshCw, ShieldCheck } from "lucide-react";
+import { AnimatePresence, LayoutGroup, MotionConfig, motion } from "framer-motion";
+import { Plus, ShieldCheck, X } from "lucide-react";
 
-import { AppShell } from "@/components/shell/AppShell";
-import { AreaChart, ChartCard, Donut, Flow, LatencyBars, RankedBars, StackedArea } from "@/components/charts/charts";
-import { Button, Card, Chip, EmptyState, ErrorState, KpiTile } from "@/components/ui/primitives";
-import { ApiError, blackboxApi, downloadBlackBoxExport, insightsApi, meApi, riskApi, type AgentRiskSummary, type Me } from "@/lib/api";
-import { useRequiredSession } from "@/lib/auth";
+import { CommandSearchModal } from "@/components/control-room/CommandSearchModal";
+import { GlassCard } from "@/components/control-room/GlassCard";
+import { IconRail } from "@/components/control-room/IconRail";
+import { NodeDetailView } from "@/components/control-room/NodeDetailView";
+import { RadialMap } from "@/components/control-room/RadialMap";
+import { RightStatsPanel } from "@/components/control-room/RightStatsPanel";
 import {
-  WINDOW_OPTIONS, bucketLabel, controlChips, formatBytes, formatCount, formatMs, hasCalls, outcomeSlices, percent, reasonRows, seriesSummary,
-  windowLabel, type InsightsSummary, type InsightsWindow, type Tone,
-} from "@/lib/insights";
+  ApprovalsView,
+  AuditLogView,
+  PoliciesView,
+} from "@/components/control-room/SecondaryViews";
+import { StatusPill } from "@/components/control-room/StatusPill";
+import { TopBar } from "@/components/control-room/TopBar";
+import { useAuth } from "@/lib/auth";
+import {
+  ALL_NODES,
+  MOCK_APPROVALS,
+  MOCK_AUDIT_LOG,
+  MOCK_POLICIES,
+  OVERVIEW_SNAPSHOTS,
+  type ApprovalRequestItem,
+  type ControlRoomView,
+  type PolicyItem,
+  type TimeRangeKey,
+  type TopologyNode,
+} from "@/lib/control-room-data";
+import {
+  EASE_OUT_EXPO,
+  MOTION_TIMING,
+  SPRING_SHARED_ELEMENT,
+  usePrefersReducedMotion,
+} from "@/lib/tokens";
 
-const REFRESH_MS = 30_000;
-const RISK_TONE: Record<string, Tone> = { low: "teal", medium: "ochre", high: "crimson", critical: "crimson" };
+type OverviewSubTab = "operational" | "topology" | "security";
 
-export default function InsightsPage() {
-  const session = useRequiredSession();
-  const token = session?.token ?? null;
-  const [window_, setWindow] = useState<InsightsWindow>("24h");
-  const [agentId, setAgentId] = useState<string>("");
-  const [summary, setSummary] = useState<InsightsSummary | null>(null);
-  const [me, setMe] = useState<Me | null>(null);
-  const [risk, setRisk] = useState<AgentRiskSummary[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [verifying, setVerifying] = useState(false);
+const TIME_RANGE_MULTIPLIER: Record<TimeRangeKey, number> = {
+  "1h": 0.06,
+  "24h": 1,
+  "7d": 6.4,
+  "30d": 26,
+};
 
-  const load = useCallback(async () => {
-    if (!token) return;
-    setLoading(true);
-    try {
-      const data = await insightsApi.summary(token, window_);
-      setSummary(data);
-      setError(null);
-    } catch (err) {
-      if (err instanceof ApiError && err.status === 401) {
-        window.location.href = "/login";
-        return;
-      }
-      // Never zeros: a failed read keeps the page honest about it.
-      setError(
-        err instanceof ApiError && err.status === 404
-          ? "This core does not serve Insights yet. Update redhand-core."
-          : err instanceof ApiError && err.status === 503
-            ? "Insights could not be read. Try again in a moment."
-            : "Insights could not be loaded."
-      );
-    } finally {
-      setLoading(false);
-    }
-  }, [token, window_]);
+export default function AgentControlRoomPage() {
+  const { session } = useAuth();
+  const reducedMotion = usePrefersReducedMotion();
 
-  useEffect(() => {
-    void load();
-  }, [load]);
+  const [activeView, setActiveView] = useState<ControlRoomView>("overview");
+  const [overviewTab, setOverviewTab] = useState<OverviewSubTab>("operational");
+  const [timeRange, setTimeRange] = useState<TimeRangeKey>("24h");
+  const [loadingRange, setLoadingRange] = useState<boolean>(false);
 
-  // Refresh while the tab is visible; stop when hidden (a page nobody looks at should not poll).
-  useEffect(() => {
-    if (!token) return undefined;
-    const tick = () => {
-      if (document.visibilityState === "visible") void load();
-    };
-    const id = window.setInterval(tick, REFRESH_MS);
-    return () => window.clearInterval(id);
-  }, [token, load]);
+  const [nodes, setNodes] = useState<TopologyNode[]>(ALL_NODES);
+  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+  const [selectedSeverity, setSelectedSeverity] = useState<string | null>(null);
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (!token) return;
-    meApi.get(token).then(setMe).catch(() => setMe(null));
-  }, [token]);
+  const [policies, setPolicies] = useState<PolicyItem[]>(MOCK_POLICIES);
+  const [approvals, setApprovals] = useState<ApprovalRequestItem[]>(MOCK_APPROVALS);
+  const [auditEntries, setAuditEntries] = useState(MOCK_AUDIT_LOG);
 
-  // Risk scores need the security operator role: a viewer is not asked (no failed request), and on an older core the table simply has no risk column.
-  const role = me?.role;
-  useEffect(() => {
-    if (!token || !role || role === "viewer") {
-      setRisk(null);
-      return;
-    }
-    riskApi.list(token).then((r) => setRisk(r.agents)).catch(() => setRisk(null));
-  }, [token, role]);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [newModalOpen, setNewModalOpen] = useState(false);
+  const [threatPulseKey, setThreatPulseKey] = useState(0);
+  const [extraBlockedCount, setExtraBlockedCount] = useState(0);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
 
-  const canExport = me?.role === "owner" || me?.role === "admin" || me?.role === "security_operator";
-
-  const verifyChain = async () => {
-    if (!token) return;
-    setVerifying(true);
-    setNotice(null);
-    try {
-      const newest = await blackboxApi.events(token, { limit: 1 });
-      const seq = newest.events[0]?.seq;
-      if (!seq) {
-        setNotice("The Black Box has no events to verify yet.");
-        return;
-      }
-      const result = await blackboxApi.verify(token, 1, seq);
-      setNotice(result.ok ? `Verified: ${result.checked} event(s) from seq 1 to ${seq}, chain intact.` : `Verification FAILED at seq ${result.broken_seq}. The record was altered.`);
-    } catch {
-      setNotice("The chain could not be verified right now.");
-    } finally {
-      setVerifying(false);
-    }
+  const showToast = (msg: string) => {
+    setToastMessage(msg);
   };
 
-  const exportCsv = async () => {
-    if (!token) return;
-    try {
-      await downloadBlackBoxExport(token, { format: "csv", includePayloads: false });
-      setNotice("Export downloaded. It was recorded in the audit log. Handle it as customer data.");
-    } catch (err) {
-      setNotice(err instanceof ApiError ? err.message : "The export could not be created.");
-    }
-  };
+  useEffect(() => {
+    if (!toastMessage) return undefined;
+    const id = setTimeout(() => setToastMessage(null), 3200);
+    return () => clearTimeout(id);
+  }, [toastMessage]);
 
-  const riskById = useMemo(() => new Map((risk ?? []).map((r) => [r.agent_id, r])), [risk]);
-  const agents = useMemo(() => (summary?.agents ?? []).filter((a) => !agentId || a.agent_id === agentId), [summary, agentId]);
-  const labels = useMemo(() => (summary?.series ?? []).map((p) => bucketLabel(p.bucket_start, window_)), [summary, window_]);
-
-  if (!session) return null;
-
-  const actions = (
-    <>
-      <Button onClick={() => void verifyChain()} disabled={verifying} aria-label="Verify the Black Box chain">
-        <ShieldCheck className="h-3.5 w-3.5" /> {verifying ? "Verifying…" : "Verify chain"}
-      </Button>
-    </>
+  const spokeNodes = useMemo(
+    () => nodes.filter((n) => n.kind === "spoke"),
+    [nodes]
+  );
+  const childNodes = useMemo(
+    () => nodes.filter((n) => n.kind === "child"),
+    [nodes]
   );
 
+  // Global Cmd+K / Ctrl+K, Escape-to-overview, and rail 1-5 shortcuts
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        setSearchOpen((prev) => !prev);
+        return;
+      }
+      if (
+        event.key === "Escape" &&
+        !searchOpen &&
+        !newModalOpen &&
+        activeView === "node-detail"
+      ) {
+        setActiveView("overview");
+        return;
+      }
+      const target = event.target as HTMLElement | null;
+      const isEditable =
+        target?.tagName === "INPUT" ||
+        target?.tagName === "TEXTAREA" ||
+        target?.tagName === "SELECT" ||
+        target?.isContentEditable;
+      if (
+        isEditable ||
+        searchOpen ||
+        newModalOpen ||
+        event.metaKey ||
+        event.ctrlKey ||
+        event.altKey
+      ) {
+        return;
+      }
+      if (event.key === "1") setActiveView("overview");
+      else if (event.key === "2") {
+        if (!selectedNodeId && spokeNodes[0]) setSelectedNodeId(spokeNodes[0].id);
+        setActiveView("node-detail");
+      } else if (event.key === "3") setActiveView("policies");
+      else if (event.key === "4") setActiveView("approvals");
+      else if (event.key === "5") setActiveView("audit-log");
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [searchOpen, newModalOpen, activeView, selectedNodeId, spokeNodes]);
+
+  const selectedNode = useMemo(
+    () => nodes.find((n) => n.id === selectedNodeId) ?? spokeNodes[0] ?? null,
+    [nodes, selectedNodeId, spokeNodes]
+  );
+
+  const relatedNodes = useMemo(() => {
+    if (!selectedNode) return [];
+    return nodes.filter((n) => n.spokeId === selectedNode.spokeId);
+  }, [nodes, selectedNode]);
+
+  const baseSnapshot = OVERVIEW_SNAPSHOTS[timeRange];
+  const snapshot = useMemo(() => {
+    if (extraBlockedCount === 0) return baseSnapshot;
+    return {
+      ...baseSnapshot,
+      hub: {
+        ...baseSnapshot.hub,
+        riskyActionsCount: baseSnapshot.hub.riskyActionsCount + extraBlockedCount,
+        blockedThreatsCount: baseSnapshot.hub.blockedThreatsCount + extraBlockedCount,
+      },
+      summary: {
+        ...baseSnapshot.summary,
+        blocked: baseSnapshot.summary.blocked + extraBlockedCount,
+      },
+    };
+  }, [baseSnapshot, extraBlockedCount]);
+
+  const pendingApprovalsCount = useMemo(
+    () => approvals.filter((a) => a.status === "pending").length,
+    [approvals]
+  );
+
+  const userEmail = session?.email ?? "alice.chen@redhand.dev";
+  const userInitials = useMemo(() => {
+    const parts = userEmail.split("@")[0]?.split(/[._-]/).filter(Boolean) ?? ["RH"];
+    return parts
+      .slice(0, 2)
+      .map((p) => p[0]?.toUpperCase() ?? "")
+      .join("") || "RH";
+  }, [userEmail]);
+
+  const handleTimeRangeChange = (next: TimeRangeKey) => {
+    if (next === timeRange) return;
+    setLoadingRange(true);
+    setTimeRange(next);
+    setTimeout(() => setLoadingRange(false), reducedMotion ? 20 : 220);
+  };
+
+  const handleSelectNode = (node: TopologyNode) => {
+    setSelectedNodeId(node.id);
+    setActiveView("node-detail");
+  };
+
+  const handleSimulateThreat = () => {
+    setThreatPulseKey((k) => k + 1);
+    setExtraBlockedCount((c) => c + 1);
+    setAuditEntries((prev) => [
+      {
+        id: `aud-sim-${Date.now()}`,
+        at: new Date().toTimeString().slice(0, 8),
+        actor: "AgentWall Gateway",
+        actorKind: "gateway",
+        action: "mcp.exfiltration_blocked",
+        target: "unpinned-shell/run_cmd",
+        category: "tools",
+        verdict: "blocked",
+        reason: "Simulated hex-escape shell payload stopped in 0.15 ms.",
+      },
+      ...prev,
+    ]);
+    showToast("Threat pulse detected on unpinned-shell MCP — blocked in 0.15 ms.");
+  };
+
+  const handleToggleProtection = (nodeId: string) => {
+    setNodes((prev) =>
+      prev.map((n) => {
+        if (n.id !== nodeId) return n;
+        const nextProtected = n.protection !== "protected";
+        return {
+          ...n,
+          protection: nextProtected ? "protected" : "partial",
+          protectedRatio: nextProtected ? 1 : 0.72,
+          hasNewThreatPulse: false,
+        };
+      })
+    );
+    showToast("Updated RedHand guardrail posture for selected node.");
+  };
+
+  const handleTogglePolicyMode = (policyId: string) => {
+    setPolicies((prev) =>
+      prev.map((p) => {
+        if (p.id !== policyId) return p;
+        const nextMode =
+          p.mode === "enforce" ? "watch" : p.mode === "watch" ? "off" : "enforce";
+        const nextStatus =
+          nextMode === "enforce"
+            ? "allowed"
+            : nextMode === "watch"
+              ? "flagged"
+              : "pending";
+        return { ...p, mode: nextMode, status: nextStatus, updatedAt: "just now" };
+      })
+    );
+  };
+
+  const handleResolveApproval = (id: string, decision: "allowed" | "blocked") => {
+    setApprovals((prev) =>
+      prev.map((a) =>
+        a.id === id
+          ? {
+              ...a,
+              status: decision,
+              signaturesHave:
+                decision === "allowed" ? a.signaturesNeed : a.signaturesHave,
+            }
+          : a
+      )
+    );
+    showToast(
+      decision === "allowed"
+        ? "Approval signature recorded."
+        : "Action request denied and halted."
+    );
+  };
+
+  const isDetailOverlay = activeView === "node-detail" && selectedNode !== null;
+
   return (
-    <AppShell title="Insights" organization={me?.organization_name} role={me?.role} actions={actions}>
-      {/* Filter row */}
-      <div className="mb-4 flex flex-wrap items-center gap-2">
-        <div role="tablist" aria-label="Time window" className="flex rounded-[8px] border border-rh-hairline bg-rh-card p-0.5">
-          {WINDOW_OPTIONS.map((o) => (
-            <button
-              key={o.value}
-              role="tab"
-              aria-selected={window_ === o.value}
-              onClick={() => setWindow(o.value)}
-              className={`rounded-[6px] px-3 py-1 text-[12px] font-medium ${window_ === o.value ? "bg-rh-elevated text-rh-text" : "text-rh-text-2 hover:text-rh-text"}`}
-            >
-              {o.label}
-            </button>
-          ))}
-        </div>
-        <select
-          aria-label="Agent"
-          value={agentId}
-          onChange={(e) => setAgentId(e.target.value)}
-          className="rounded-[8px] border border-rh-hairline bg-rh-card px-2 py-1.5 text-[12px] text-rh-text"
-        >
-          <option value="">All agents</option>
-          {(summary?.agents ?? []).map((a) => <option key={a.agent_id} value={a.agent_id}>{a.name ?? a.agent_id.slice(0, 8)}</option>)}
-        </select>
-        <span className="rounded-full border border-rh-hairline px-2.5 py-1 text-[11px] text-rh-text-2">Time zone: UTC</span>
-        <div className="ml-auto flex items-center gap-2">
-          {canExport && <Button onClick={() => void exportCsv()}>Export CSV</Button>}
-          <Button onClick={() => void load()} disabled={loading} aria-label="Refresh">
-            <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
-          </Button>
-        </div>
-      </div>
+    <MotionConfig reducedMotion="user">
+      <LayoutGroup>
+        <div className="rh-control-room flex h-screen w-screen overflow-hidden p-3 gap-3 select-none">
+          <a
+            href="#control-room-main"
+            className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-50 focus:rounded-lg focus:bg-rose-600 focus:px-3.5 focus:py-2 focus:text-xs focus:font-semibold focus:text-white focus:shadow-lg"
+          >
+            Skip to main content
+          </a>
+          {/* Left Navigation Icon Rail */}
+        <IconRail
+          activeView={activeView}
+          onSelectView={(view) => {
+            if (view === "node-detail" && !selectedNodeId && spokeNodes[0]) {
+              setSelectedNodeId(spokeNodes[0].id);
+            }
+            setActiveView(view);
+          }}
+          hasSelectedNode={Boolean(selectedNode)}
+          pendingApprovalsCount={pendingApprovalsCount}
+          userInitials={userInitials}
+          userEmail={userEmail}
+        />
 
-      {notice && <div role="status" className="mb-4 rounded-[8px] border border-rh-hairline bg-rh-elevated px-4 py-2.5 text-[13px] text-rh-text">{notice}</div>}
-      {error && <div className="mb-4"><ErrorState message={error} onRetry={() => void load()} /></div>}
-
-      {summary && (
-        <>
-          {/* Control strip */}
-          <div className="mb-4 flex flex-wrap items-center gap-2" aria-label="Organization controls">
-            {controlChips(summary).map((c) => <Chip key={c.label} tone={c.tone}>{c.label}</Chip>)}
-            <Link href="/passports" className="ml-1 text-[12px] text-rh-text-2 underline underline-offset-2 hover:text-rh-text">Manage on Passports</Link>
+        {/* Main Right Workspace Column */}
+        <div className="flex min-w-0 flex-1 flex-col gap-3 overflow-hidden">
+          <div
+            role="status"
+            className="rounded-rh-md border border-amber-400/30 bg-amber-500/10 px-3 py-1.5 text-center text-[11px] font-medium text-amber-200"
+          >
+            Demo data: this Control Room shows sample figures, not your live organization. Use{" "}
+            <Link href="/passports" className="underline">Passports</Link> for real control actions.
           </div>
+          <TopBar
+            activeView={activeView}
+            selectedNode={isDetailOverlay ? selectedNode : null}
+            timeRange={timeRange}
+            onChangeTimeRange={handleTimeRangeChange}
+            onNavigateOverview={() => setActiveView("overview")}
+            onSelectView={(v) => setActiveView(v)}
+            onOpenSearch={() => setSearchOpen(true)}
+            onSimulateThreat={handleSimulateThreat}
+            onOpenNewModal={() => setNewModalOpen(true)}
+            pendingApprovalsCount={pendingApprovalsCount}
+            userInitials={userInitials}
+          />
 
-          {/* KPI tiles */}
-          <div className="mb-4 grid grid-cols-2 gap-3 md:grid-cols-5">
-            <KpiTile label="Gateway decisions" value={formatCount(summary.totals.decisions)} tone="steel" note={windowLabel(window_)} />
-            <KpiTile label="Allowed" value={formatCount(summary.totals.allowed)} tone="teal" note={`${percent(summary.totals.allowed, summary.totals.decisions)}% of decisions`} />
-            <KpiTile label="Refused" value={formatCount(summary.totals.refused)} tone="crimson" note={`${percent(summary.totals.refused, summary.totals.decisions)}% of decisions`} />
-            <KpiTile label="Errors" value={formatCount(summary.totals.errors)} tone="ochre" note="allowed, then failed" />
-            <KpiTile label="Agents" value={`${formatCount(summary.passports.managed_active)} / ${formatCount(summary.passports.reported_only)}`} note="managed active / reported only" />
-          </div>
+          {/* Main Stage Container */}
+          <main id="control-room-main" className="relative flex min-h-0 flex-1 overflow-hidden">
+            {/* Keep RadialMap + RightStatsPanel rendered for overview and faded/blurred backdrop under node-detail */}
+            {(activeView === "overview" || isDetailOverlay) && (
+              <motion.div
+                aria-hidden={isDetailOverlay}
+                animate={{
+                  opacity: isDetailOverlay ? 0.18 : 1,
+                  scale: isDetailOverlay && !reducedMotion ? 0.95 : 1,
+                }}
+                transition={{ duration: 0.28, ease: EASE_OUT_EXPO }}
+                style={{
+                  filter: isDetailOverlay ? "blur(10px)" : "blur(0px)",
+                }}
+                className={[
+                  "rh-scrollbar flex h-full w-full flex-col gap-3 lg:flex-row overflow-y-auto lg:overflow-hidden",
+                  isDetailOverlay ? "pointer-events-none" : "",
+                ].join(" ")}
+              >
+                {/* Center Map Column */}
+                <div className="flex min-w-0 flex-1 flex-col gap-3 min-h-[480px] lg:min-h-0 lg:overflow-hidden">
+                  {/* Top Sub-Mode Tabs Bar (Image 2 style: Operational / Security / Topology) */}
+                  <div className="flex flex-wrap items-center justify-between gap-2 px-1">
+                    <div>
+                      <h1 className="text-lg font-semibold tracking-tight text-white">
+                        Agent Control Room
+                      </h1>
+                      <p className="text-[11px] text-slate-400">
+                        Unified posture across AI agents, MCP tools, data vaults, human approvers, and models
+                      </p>
+                    </div>
 
-          {!hasCalls(summary) ? (
-            <Card><EmptyState title={`No gateway calls in the ${windowLabel(window_).toLowerCase()}`} detail="Calls appear here as agents use the gateway. Agents that only report through the SDK are not counted: they have no gateway access." /></Card>
-          ) : (
-            <>
-              <Card title="Top agents" subtitle="Most active agents by gateway decisions" className="mb-4">
-                <div className="relative overflow-x-auto">
-                  <table className="w-full min-w-[520px] text-left text-[13px]">
-                    <thead>
-                      <tr className="text-[12px] text-rh-text-2">
-                        <th className="border-b border-rh-hairline px-2 py-1.5 font-medium">Agent</th>
-                        <th className="border-b border-rh-hairline px-2 py-1.5 font-medium">Framework</th>
-                        <th className="border-b border-rh-hairline px-2 py-1.5 text-right font-medium">Decisions</th>
-                        <th className="border-b border-rh-hairline px-2 py-1.5 text-right font-medium">Refused</th>
-                        {risk && <th className="border-b border-rh-hairline px-2 py-1.5 font-medium">Risk</th>}
-                        <th className="border-b border-rh-hairline px-2 py-1.5 font-medium"><span className="sr-only">Incident view</span></th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {agents.map((a) => {
-                        const r = riskById.get(a.agent_id);
+                    <div
+                      role="tablist"
+                      aria-label="Control Room Focus"
+                      className="flex items-center rounded-full border border-white/[0.09] bg-slate-950/75 p-1"
+                    >
+                      {(
+                        [
+                          { id: "operational", label: "Operational" },
+                          { id: "topology", label: "Topology Map" },
+                          { id: "security", label: "Security Alerts" },
+                        ] as const
+                      ).map((tab) => {
+                        const active = overviewTab === tab.id;
                         return (
-                          <tr key={a.agent_id}>
-                            <td className="border-b border-rh-hairline px-2 py-2 text-rh-text">{a.name ?? a.agent_id.slice(0, 8)}</td>
-                            <td className="border-b border-rh-hairline px-2 py-2 text-rh-text-2">{a.framework ?? "unknown"}</td>
-                            <td className="rh-tabular border-b border-rh-hairline px-2 py-2 text-right text-rh-text">{formatCount(a.decisions)}</td>
-                            <td className="rh-tabular border-b border-rh-hairline px-2 py-2 text-right text-rh-text">{formatCount(a.refused)} <span className="text-rh-text-2">({percent(a.refused, a.decisions)}%)</span></td>
-                            {risk && <td className="border-b border-rh-hairline px-2 py-2">{r ? <Chip tone={RISK_TONE[r.level] ?? "neutral"}>{r.level} · {r.score}</Chip> : <span className="text-rh-text-2">–</span>}</td>}
-                            <td className="border-b border-rh-hairline px-2 py-2 text-right"><Link href={`/passports/${a.agent_id}/timeline`} className="text-[12px] text-rh-text-2 underline underline-offset-2 hover:text-rh-text">Timeline</Link></td>
-                          </tr>
+                          <button
+                            key={tab.id}
+                            role="tab"
+                            type="button"
+                            aria-selected={active}
+                            onClick={() => {
+                              setOverviewTab(tab.id);
+                              if (tab.id === "security") {
+                                setSelectedSeverity("critical");
+                              } else {
+                                setSelectedSeverity(null);
+                              }
+                            }}
+                            className={[
+                              "relative rounded-full px-3 py-1 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500/70",
+                              active
+                                ? "text-white"
+                                : "text-slate-400 hover:text-slate-200",
+                            ].join(" ")}
+                          >
+                            {active && (
+                              <motion.span
+                                layoutId="rh-overview-tab-pill"
+                                transition={
+                                  reducedMotion
+                                    ? { duration: 0.01 }
+                                    : SPRING_SHARED_ELEMENT
+                                }
+                                className="absolute inset-0 rounded-full bg-white/[0.12] border border-white/15"
+                              />
+                            )}
+                            <span className="relative z-10">{tab.label}</span>
+                          </button>
                         );
                       })}
-                    </tbody>
-                  </table>
+                    </div>
+                  </div>
+
+                  {/* Interactive Radial Hub-and-Spoke Map */}
+                  <div className="min-h-0 flex-1">
+                    <RadialMap
+                      spokes={spokeNodes}
+                      childNodes={childNodes}
+                      hubStats={snapshot.hub}
+                      selectedNodeId={isDetailOverlay ? selectedNode?.id ?? null : null}
+                      highlightedSeverity={selectedSeverity}
+                      threatPulseKey={threatPulseKey}
+                      onSelectNode={handleSelectNode}
+                      isDetailOpen={isDetailOverlay}
+                    />
+                  </div>
                 </div>
-              </Card>
 
-              <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-                <ChartCard
-                  title="Gateway decisions over time" subtitle="Allowed, refused and errors" summary={seriesSummary(summary)}
-                  table={{ headers: ["Time (UTC)", "Allowed", "Refused", "Errors"], rows: summary.series.map((p, i) => [labels[i], formatCount(p.allowed), formatCount(p.refused), formatCount(p.errors)]) }}
-                >
-                  <StackedArea labels={labels} layers={[
-                    { name: "allowed", tone: "steel", values: summary.series.map((p) => p.allowed) },
-                    { name: "refused", tone: "crimson", values: summary.series.map((p) => p.refused) },
-                    { name: "errors", tone: "ochre", values: summary.series.map((p) => p.errors) },
-                  ]} />
-                </ChartCard>
+                {/* Right Telemetry Stats Panel */}
+                <RightStatsPanel
+                  snapshot={snapshot}
+                  selectedSeverity={selectedSeverity}
+                  onSelectSeverity={setSelectedSeverity}
+                  selectedCategory={selectedCategory}
+                  onSelectCategory={setSelectedCategory}
+                  loading={loadingRange}
+                />
+              </motion.div>
+            )}
 
-                <ChartCard
-                  title="Data returned to agents" subtitle="Result size on allowed calls" summary={`${formatBytes(summary.totals.bytes_returned)} returned to agents in the ${windowLabel(window_).toLowerCase()}.`}
-                  table={{ headers: ["Time (UTC)", "Returned"], rows: summary.series.map((p, i) => [labels[i], formatBytes(p.bytes)]) }}
+            {/* Shared-Element Node Detail Screen Overlay */}
+            <AnimatePresence mode="wait">
+              {isDetailOverlay && selectedNode && (
+                <div
+                  key={`detail-${selectedNode.id}`}
+                  className="absolute inset-0 z-30 flex overflow-hidden rounded-rh-xl bg-slate-950/55 p-1 backdrop-blur-sm"
                 >
-                  <AreaChart labels={labels} values={summary.series.map((p) => p.bytes)} tone="teal" format={formatBytes} />
-                </ChartCard>
+                  <NodeDetailView
+                    node={selectedNode}
+                    relatedNodes={relatedNodes}
+                    timeRangeLabel={baseSnapshot.label}
+                    timeRangeMultiplier={TIME_RANGE_MULTIPLIER[timeRange]}
+                    loading={loadingRange}
+                    policies={policies}
+                    onBack={() => setActiveView("overview")}
+                    onSelectNode={handleSelectNode}
+                    onToggleProtection={handleToggleProtection}
+                    onTogglePolicyMode={handleTogglePolicyMode}
+                  />
+                </div>
+              )}
 
-                <ChartCard
-                  title="Outcomes" subtitle="Share of gateway decisions"
-                  summary={`${percent(summary.totals.allowed, summary.totals.decisions)}% of decisions were allowed.`}
-                  table={{ headers: ["Outcome", "Decisions"], rows: outcomeSlices(summary.totals).map((s) => [s.label, formatCount(s.value)]) }}
-                >
-                  <Donut slices={outcomeSlices(summary.totals)} centre={`${percent(summary.totals.allowed, summary.totals.decisions)}%`} centreNote="allowed" />
-                </ChartCard>
+              {activeView === "policies" && (
+                <PoliciesView
+                  key="view-policies"
+                  policies={policies}
+                  onTogglePolicyMode={handleTogglePolicyMode}
+                />
+              )}
 
-                <ChartCard
-                  title="Call duration" subtitle="Allowed calls: p50 and p95"
-                  summary={`Allowed calls took ${formatMs(summary.latency.p50_ms)} at the median and ${formatMs(summary.latency.p95_ms)} at the 95th percentile, tool time included.`}
-                  table={{ headers: ["Measure", "Value"], rows: [["p50", formatMs(summary.latency.p50_ms)], ["p95", formatMs(summary.latency.p95_ms)], ["Samples", formatCount(summary.latency.samples)]] }}
-                  empty={summary.latency.samples === 0 ? "No allowed calls with a timing in this window." : undefined}
-                >
-                  <LatencyBars p50={summary.latency.p50_ms} p95={summary.latency.p95_ms} />
-                </ChartCard>
+              {activeView === "approvals" && (
+                <ApprovalsView
+                  key="view-approvals"
+                  approvals={approvals}
+                  onResolveApproval={handleResolveApproval}
+                />
+              )}
 
-                <ChartCard
-                  title="Why calls were refused" subtitle="Most common reasons" summary={`${reasonRows(summary.reasons).length} refusal reasons.`}
-                  table={{ headers: ["Reason", "Count"], rows: reasonRows(summary.reasons).map((r) => [r.label, formatCount(r.count)]) }}
-                  empty={summary.reasons.length === 0 ? "Nothing was refused in this window." : undefined}
-                >
-                  <RankedBars rows={reasonRows(summary.reasons).map((r) => ({ label: r.label, value: r.count }))} tone="crimson" />
-                </ChartCard>
+              {activeView === "audit-log" && (
+                <AuditLogView key="view-audit-log" entries={auditEntries} />
+              )}
+            </AnimatePresence>
+          </main>
+        </div>
 
-                <ChartCard
-                  title="Most called tools" subtitle="By server and tool" summary={`${summary.tools.length} most called tools.`}
-                  table={{ headers: ["Tool", "Calls", "Refused"], rows: summary.tools.map((t) => [`${t.server} / ${t.tool}`, formatCount(t.calls), formatCount(t.refused)]) }}
-                  empty={summary.tools.length === 0 ? "No tool calls in this window." : undefined}
-                >
-                  <RankedBars rows={summary.tools.map((t) => ({ label: `${t.server} / ${t.tool}`, value: t.calls, detail: t.refused ? `${formatCount(t.refused)} refused` : undefined }))} tone="steel" />
-                </ChartCard>
-              </div>
+        {/* Command Search Palette (Cmd+K) */}
+        <CommandSearchModal
+          open={searchOpen}
+          onClose={() => setSearchOpen(false)}
+          nodes={nodes}
+          policies={policies}
+          onSelectNode={handleSelectNode}
+          onSelectView={(view) => setActiveView(view)}
+        />
 
-              <div className="mt-4">
-                <ChartCard
-                  title="Agent, server and outcome" subtitle="Where the top agents' calls went and how they ended"
-                  summary="Flow from the most active agents to the servers they called and the outcome of each call."
-                  table={{ headers: ["Agent", "Server", "Outcome", "Decisions"], rows: summary.flow.map((f) => [summary.agents.find((a) => a.agent_id === f.agent_id)?.name ?? f.agent_id.slice(0, 8), f.server || "(none)", f.decision === "ALLOW" ? "Allowed" : f.decision === "BLOCK" ? "Refused" : "Errors", formatCount(f.count)]) }}
-                  empty={summary.flow.length === 0 ? "No flows to draw yet." : undefined}
-                >
-                  <Flow rows={summary.flow
-                    .filter((f) => !agentId || f.agent_id === agentId)
-                    .map((f) => ({
-                      agent: summary.agents.find((a) => a.agent_id === f.agent_id)?.name ?? f.agent_id.slice(0, 8),
-                      server: f.server || "(none)",
-                      outcome: f.decision === "ALLOW" ? "Allowed" : f.decision === "BLOCK" ? "Refused" : "Errors",
-                      count: f.count,
-                    }))} />
-                </ChartCard>
-              </div>
-            </>
+        {/* Quick "+ New" Action Modal */}
+        <AnimatePresence>
+          {newModalOpen && (
+            <motion.div
+              role="dialog"
+              aria-modal="true"
+              aria-label="Quick Control Action"
+              initial={reducedMotion ? false : { opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: MOTION_TIMING.fast }}
+              onClick={() => setNewModalOpen(false)}
+              className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/75 px-4 backdrop-blur-sm"
+            >
+              <motion.div
+                initial={reducedMotion ? false : { opacity: 0, scale: 0.96, y: 8 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.96 }}
+                transition={{ duration: MOTION_TIMING.fast, ease: EASE_OUT_EXPO }}
+                onClick={(e) => e.stopPropagation()}
+                className="w-full max-w-md"
+              >
+                <GlassCard glow="crimson" className="p-5">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2 text-sm font-semibold text-white">
+                      <Plus className="h-4 w-4 text-rose-400" />
+                      <span>Register Control Resource</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setNewModalOpen(false)}
+                      aria-label="Close modal"
+                      className="rounded-lg p-1 text-slate-400 hover:bg-white/10 hover:text-white"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  </div>
+
+                  <p className="mt-2 text-xs leading-relaxed text-slate-400">
+                    The Control Room runs with realistic mock telemetry while you evaluate the redesign. Jump directly to live operational consoles or simulate an event:
+                  </p>
+
+                  <div className="mt-4 flex flex-col gap-2">
+                    <Link
+                      href="/passports"
+                      className="flex items-center justify-between rounded-rh-md border border-white/10 bg-slate-900/60 px-3.5 py-2.5 text-xs font-medium text-slate-100 hover:border-rose-400/40 hover:bg-rose-500/10"
+                    >
+                      <span>Register real Agent Passport or SDK Key</span>
+                      <span className="text-rose-300">/passports →</span>
+                    </Link>
+                    <Link
+                      href="/radar"
+                      className="flex items-center justify-between rounded-rh-md border border-white/10 bg-slate-900/60 px-3.5 py-2.5 text-xs font-medium text-slate-100 hover:border-rose-400/40 hover:bg-rose-500/10"
+                    >
+                      <span>Configure Threat Radar & Approved Models</span>
+                      <span className="text-rose-300">/radar →</span>
+                    </Link>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setNewModalOpen(false);
+                        handleSimulateThreat();
+                      }}
+                      className="flex items-center justify-between rounded-rh-md border border-rose-500/35 bg-rose-500/15 px-3.5 py-2.5 text-xs font-semibold text-rose-100 hover:bg-rose-500/25"
+                    >
+                      <span className="flex items-center gap-2">
+                        <ShieldCheck className="h-4 w-4 text-rose-300" />
+                        Trigger simulated threat pulse on map
+                      </span>
+                      <span>Run</span>
+                    </button>
+                  </div>
+                </GlassCard>
+              </motion.div>
+            </motion.div>
           )}
-        </>
-      )}
-      {!summary && !error && <p className="text-[13px] text-rh-text-2">Loading…</p>}
-    </AppShell>
+        </AnimatePresence>
+
+        {/* Live Action Toast */}
+        <AnimatePresence>
+          {toastMessage && (
+            <motion.div
+              role="status"
+              initial={reducedMotion ? false : { opacity: 0, y: 16 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 10 }}
+              transition={{ duration: MOTION_TIMING.fast, ease: EASE_OUT_EXPO }}
+              className="fixed bottom-5 right-5 z-50 flex items-center gap-2.5 rounded-full border border-rose-400/35 bg-slate-950/95 px-4 py-2 text-xs font-medium text-slate-100 shadow-rh-crimson backdrop-blur-xl"
+            >
+              <StatusPill status="blocked" label="Alert" pulse />
+              <span>{toastMessage}</span>
+            </motion.div>
+          )}
+        </AnimatePresence>
+        </div>
+      </LayoutGroup>
+    </MotionConfig>
   );
 }

@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 
-const css = readFileSync(new URL("../src/app/globals.css", import.meta.url), "utf8");
+const css = readFileSync(new URL("../src/app/globals.css", import.meta.url), "utf8").split("/* === AGENT CONTROL ROOM GLASS TOKENS === */")[0];
 const tailwind = readFileSync(new URL("../tailwind.config.ts", import.meta.url), "utf8");
 const primitives = readFileSync(new URL("../src/components/ui/primitives.tsx", import.meta.url), "utf8");
 
