@@ -63,7 +63,7 @@ export function TeamCard(props: { token: string; ownRole: string; ownUserId: str
   const pending = invites.filter((i) => i.state === "pending");
 
   return (
-    <section className="rounded-[12px] border border-rh-hairline bg-rh-card p-4" aria-label="Team">
+    <section className="rh-glass rounded-rh-md p-4" aria-label="Team">
       <h2 className="text-[15px] font-semibold">Team</h2>
       <p className="mb-3 mt-1 text-[12px] text-rh-text-2">{TEAM_TEXT}</p>
       {error && <div role="alert" className="mb-3 rounded-[8px] bg-rh-crimson-wash p-2 text-[12px] text-rh-crimson-text">{error}</div>}

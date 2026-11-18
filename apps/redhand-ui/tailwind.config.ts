@@ -10,7 +10,7 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        // Matte Executive Dark: every value is a CSS variable in src/app/globals.css (one source of colour).
+        // Unified Dark Navy Glass + Crimson: every value is a CSS variable in src/app/globals.css (one source of colour).
         rh: {
           chrome: "var(--rh-chrome-bg)",
           "chrome-hover": "var(--rh-chrome-hover)",
@@ -40,7 +40,7 @@ const config: Config = {
           "steel-text": "var(--rh-steel-text)",
           "purple-text": "var(--rh-purple-text)",
         },
-        // Agent Control Room dark glass surface tokens (.rh-control-room in src/app/globals.css).
+        // Dark Navy Glass & Crimson control surface tokens (src/app/globals.css).
         control: {
           base: "var(--rh-bg-base)",
           elevated: "var(--rh-bg-elevated)",
@@ -49,9 +49,14 @@ const config: Config = {
           glassHover: "var(--rh-glass-bg-hover)",
           border: "var(--rh-glass-border)",
           borderStrong: "var(--rh-glass-border-strong)",
+          scrim: "var(--rh-scrim)",
           crimson: "var(--rh-accent-crimson)",
           crimsonBright: "var(--rh-accent-crimson-bright)",
+          crimsonDeep: "var(--rh-accent-crimson-deep)",
           crimsonSoft: "var(--rh-accent-crimson-soft)",
+          crimsonBorder: "var(--rh-accent-crimson-border)",
+          steelBorder: "var(--rh-steel-border)",
+          ochreBorder: "var(--rh-ochre-border)",
           allowed: "var(--rh-status-allowed)",
           flagged: "var(--rh-status-flagged)",
           blocked: "var(--rh-status-blocked)",

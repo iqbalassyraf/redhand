@@ -15,7 +15,7 @@ import { AppShell } from "@/components/shell/AppShell";
 import { ORG_TEXT, exportFilename, pendingText, slugMatches } from "@/lib/lifecycle";
 import { isNoOrganizationMessage } from "@/lib/onboarding";
 
-const button = "rounded-full bg-rh-crimson px-4 py-2 text-[13px] font-semibold text-rh-canvas disabled:opacity-50";
+const button = "rounded-full bg-control-crimson px-4 py-2 text-[13px] font-semibold text-white shadow-rh-crimson transition hover:bg-control-crimsonDeep disabled:opacity-50";
 const quiet = "rounded-full border border-rh-hairline px-4 py-2 text-[13px] font-semibold disabled:opacity-50";
 
 export default function OrganizationPage() {
@@ -108,13 +108,13 @@ export default function OrganizationPage() {
 
         {me?.role === "owner" && (
           <>
-            <section className="rounded-[12px] border border-rh-hairline bg-rh-card p-4" aria-label={ORG_TEXT.exportTitle}>
+            <section className="rh-glass rounded-rh-md p-4" aria-label={ORG_TEXT.exportTitle}>
               <h2 className="text-[15px] font-semibold">{ORG_TEXT.exportTitle}</h2>
               <p className="mb-3 mt-1 text-[12px] text-rh-text-2">{ORG_TEXT.exportIntro}</p>
               <button className={quiet} disabled={busy} onClick={() => void download()}>{ORG_TEXT.exportButton}</button>
             </section>
 
-            <section className="rounded-[12px] border border-rh-crimson bg-rh-card p-4" aria-label={ORG_TEXT.deleteTitle}>
+            <section className="rh-glass rounded-rh-md border-control-crimsonBorder p-4" aria-label={ORG_TEXT.deleteTitle}>
               <h2 className="text-[15px] font-semibold">{ORG_TEXT.deleteTitle}</h2>
               <p className="mb-3 mt-1 text-[12px] text-rh-text-2">{ORG_TEXT.deleteIntro}</p>
               {pendingUntil ? (

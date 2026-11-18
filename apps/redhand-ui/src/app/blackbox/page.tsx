@@ -228,9 +228,11 @@ export default function BlackBoxPage() {
             <button
               key={d || "all"}
               onClick={() => setDecisionFilter(d)}
-              className={`rounded-full px-3 py-1 font-medium ${
-                decisionFilter === d ? "bg-rh-teal text-rh-canvas" : "bg-rh-card text-rh-text-2 hover:bg-rh-elevated"
-              } border border-rh-hairline`}
+              className={`rounded-full border px-3 py-1 font-medium transition-colors ${
+                decisionFilter === d
+                  ? "border-control-crimsonBorder bg-control-crimson text-white shadow-rh-crimson"
+                  : "border-rh-hairline bg-rh-card text-rh-text-2 hover:bg-rh-elevated"
+              }`}
             >
               {d || "All"}
             </button>
@@ -260,7 +262,7 @@ export default function BlackBoxPage() {
           ) : null}
         </div>
 
-        <div className="overflow-hidden rounded-[10px] border border-rh-hairline bg-rh-card">
+        <div className="rh-glass overflow-hidden rounded-rh-md">
           <table className="w-full text-[12px]">
             <thead>
               <tr className="border-b border-rh-hairline text-left text-rh-text-2">

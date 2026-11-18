@@ -140,14 +140,14 @@ export default function InsightsPage() {
     <AppShell title="Insights" organization={me?.organization_name} role={me?.role} actions={actions}>
       {/* Filter row */}
       <div className="mb-4 flex flex-wrap items-center gap-2">
-        <div role="tablist" aria-label="Time window" className="flex rounded-[8px] border border-rh-hairline bg-rh-card p-0.5">
+        <div role="tablist" aria-label="Time window" className="rh-glass flex rounded-full p-0.5">
           {WINDOW_OPTIONS.map((o) => (
             <button
               key={o.value}
               role="tab"
               aria-selected={window_ === o.value}
               onClick={() => setWindow(o.value)}
-              className={`rounded-[6px] px-3 py-1 text-[12px] font-medium ${window_ === o.value ? "bg-rh-elevated text-rh-text" : "text-rh-text-2 hover:text-rh-text"}`}
+              className={`rounded-full px-3 py-1 text-[12px] font-medium transition-colors ${window_ === o.value ? "bg-control-crimson text-white shadow-rh-crimson" : "text-rh-text-2 hover:text-rh-text"}`}
             >
               {o.label}
             </button>

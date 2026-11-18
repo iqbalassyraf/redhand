@@ -34,7 +34,7 @@ export function ChartCard({ title, subtitle, summary, table, empty, children }: 
 }) {
   const [asTable, setAsTable] = useState(false);
   return (
-    <section className="rounded-[10px] border border-rh-hairline bg-rh-card p-4">
+    <section className="rh-glass rounded-rh-md p-4">
       <div className="mb-3 flex items-start justify-between gap-3">
         <div className="min-w-0">
           <h2 className="text-[13px] font-semibold text-rh-text">{title}</h2>

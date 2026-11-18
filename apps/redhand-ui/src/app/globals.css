@@ -3,133 +3,80 @@
 @tailwind utilities;
 
 /*
- * Matte Executive Dark (docs/design/matte-executive-dark.md). The one source of colour for the dashboard: Tailwind's `rh-*` colours point at
- * these variables. No pure black, no glow, no gradient, no blur: hierarchy comes from matte surface steps and 1px hairline borders.
- * Meanings (claims discipline, CLAUDE.md section 1): teal = allowed / primary, steel = volume, ochre = needs attention (frozen, Safe Mode,
- * review pending, Watch), crimson = refused / revoked / trip, slate-purple = detective findings (never enforcement).
- * Contrast (tests/tokens.test.mjs): --rh-text-muted is below 4.5:1 on every surface, so it is only for placeholders, separators and disabled
- * text; information uses --rh-text-secondary or brighter. Chips put primary text on a wash with a coloured dot, because the accent colours
- * on their own washes are below 4.5:1.
+ * Unified Dark Navy Glass + Crimson theme. The one source of colour for the dashboard and Agent Control Room:
+ * Tailwind's `rh-*` and `control-*` utilities point at these CSS variables.
+ * Hierarchy comes from deep navy base (#060913), ambient radial glows, translucent glass surfaces (rgba(13, 19, 38, 0.64) + blur),
+ * and crimson primary/focus accents (#E11D48 / #F43F5E).
+ * Meanings (claims discipline, CLAUDE.md section 1): emerald/teal = allowed / healthy, steel = volume, ochre = needs attention
+ * (frozen, Safe Mode, review pending, Watch), crimson = primary CTA / refused / revoked / trip, slate-purple = detective findings
+ * (never enforcement).
+ * Contrast (tests/tokens.test.mjs): --rh-text-muted is intentionally below 4.5:1 on surfaces, so it is only for placeholders,
+ * separators and disabled text; information uses --rh-text-secondary or brighter. Solid crimson CTAs (#E11D48 / #BE123C) use
+ * pure white text (#FFFFFF, >= 4.70:1 AA).
  */
 :root {
-  /* Navigation chrome (deep matte pine-slate) */
-  --rh-chrome-bg: #10231E;
-  --rh-chrome-hover: #17332C;
-  --rh-chrome-active: #1E4239;
-  --rh-chrome-border: #1F3D35;
-
-  /* Application surfaces (matte charcoal and graphite) */
-  --rh-canvas-bg: #111417;
-  --rh-surface-card: #181C20;
-  --rh-surface-elevated: #1E2328;
-  --rh-surface-subtle: #14181C;
-  --rh-border-hairline: #262C33;
-  --rh-border-strong: #343C46;
-
-  /* Typography */
-  --rh-text-primary: #F1F5F9;
-  --rh-text-secondary: #94A3B8;
-  --rh-text-muted: #64748B;
-
-  /* Desaturated telemetry palette */
-  --rh-teal: #3B9E7E;
-  --rh-teal-wash: rgba(59, 158, 126, 0.14);
-  --rh-steel: #4E82B4;
-  --rh-steel-wash: rgba(78, 130, 180, 0.14);
-  --rh-ochre: #C9923E;
-  --rh-ochre-wash: rgba(201, 146, 62, 0.14);
-  --rh-crimson: #C85A53;
-  --rh-crimson-wash: rgba(200, 90, 83, 0.15);
-  --rh-slate-purple: #8470B8;
-  --rh-slate-purple-wash: rgba(132, 112, 184, 0.15);
-
-  /* Lighter siblings of the accents for small TEXT on cards and washes (the accents themselves stay for dots, bars and chart marks). */
-  --rh-teal-text: #5CBF9F;
-  --rh-crimson-text: #E4857E;
-  --rh-steel-text: #7DA7D1;
-  --rh-purple-text: #A99BD6;
-}
-
-/* Figures (latency, counts, ids, token totals) never shift width as they change. */
-.rh-tabular {
-  font-family: var(--font-rh-mono), ui-monospace, monospace;
-  font-variant-numeric: tabular-nums;
-}
-
-/* Inside the dark shell: native controls and scrollbars follow, and focus is a crisp 1px teal outline (never a glow). */
-.rh-dark {
-  color-scheme: dark;
-  background-color: var(--rh-canvas-bg);
-  color: var(--rh-text-primary);
-  font-family: var(--font-rh-sans), system-ui, -apple-system, sans-serif;
-}
-/* Form controls sit one step below the cards (matte, not the browser's default grey). */
-.rh-dark input:not([type="checkbox"]):not([type="radio"]),
-.rh-dark select,
-.rh-dark textarea {
-  background-color: var(--rh-surface-subtle);
-  color: var(--rh-text-primary);
-}
-.rh-dark :focus-visible {
-  outline: 1px solid var(--rh-teal);
-  outline-offset: 2px;
-}
-
-
-.react-flow__attribution {
-  display: none !important;
-}
-
-/* Flow-diagram controls (the sample canvas at /demo) follow the tokens: flat, hairline, no shadow. */
-.react-flow__controls {
-  background: var(--rh-surface-card) !important;
-  border: 1px solid var(--rh-border-hairline) !important;
-  border-radius: 8px !important;
-  overflow: hidden;
-}
-
-.react-flow__controls-button {
-  background: var(--rh-surface-card) !important;
-  border-bottom: 1px solid var(--rh-border-hairline) !important;
-  fill: var(--rh-text-secondary) !important;
-}
-
-.react-flow__controls-button:hover {
-  background: var(--rh-surface-elevated) !important;
-  fill: var(--rh-text-primary) !important;
-}
-
-code,
-pre,
-.font-mono {
-  font-family: var(--font-rh-mono), ui-monospace, monospace;
-}
-
-/* === AGENT CONTROL ROOM GLASS TOKENS === */
-.rh-control-room {
-  color-scheme: dark;
-
+  /* Core Dark Navy surfaces & glass tokens */
   --rh-bg-base: #060913;
-  --rh-bg-elevated: #0b1022;
+  --rh-bg-elevated: #0B1022;
   --rh-bg-rail: rgba(10, 15, 31, 0.72);
   --rh-glass-bg: rgba(13, 19, 38, 0.64);
   --rh-glass-bg-hover: rgba(20, 29, 56, 0.8);
   --rh-glass-border: rgba(148, 163, 184, 0.14);
   --rh-glass-border-strong: rgba(226, 232, 240, 0.24);
+  --rh-scrim: rgba(6, 9, 19, 0.78);
 
-  --rh-accent-crimson: #e11d48;
-  --rh-accent-crimson-bright: #f43f5e;
+  /* Navigation chrome (Dark Navy equivalents for shared rh-chrome-* tokens) */
+  --rh-chrome-bg: #0A0F1F;
+  --rh-chrome-hover: #131B33;
+  --rh-chrome-active: #1C162E;
+  --rh-chrome-border: rgba(148, 163, 184, 0.14);
+
+  /* Application surfaces (opaque Dark Navy fallbacks matching glass RGBs for AA contrast & native controls) */
+  --rh-canvas-bg: #060913;
+  --rh-surface-card: #0D1326;
+  --rh-surface-elevated: #141D38;
+  --rh-surface-subtle: #0B1022;
+  --rh-border-hairline: rgba(148, 163, 184, 0.14);
+  --rh-border-strong: rgba(226, 232, 240, 0.24);
+
+  /* Typography */
+  --rh-text-primary: #F8FAFC;
+  --rh-text-secondary: #94A3B8;
+  --rh-text-muted: #64748B;
+
+  /* Crimson & semantic status accents */
+  --rh-accent-crimson: #E11D48;
+  --rh-accent-crimson-bright: #F43F5E;
+  --rh-accent-crimson-deep: #BE123C;
   --rh-accent-crimson-soft: rgba(225, 29, 72, 0.16);
+  --rh-accent-crimson-border: rgba(251, 113, 133, 0.35);
 
-  --rh-status-allowed: #10b981;
-  --rh-status-flagged: #f59e0b;
-  --rh-status-blocked: #ef4444;
-  --rh-status-pending: #94a3b8;
+  --rh-status-allowed: #10B981;
+  --rh-status-flagged: #F59E0B;
+  --rh-status-blocked: #EF4444;
+  --rh-status-pending: #94A3B8;
 
-  --rh-text-primary: #f8fafc;
-  --rh-text-secondary: #94a3b8;
-  --rh-text-muted: #64748b;
+  /* Semantic telemetry palette (harmonized with Control Room; hexes used for AA math & SVG marks) */
+  --rh-teal: #10B981;
+  --rh-teal-wash: rgba(16, 185, 129, 0.14);
+  --rh-steel: #38BDF8;
+  --rh-steel-wash: rgba(56, 189, 248, 0.14);
+  --rh-steel-border: rgba(56, 189, 248, 0.3);
+  --rh-ochre: #F59E0B;
+  --rh-ochre-wash: rgba(245, 158, 11, 0.14);
+  --rh-ochre-border: rgba(245, 158, 11, 0.3);
+  --rh-crimson: #F43F5E;
+  --rh-crimson-wash: rgba(225, 29, 72, 0.16);
+  --rh-slate-purple: #A78BFA;
+  --rh-slate-purple-wash: rgba(167, 139, 250, 0.15);
 
+  /* Lighter siblings of the accents for small TEXT on Dark Navy cards (#0D1326) and washes */
+  --rh-teal-text: #34D399;
+  --rh-crimson-text: #FDA4AF;
+  --rh-steel-text: #7DD3FC;
+  --rh-purple-text: #C4B5FD;
+
+  /* Radii, glows & motion */
   --rh-radius-sm: 8px;
   --rh-radius-md: 12px;
   --rh-radius-lg: 16px;
@@ -154,7 +101,74 @@ pre,
   --rh-ease-out: cubic-bezier(0.22, 1, 0.36, 1);
   --rh-duration-fast: 180ms;
   --rh-duration-normal: 260ms;
+}
 
+/* Figures (latency, counts, ids, token totals) never shift width as they change. */
+.rh-tabular {
+  font-family: var(--font-rh-mono), ui-monospace, monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Inside the dark shell: native controls and scrollbars follow, ambient navy radial glows sit behind glass cards, and focus uses crimson. */
+.rh-dark {
+  color-scheme: dark;
+  background-color: var(--rh-bg-base);
+  background-image:
+    radial-gradient(60% 55% at 44% 48%, rgba(225, 29, 72, 0.09) 0%, transparent 70%),
+    radial-gradient(50% 45% at 78% 18%, rgba(16, 185, 129, 0.06) 0%, transparent 70%),
+    radial-gradient(55% 60% at 15% 85%, rgba(56, 189, 248, 0.05) 0%, transparent 75%);
+  background-attachment: fixed;
+  color: var(--rh-text-primary);
+  font-family: var(--font-rh-sans), system-ui, -apple-system, sans-serif;
+}
+/* Form controls sit on elevated opaque dark navy (macOS/Windows dropdowns stay legible). */
+.rh-dark input:not([type="checkbox"]):not([type="radio"]),
+.rh-dark select,
+.rh-dark textarea {
+  background-color: var(--rh-bg-elevated);
+  color: var(--rh-text-primary);
+}
+.rh-dark :focus-visible {
+  outline: 2px solid var(--rh-accent-crimson-bright);
+  outline-offset: 2px;
+}
+
+
+.react-flow__attribution {
+  display: none !important;
+}
+
+/* Flow-diagram controls (the sample canvas at /demo) follow Dark Navy Glass tokens. */
+.react-flow__controls {
+  background: var(--rh-glass-bg) !important;
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid var(--rh-glass-border) !important;
+  border-radius: var(--rh-radius-sm) !important;
+  box-shadow: var(--rh-glass-glow);
+  overflow: hidden;
+}
+
+.react-flow__controls-button {
+  background: transparent !important;
+  border-bottom: 1px solid var(--rh-glass-border) !important;
+  fill: var(--rh-text-secondary) !important;
+}
+
+.react-flow__controls-button:hover {
+  background: var(--rh-glass-bg-hover) !important;
+  fill: var(--rh-text-primary) !important;
+}
+
+code,
+pre,
+.font-mono {
+  font-family: var(--font-rh-mono), ui-monospace, monospace;
+}
+
+/* === AGENT CONTROL ROOM GLASS TOKENS === */
+.rh-control-room {
+  color-scheme: dark;
   background-color: var(--rh-bg-base);
   background-image:
     radial-gradient(60% 55% at 44% 48%, rgba(225, 29, 72, 0.09) 0%, transparent 70%),
@@ -167,12 +181,14 @@ pre,
   outline: none;
 }
 
-.rh-glass {
-  background: var(--rh-glass-bg);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  border: 1px solid var(--rh-glass-border);
-  box-shadow: var(--rh-glass-glow);
+@layer components {
+  .rh-glass {
+    background: var(--rh-glass-bg);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid var(--rh-glass-border);
+    box-shadow: var(--rh-glass-glow);
+  }
 }
 
 .rh-scrollbar::-webkit-scrollbar {
@@ -194,6 +210,9 @@ pre,
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .rh-dark *,
+  .rh-dark *::before,
+  .rh-dark *::after,
   .rh-control-room *,
   .rh-control-room *::before,
   .rh-control-room *::after {

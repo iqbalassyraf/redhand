@@ -96,7 +96,7 @@ export function SdkKeysCard(props: { token: string; onUnauthorized: () => void }
   };
 
   return (
-    <section className="rounded-[12px] border border-rh-hairline bg-rh-card p-4 text-[12px]" aria-label="SDK keys">
+    <section className="rh-glass rounded-rh-md p-4 text-[12px]" aria-label="SDK keys">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 className="text-[15px] font-semibold">SDK keys</h2>
         <button onClick={load} className={button}>Refresh</button>
@@ -186,7 +186,7 @@ export function SdkKeysCard(props: { token: string; onUnauthorized: () => void }
               Expires after (days)
               <input value={days} onChange={(e) => setDays(e.target.value)} inputMode="numeric" className="h-[34px] w-[90px] rounded-[8px] border border-rh-hairline px-2" />
             </label>
-            <button type="submit" disabled={busy || invalid} className="h-[34px] rounded-full bg-rh-teal px-4 font-semibold text-rh-canvas disabled:opacity-40">
+            <button type="submit" disabled={busy || invalid} className="h-[34px] rounded-full bg-gradient-to-r from-control-crimsonDeep to-control-crimson px-4 font-semibold text-white shadow-rh-crimson transition hover:to-control-crimsonDeep disabled:opacity-40">
               Create SDK key
             </button>
           </form>

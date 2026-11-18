@@ -98,7 +98,7 @@ export function SpendPanel(props: {
   const measured = agent ? measuredLine(agent) : null;
   const maxDay = Math.max(1, ...(detail?.days ?? []).map((d) => d.estimated_micro_usd));
   return (
-    <section className="rounded-[12px] border-2 border-rh-strong bg-rh-card p-4 text-[12px]" aria-label="Model use">
+    <section className="rh-glass rounded-rh-md border-2 border-control-borderStrong p-4 text-[12px]" aria-label="Model use">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 className="text-[15px] font-semibold">Model use for {props.agentName}</h2>
         <div className="flex gap-2">
@@ -218,7 +218,7 @@ export function SpendPanel(props: {
               admin; raising or removing it asks you to confirm.
             </p>
             <div>
-              <button type="submit" disabled={busy || invalid} className="h-[34px] rounded-full bg-rh-teal px-4 font-semibold text-rh-canvas disabled:opacity-40">
+              <button type="submit" disabled={busy || invalid} className="h-[34px] rounded-full bg-gradient-to-r from-control-crimsonDeep to-control-crimson px-4 font-semibold text-white shadow-rh-crimson transition hover:to-control-crimsonDeep disabled:opacity-40">
                 Save limit
               </button>
             </div>

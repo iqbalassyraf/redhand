@@ -129,7 +129,7 @@ export function ToolPinsPanel({ token, serverId, onUnauthorized }: { token: stri
       ) : (
         <ul className="space-y-3">
           {data.pins.map((p: ToolPin) => (
-            <li key={p.id} className="rounded-[8px] border border-rh-hairline bg-rh-card p-3">
+            <li key={p.id} className="rh-glass rounded-rh-sm p-3">
               <div className="mb-2 flex flex-wrap items-center gap-2">
                 <span className="font-mono font-semibold">{p.tool_name}</span>
                 <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${STATUS_STYLE[p.status] ?? ""}`}>{p.status}</span>
@@ -147,7 +147,7 @@ export function ToolPinsPanel({ token, serverId, onUnauthorized }: { token: stri
                     <button
                       disabled={busy}
                       onClick={() => act(async () => { await pinsApi.decide(token, p.id, "approve", ""); return `Approved ${p.tool_name}.`; })}
-                      className="rounded-full bg-rh-teal px-3 py-1 font-semibold text-rh-canvas disabled:opacity-50"
+                      className="rounded-full bg-gradient-to-r from-control-crimsonDeep to-control-crimson px-3 py-1 font-semibold text-white shadow-rh-crimson transition hover:to-control-crimsonDeep disabled:opacity-50"
                     >
                       Approve
                     </button>

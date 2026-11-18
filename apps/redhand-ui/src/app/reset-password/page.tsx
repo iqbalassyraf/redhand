@@ -32,8 +32,8 @@ export default function ResetPasswordPage() {
 
   if (provider === "clerk") {
     return (
-      <main className="flex min-h-screen items-center justify-center bg-rh-subtle px-4">
-        <div className="w-full max-w-[380px] rounded-[12px] border border-rh-hairline bg-rh-card p-6 text-[13px]">
+      <main className="flex min-h-screen items-center justify-center px-4">
+        <div className="rh-glass w-full max-w-[380px] rounded-rh-lg p-6 text-[13px] text-rh-text">
           <p className="mb-3">Password resets are handled on the sign-in screen: choose "Forgot password?" there.</p>
           <a href="/login" className="underline">Go to sign in</a>
         </div>
@@ -65,16 +65,16 @@ export default function ResetPasswordPage() {
   }
 
   const input =
-    "h-[38px] rounded-[8px] border border-rh-hairline px-3 text-[14px] focus:border-rh-strong focus:outline-none";
+    "h-[38px] rounded-[8px] border border-control-border bg-rh-subtle px-3 text-[14px] text-rh-text focus:border-control-crimson focus:outline-none";
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-rh-subtle px-4">
-      <div className="w-full max-w-[380px] rounded-[12px] border border-rh-hairline bg-rh-card p-6">
-        <div className="mb-6 flex items-center gap-2">
-          <div className="flex h-7 w-9 items-center justify-center rounded-[8px] bg-rh-chrome-active">
-            <Hand className="h-4 w-4 text-rh-canvas" />
+    <main className="flex min-h-screen items-center justify-center px-4">
+      <div className="rh-glass w-full max-w-[380px] rounded-rh-lg p-6">
+        <div className="mb-6 flex items-center gap-2.5">
+          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-control-crimsonBright to-control-crimsonDeep shadow-rh-crimson ring-1 ring-control-borderStrong">
+            <Hand className="h-4 w-4 text-white" />
           </div>
-          <span className="text-[20px] font-bold tracking-tight">RedHand</span>
+          <span className="text-[20px] font-bold tracking-tight text-rh-text">RedHand</span>
         </div>
 
         {stage === "reading" && <p className="text-[13px] text-rh-text-2">Checking your link…</p>}
@@ -119,7 +119,7 @@ export default function ResetPasswordPage() {
             <button
               type="submit"
               disabled={busy}
-              className="mt-2 h-[38px] rounded-full bg-rh-teal text-[14px] font-semibold text-rh-canvas disabled:opacity-50"
+              className="mt-2 h-[38px] rounded-full bg-gradient-to-r from-control-crimsonDeep to-control-crimson text-[14px] font-semibold text-white shadow-rh-crimson transition hover:to-control-crimsonDeep disabled:opacity-50"
             >
               Set new password
             </button>

@@ -207,7 +207,7 @@ export default function PassportsPage() {
     <AppShell title="Passports" organization={me?.organization_name} role={me?.role}>
 
       <div className="mx-auto flex max-w-[1200px] min-w-0 flex-col gap-6">
-        <section className="flex flex-wrap items-center justify-between gap-4 rounded-[12px] border border-rh-hairline bg-rh-card p-4">
+        <section className="rh-glass flex flex-wrap items-center justify-between gap-4 rounded-rh-md p-4">
           <div className="flex flex-wrap gap-4 text-[13px]">
             {(Object.keys(counts) as PassportStatus[]).map((s) => (
               <span key={s} className="flex items-center gap-1.5">
@@ -243,7 +243,7 @@ export default function PassportsPage() {
             <button
               onClick={onFreezeAll}
               disabled={busy || counts.active === 0}
-              className="flex items-center gap-1.5 rounded-full bg-rh-crimson px-4 py-2 text-[13px] font-bold text-rh-canvas hover:bg-rh-crimson disabled:opacity-40"
+              className="flex items-center gap-1.5 rounded-full bg-control-crimson px-4 py-2 text-[13px] font-bold text-white shadow-rh-crimson transition hover:bg-control-crimsonDeep disabled:opacity-40"
             >
               <OctagonX className="h-4 w-4" /> Freeze all agents
             </button>
@@ -273,7 +273,7 @@ export default function PassportsPage() {
         )}
 
         {revealedKey && (
-          <div className="rounded-[12px] border-2 border-rh-strong bg-rh-card p-4">
+          <div className="rh-glass rounded-rh-md border-2 border-control-borderStrong p-4">
             <p className="text-[13px] font-semibold">Agent key for {revealedKey.name}</p>
             <p className="mt-1 text-[12px] text-rh-text-2">
               Shown once. Store it in the agent&apos;s secret store; RedHand keeps only a hash. The agent
@@ -289,7 +289,7 @@ export default function PassportsPage() {
               </button>
               <button
                 onClick={() => setRevealedKey(null)}
-                className="rounded-full bg-rh-teal px-3 py-1.5 text-[12px] font-semibold text-rh-canvas"
+                className="rounded-full bg-gradient-to-r from-control-crimsonDeep to-control-crimson px-3 py-1.5 text-[12px] font-semibold text-white shadow-rh-crimson transition hover:to-control-crimsonDeep"
               >
                 I&apos;ve stored it
               </button>
@@ -423,7 +423,7 @@ export default function PassportsPage() {
 
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
           {me && !admin ? (
-            <section className="rounded-[12px] border border-rh-hairline bg-rh-card p-4 text-[13px] text-rh-text-2">
+            <section className="rh-glass rounded-rh-md p-4 text-[13px] text-rh-text-2">
               <h2 className="text-[15px] font-semibold text-rh-text">Register an agent</h2>
               <p className="mt-1">Registering an agent issues its key, so it needs an admin. Ask one of your admins to register it.</p>
             </section>
@@ -507,7 +507,7 @@ function PassportTable(props: {
   const usageByAgent = new Map<string, AgentUsage>((props.usage?.agents ?? []).map((u) => [u.agent_id, u]));
   const spendByAgent = new Map<string, AgentSpend>((props.spend?.agents ?? []).map((s) => [s.agent_id, s]));
   return (
-    <section className="overflow-x-auto rounded-[12px] border border-rh-hairline bg-rh-card">
+    <section className="rh-glass overflow-x-auto rounded-rh-md">
       <table className="w-full min-w-[900px] text-left text-[13px]">
         <thead className="border-b border-rh-hairline text-[11px] uppercase tracking-wider text-rh-text-2">
           <tr>
@@ -695,7 +695,7 @@ function RegisterAgentForm(props: {
   const [scopes, setScopes] = useState<Scope[]>([]);
 
   return (
-    <section className="rounded-[12px] border border-rh-hairline bg-rh-card p-4">
+    <section className="rh-glass rounded-rh-md p-4">
       <h2 className="text-[15px] font-semibold">Register an agent</h2>
       <form
         className="mt-3 flex flex-col gap-3 text-[13px]"
@@ -754,7 +754,7 @@ function RegisterAgentForm(props: {
         <button
           type="submit"
           disabled={props.busy}
-          className="h-[36px] rounded-full bg-rh-teal font-semibold text-rh-canvas disabled:opacity-40"
+          className="h-[36px] rounded-full bg-gradient-to-r from-control-crimsonDeep to-control-crimson font-semibold text-white shadow-rh-crimson transition hover:to-control-crimsonDeep disabled:opacity-40"
         >
           Register and issue key
         </button>
@@ -853,7 +853,7 @@ function ScopeEditor(props: {
   const [scopes, setScopes] = useState<Scope[]>(props.passport.scopes);
   const [reason, setReason] = useState("");
   return (
-    <section className="rounded-[12px] border-2 border-rh-strong bg-rh-card p-4">
+    <section className="rh-glass rounded-rh-md border-2 border-control-borderStrong p-4">
       <h2 className="text-[15px] font-semibold">Edit scopes for {props.passport.name}</h2>
       <form
         className="mt-3 flex flex-col gap-3 text-[13px]"
@@ -879,7 +879,7 @@ function ScopeEditor(props: {
           <button
             type="submit"
             disabled={props.busy}
-            className="h-[34px] flex-1 rounded-full bg-rh-teal font-semibold text-rh-canvas disabled:opacity-40"
+            className="h-[34px] flex-1 rounded-full bg-gradient-to-r from-control-crimsonDeep to-control-crimson font-semibold text-white shadow-rh-crimson transition hover:to-control-crimsonDeep disabled:opacity-40"
           >
             Save scopes (admin)
           </button>
@@ -905,7 +905,7 @@ function McpServersPanel(props: {
   const [name, setName] = useState("");
   const [url, setUrl] = useState("");
   return (
-    <section className="rounded-[12px] border border-rh-hairline bg-rh-card p-4">
+    <section className="rh-glass rounded-rh-md p-4">
       <h2 className="text-[15px] font-semibold">MCP servers</h2>
       <p className="mt-1 text-[12px] text-rh-text-2">
         Agents reach a server at <code>/mcp/&lt;slug&gt;</code> on the RedHand gateway.
@@ -981,7 +981,7 @@ function AuditPanel(props: { entries: ControlAuditEntry[]; passports: Passport[]
     return e.target_type;
   };
   return (
-    <section className="rounded-[12px] border border-rh-hairline bg-rh-card p-4">
+    <section className="rh-glass rounded-rh-md p-4">
       <h2 className="text-[15px] font-semibold">Control audit log</h2>
       <p className="mt-1 text-[12px] text-rh-text-2">Append-only record of who changed what, and when.</p>
       <ul className="mt-3 flex flex-col divide-y divide-rh-hairline text-[13px]">
@@ -1075,7 +1075,7 @@ function TelegramPanel(props: {
   };
 
   return (
-    <section className="rounded-[12px] border border-rh-hairline bg-rh-card p-4">
+    <section className="rh-glass rounded-rh-md p-4">
       <h2 className="text-[15px] font-semibold">Telegram panic command</h2>
       <p className="mt-1 text-[12px] text-rh-text-2">
         Freeze agents from your phone with <code>/freeze_all</code> or <code>/freeze &lt;name&gt;</code>. Unfreezing
@@ -1179,7 +1179,7 @@ function BudgetEditor(props: {
   // Raising or removing a limit, or turning auto-freeze off, relaxes the restriction: the server wants an admin and confirmation.
   const relaxes = (old !== null && (parsed === null || parsed > old)) || (passport.budget_action === "freeze" && action !== "freeze");
   return (
-    <section className="rounded-[12px] border-2 border-rh-strong bg-rh-card p-4">
+    <section className="rh-glass rounded-rh-md border-2 border-control-borderStrong p-4">
       <h2 className="text-[15px] font-semibold">Daily limit for {passport.name}</h2>
       <p className="mt-1 text-[12px] text-rh-text-2">
         A cap on tool calls this agent makes through the RedHand gateway per day (the day starts at midnight in your
@@ -1232,7 +1232,7 @@ function BudgetEditor(props: {
           <button
             type="submit"
             disabled={props.busy || !valid}
-            className="h-[34px] flex-1 rounded-full bg-rh-teal font-semibold text-rh-canvas disabled:opacity-40"
+            className="h-[34px] flex-1 rounded-full bg-gradient-to-r from-control-crimsonDeep to-control-crimson font-semibold text-white shadow-rh-crimson transition hover:to-control-crimsonDeep disabled:opacity-40"
           >
             Save limit
           </button>
@@ -1273,7 +1273,7 @@ function BudgetDefaultPanel(props: {
     props.onChange(limit, reason, relaxes);
   };
   return (
-    <section className="flex flex-wrap items-center justify-between gap-3 rounded-[12px] border border-rh-hairline bg-rh-card p-4">
+    <section className="rh-glass flex flex-wrap items-center justify-between gap-3 rounded-rh-md p-4">
       <div>
         <h2 className="text-[15px] font-semibold">Default daily limit for new agents</h2>
         <p className="mt-1 text-[12px] text-rh-text-2">

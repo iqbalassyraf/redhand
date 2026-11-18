@@ -353,12 +353,12 @@ export default function RadarPage() {
         {notice ? <div className="mb-3 rounded-[8px] border border-rh-teal bg-rh-teal-wash px-3 py-2 text-[12px] text-rh-teal-text">{notice}</div> : null}
 
         {forbidden ? (
-          <div className="rounded-[10px] border border-rh-hairline bg-rh-card p-4 text-[12px]">
+          <div className="rh-glass rounded-rh-md p-4 text-[12px]">
             Your role cannot see the Radar. Ask an owner or admin to give you the security operator role.
           </div>
         ) : (
           <>
-            <section className="mb-6 rounded-[10px] border border-rh-hairline bg-rh-card p-4 text-[12px]">
+            <section className="rh-glass mb-6 rounded-rh-md p-4 text-[12px]">
               <h2 className="mb-3 text-[14px] font-semibold">Checks</h2>
               <div className="mb-3 flex flex-wrap items-end gap-4">
                 <label className="flex flex-col gap-1">
@@ -429,7 +429,7 @@ export default function RadarPage() {
               />
             )}
 
-            <section className="mb-6 rounded-[10px] border border-rh-hairline bg-rh-card p-4 text-[12px]" aria-label="Repeated calls">
+            <section className="rh-glass mb-6 rounded-rh-md p-4 text-[12px]" aria-label="Repeated calls">
               <h2 className="mb-3 text-[14px] font-semibold">Repeated calls</h2>
               {loopUnavailable || !loop ? (
                 <p className="text-rh-text-2">Repeated-call detection is not available from this server yet.</p>
@@ -492,7 +492,7 @@ export default function RadarPage() {
               )}
             </section>
 
-            <section className="mb-6 rounded-[10px] border border-rh-hairline bg-rh-card p-4 text-[12px]">
+            <section className="rh-glass mb-6 rounded-rh-md p-4 text-[12px]">
               <h2 className="mb-1 text-[14px] font-semibold">Could blocking ever be switched on?</h2>
               <p className="mb-3 text-rh-text-2">
                 Not today: blocking is not available. Two separate things must both look good before anyone could even consider it: our tests on
@@ -547,7 +547,7 @@ export default function RadarPage() {
               </p>
             </section>
 
-            <section className="mb-6 rounded-[10px] border border-rh-hairline bg-rh-card p-4 text-[12px]">
+            <section className="rh-glass mb-6 rounded-rh-md p-4 text-[12px]">
               <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
                 <h2 className="text-[14px] font-semibold">Self-test</h2>
                 <button onClick={runSelfTest} disabled={selfTestRunning} className={button}>
@@ -601,7 +601,7 @@ export default function RadarPage() {
               ) : null}
             </section>
 
-            <section className="mb-6 rounded-[10px] border border-rh-hairline bg-rh-card p-4 text-[12px]">
+            <section className="rh-glass mb-6 rounded-rh-md p-4 text-[12px]">
               <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
                 <h2 className="text-[14px] font-semibold">Findings</h2>
                 <div className="flex flex-wrap gap-2">
@@ -631,7 +631,7 @@ export default function RadarPage() {
                   {findings.map((f) => (
                     <li key={f.id} className="py-3">
                       <div className="flex flex-wrap items-center gap-2">
-                        <span className="rounded-full bg-rh-teal px-2 py-0.5 font-mono text-[11px] text-rh-canvas">{f.rule_id}</span>
+                        <span className="rounded-full border border-control-steelBorder bg-rh-steel-wash px-2 py-0.5 font-mono text-[11px] text-rh-steel-text">{f.rule_id}</span>
                         <span className="font-semibold">{f.agent_name ?? f.agent_id.slice(0, 8)}</span>
                         <span className="text-rh-text-2">
                           via {shorten(f.tool_name || "(unknown tool)")} on {shorten(f.server_slug || "(unknown server)")}
@@ -735,7 +735,7 @@ export default function RadarPage() {
               ) : null}
             </section>
 
-            <section className="rounded-[10px] border border-rh-hairline bg-rh-card p-4 text-[12px]">
+            <section className="rh-glass rounded-rh-md p-4 text-[12px]">
               <h2 className="mb-3 text-[14px] font-semibold">Active silences</h2>
               {silences.length === 0 ? (
                 <p className="text-rh-text-2">None. Every rule is recording for every agent.</p>
@@ -743,7 +743,7 @@ export default function RadarPage() {
                 <ul className="divide-y divide-rh-hairline">
                   {silences.map((s) => (
                     <li key={s.id} className="flex flex-wrap items-center gap-2 py-2">
-                      <span className="rounded-full bg-rh-teal px-2 py-0.5 font-mono text-[11px] text-rh-canvas">{s.rule_id}</span>
+                      <span className="rounded-full border border-control-steelBorder bg-rh-steel-wash px-2 py-0.5 font-mono text-[11px] text-rh-steel-text">{s.rule_id}</span>
                       <span className="font-semibold">{s.agent_name ?? s.agent_id.slice(0, 8)}</span>
                       <span className="text-rh-text-2">{shorten(s.reason, 100)}</span>
                       <span className="ml-auto text-rh-text-2">ends {when(s.expires_at)}</span>

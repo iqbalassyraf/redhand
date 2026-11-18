@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { AnimatePresence, LayoutGroup, MotionConfig, motion } from "framer-motion";
 import { Plus, ShieldCheck, X } from "lucide-react";
@@ -18,7 +18,16 @@ import {
 } from "@/components/control-room/SecondaryViews";
 import { StatusPill } from "@/components/control-room/StatusPill";
 import { TopBar } from "@/components/control-room/TopBar";
-import { useAuth } from "@/lib/auth";
+import {
+  ApiError,
+  insightsApi,
+  meApi,
+  passportsApi,
+  type ControlAuditEntry,
+  type Me,
+  type Passport,
+} from "@/lib/api";
+import { useRequiredSession } from "@/lib/auth";
 import {
   ALL_NODES,
   MOCK_APPROVALS,
@@ -31,6 +40,8 @@ import {
   type TimeRangeKey,
   type TopologyNode,
 } from "@/lib/control-room-data";
+import { type InsightsSummary } from "@/lib/insights";
+import { buildLiveTopology } from "@/lib/live-topology";
 import {
   EASE_OUT_EXPO,
   MOTION_TIMING,
@@ -48,7 +59,8 @@ const TIME_RANGE_MULTIPLIER: Record<TimeRangeKey, number> = {
 };
 
 export default function AgentControlRoomPage() {
-  const { session } = useAuth();
+  const session = useRequiredSession();
+  const token = session?.token ?? null;
   const reducedMotion = usePrefersReducedMotion();
 
   const [activeView, setActiveView] = useState<ControlRoomView>("overview");
@@ -56,7 +68,16 @@ export default function AgentControlRoomPage() {
   const [timeRange, setTimeRange] = useState<TimeRangeKey>("24h");
   const [loadingRange, setLoadingRange] = useState<boolean>(false);
 
-  const [nodes, setNodes] = useState<TopologyNode[]>(ALL_NODES);
+  // Live vs Sample preview state
+  const [dataSource, setDataSource] = useState<"live" | "preview">("live");
+  const [livePassports, setLivePassports] = useState<Passport[]>([]);
+  const [liveSummary, setLiveSummary] = useState<InsightsSummary | null>(null);
+  const [liveMe, setLiveMe] = useState<Me | null>(null);
+  const [liveAudit, setLiveAudit] = useState<ControlAuditEntry[]>([]);
+  const [liveLoading, setLiveLoading] = useState(false);
+
+  // Sample data fallback state
+  const [mockNodes, setMockNodes] = useState<TopologyNode[]>(ALL_NODES);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [selectedSeverity, setSelectedSeverity] = useState<string | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
@@ -81,13 +102,81 @@ export default function AgentControlRoomPage() {
     return () => clearTimeout(id);
   }, [toastMessage]);
 
+  // Load real telemetry from redhand-core
+  const loadLiveData = useCallback(async () => {
+    if (!token) return;
+    setLiveLoading(true);
+    try {
+      const insightsWindow = timeRange === "1h" ? "1h" : timeRange === "7d" ? "7d" : "24h";
+      const [pList, summaryData, meData, auditData] = await Promise.all([
+        passportsApi.list(token).catch(() => []),
+        insightsApi.summary(token, insightsWindow).catch(() => null),
+        meApi.get(token).catch(() => null),
+        passportsApi.audit(token).catch(() => []),
+      ]);
+      setLivePassports(pList);
+      setLiveSummary(summaryData);
+      setLiveMe(meData);
+      setLiveAudit(auditData);
+
+      // Auto-preview sample topology if org has no registered agents yet
+      if (pList.length === 0 && (!summaryData || summaryData.totals.decisions === 0)) {
+        setDataSource("preview");
+      }
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 401) {
+        window.location.href = "/login";
+        return;
+      }
+    } finally {
+      setLiveLoading(false);
+    }
+  }, [token, timeRange]);
+
+  useEffect(() => {
+    void loadLiveData();
+  }, [loadLiveData]);
+
+  // Build live topology from server responses
+  const liveBuilt = useMemo(() => {
+    return buildLiveTopology(livePassports, liveSummary, liveMe, liveAudit, timeRange);
+  }, [livePassports, liveSummary, liveMe, liveAudit, timeRange]);
+
+  const activeNodes = useMemo(
+    () => (dataSource === "live" && livePassports.length > 0 ? liveBuilt.nodes : mockNodes),
+    [dataSource, livePassports.length, liveBuilt.nodes, mockNodes]
+  );
+
+  const baseSnapshot = OVERVIEW_SNAPSHOTS[timeRange];
+  const activeSnapshot = useMemo(() => {
+    if (dataSource === "live" && (livePassports.length > 0 || (liveSummary && liveSummary.totals.decisions > 0))) {
+      return liveBuilt.snapshot;
+    }
+    if (extraBlockedCount === 0) return baseSnapshot;
+    return {
+      ...baseSnapshot,
+      hub: {
+        ...baseSnapshot.hub,
+        riskyActionsCount: baseSnapshot.hub.riskyActionsCount + extraBlockedCount,
+        blockedThreatsCount: baseSnapshot.hub.blockedThreatsCount + extraBlockedCount,
+      },
+      summary: {
+        ...baseSnapshot.summary,
+        blocked: baseSnapshot.summary.blocked + extraBlockedCount,
+      },
+    };
+  }, [dataSource, livePassports.length, liveSummary, liveBuilt.snapshot, extraBlockedCount, baseSnapshot]);
+
+  const activePolicies = dataSource === "live" && livePassports.length > 0 ? liveBuilt.policies : policies;
+  const activeAudit = dataSource === "live" && liveAudit.length > 0 ? liveBuilt.auditEntries : auditEntries;
+
   const spokeNodes = useMemo(
-    () => nodes.filter((n) => n.kind === "spoke"),
-    [nodes]
+    () => activeNodes.filter((n) => n.kind === "spoke"),
+    [activeNodes]
   );
   const childNodes = useMemo(
-    () => nodes.filter((n) => n.kind === "child"),
-    [nodes]
+    () => activeNodes.filter((n) => n.kind === "child"),
+    [activeNodes]
   );
 
   // Global Cmd+K / Ctrl+K, Escape-to-overview, and rail 1-5 shortcuts
@@ -136,38 +225,21 @@ export default function AgentControlRoomPage() {
   }, [searchOpen, newModalOpen, activeView, selectedNodeId, spokeNodes]);
 
   const selectedNode = useMemo(
-    () => nodes.find((n) => n.id === selectedNodeId) ?? spokeNodes[0] ?? null,
-    [nodes, selectedNodeId, spokeNodes]
+    () => activeNodes.find((n) => n.id === selectedNodeId) ?? spokeNodes[0] ?? null,
+    [activeNodes, selectedNodeId, spokeNodes]
   );
 
   const relatedNodes = useMemo(() => {
     if (!selectedNode) return [];
-    return nodes.filter((n) => n.spokeId === selectedNode.spokeId);
-  }, [nodes, selectedNode]);
-
-  const baseSnapshot = OVERVIEW_SNAPSHOTS[timeRange];
-  const snapshot = useMemo(() => {
-    if (extraBlockedCount === 0) return baseSnapshot;
-    return {
-      ...baseSnapshot,
-      hub: {
-        ...baseSnapshot.hub,
-        riskyActionsCount: baseSnapshot.hub.riskyActionsCount + extraBlockedCount,
-        blockedThreatsCount: baseSnapshot.hub.blockedThreatsCount + extraBlockedCount,
-      },
-      summary: {
-        ...baseSnapshot.summary,
-        blocked: baseSnapshot.summary.blocked + extraBlockedCount,
-      },
-    };
-  }, [baseSnapshot, extraBlockedCount]);
+    return activeNodes.filter((n) => n.spokeId === selectedNode.spokeId);
+  }, [activeNodes, selectedNode]);
 
   const pendingApprovalsCount = useMemo(
     () => approvals.filter((a) => a.status === "pending").length,
     [approvals]
   );
 
-  const userEmail = session?.email ?? "alice.chen@redhand.dev";
+  const userEmail = liveMe?.email || session?.email || "operator@redhand.dev";
   const userInitials = useMemo(() => {
     const parts = userEmail.split("@")[0]?.split(/[._-]/).filter(Boolean) ?? ["RH"];
     return parts
@@ -209,7 +281,7 @@ export default function AgentControlRoomPage() {
   };
 
   const handleToggleProtection = (nodeId: string) => {
-    setNodes((prev) =>
+    setMockNodes((prev) =>
       prev.map((n) => {
         if (n.id !== nodeId) return n;
         const nextProtected = n.protection !== "protected";
@@ -290,13 +362,54 @@ export default function AgentControlRoomPage() {
 
         {/* Main Right Workspace Column */}
         <div className="flex min-w-0 flex-1 flex-col gap-3 overflow-hidden">
-          <div
-            role="status"
-            className="rounded-rh-md border border-amber-400/30 bg-amber-500/10 px-3 py-1.5 text-center text-[11px] font-medium text-amber-200"
-          >
-            Demo data: this Control Room shows sample figures, not your live organization. Use{" "}
-            <Link href="/passports" className="underline">Passports</Link> for real control actions.
-          </div>
+          {/* Contextual Banner */}
+          {dataSource === "preview" ? (
+            <div
+              role="status"
+              className="flex items-center justify-between rounded-rh-md border border-amber-400/30 bg-amber-500/10 px-3.5 py-1.5 text-[11px] font-medium text-amber-200"
+            >
+              <span>
+                Sample topology preview: exploring realistic agent control figures.
+                {livePassports.length > 0
+                  ? ` (${livePassports.length} live agents registered in ${liveMe?.organization_name || "your org"}).`
+                  : " Your organization has 0 registered agents so far."}
+              </span>
+              <div className="flex items-center gap-2">
+                <Link href="/passports" className="text-amber-300 underline hover:text-white">
+                  Manage Passports
+                </Link>
+                <button
+                  type="button"
+                  onClick={() => setDataSource("live")}
+                  className="rounded-full bg-amber-500/20 px-2.5 py-0.5 font-semibold text-amber-200 hover:bg-amber-500/35"
+                >
+                  Switch to Live Data →
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div
+              role="status"
+              className="flex items-center justify-between rounded-rh-md border border-emerald-500/30 bg-emerald-500/10 px-3.5 py-1.5 text-[11px] font-medium text-emerald-200"
+            >
+              <div className="flex items-center gap-2">
+                <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
+                <span>
+                  Live Control Room · Connected to redhand-core
+                  {liveMe?.organization_name ? ` · ${liveMe.organization_name}` : ""}
+                  {` (${livePassports.length} agents, ${liveSummary?.totals.decisions ?? 0} calls)`}
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setDataSource("preview")}
+                className="font-semibold text-emerald-300 underline hover:text-white"
+              >
+                Preview Sample Topology →
+              </button>
+            </div>
+          )}
+
           <TopBar
             activeView={activeView}
             selectedNode={isDetailOverlay ? selectedNode : null}
@@ -309,6 +422,8 @@ export default function AgentControlRoomPage() {
             onOpenNewModal={() => setNewModalOpen(true)}
             pendingApprovalsCount={pendingApprovalsCount}
             userInitials={userInitials}
+            dataSource={dataSource}
+            onToggleDataSource={() => setDataSource((prev) => (prev === "live" ? "preview" : "live"))}
           />
 
           {/* Main Stage Container */}
@@ -400,7 +515,7 @@ export default function AgentControlRoomPage() {
                     <RadialMap
                       spokes={spokeNodes}
                       childNodes={childNodes}
-                      hubStats={snapshot.hub}
+                      hubStats={activeSnapshot.hub}
                       selectedNodeId={isDetailOverlay ? selectedNode?.id ?? null : null}
                       highlightedSeverity={selectedSeverity}
                       threatPulseKey={threatPulseKey}
@@ -412,12 +527,12 @@ export default function AgentControlRoomPage() {
 
                 {/* Right Telemetry Stats Panel */}
                 <RightStatsPanel
-                  snapshot={snapshot}
+                  snapshot={activeSnapshot}
                   selectedSeverity={selectedSeverity}
                   onSelectSeverity={setSelectedSeverity}
                   selectedCategory={selectedCategory}
                   onSelectCategory={setSelectedCategory}
-                  loading={loadingRange}
+                  loading={loadingRange || liveLoading}
                 />
               </motion.div>
             )}
@@ -435,7 +550,7 @@ export default function AgentControlRoomPage() {
                     timeRangeLabel={baseSnapshot.label}
                     timeRangeMultiplier={TIME_RANGE_MULTIPLIER[timeRange]}
                     loading={loadingRange}
-                    policies={policies}
+                    policies={activePolicies}
                     onBack={() => setActiveView("overview")}
                     onSelectNode={handleSelectNode}
                     onToggleProtection={handleToggleProtection}
@@ -447,7 +562,7 @@ export default function AgentControlRoomPage() {
               {activeView === "policies" && (
                 <PoliciesView
                   key="view-policies"
-                  policies={policies}
+                  policies={activePolicies}
                   onTogglePolicyMode={handleTogglePolicyMode}
                 />
               )}
@@ -461,7 +576,7 @@ export default function AgentControlRoomPage() {
               )}
 
               {activeView === "audit-log" && (
-                <AuditLogView key="view-audit-log" entries={auditEntries} />
+                <AuditLogView key="view-audit-log" entries={activeAudit} />
               )}
             </AnimatePresence>
           </main>
@@ -471,8 +586,8 @@ export default function AgentControlRoomPage() {
         <CommandSearchModal
           open={searchOpen}
           onClose={() => setSearchOpen(false)}
-          nodes={nodes}
-          policies={policies}
+          nodes={activeNodes}
+          policies={activePolicies}
           onSelectNode={handleSelectNode}
           onSelectView={(view) => setActiveView(view)}
         />
@@ -488,15 +603,13 @@ export default function AgentControlRoomPage() {
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               transition={{ duration: MOTION_TIMING.fast }}
-              onClick={() => setNewModalOpen(false)}
-              className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/75 px-4 backdrop-blur-sm"
+              className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 p-4 backdrop-blur-md"
             >
               <motion.div
-                initial={reducedMotion ? false : { opacity: 0, scale: 0.96, y: 8 }}
+                initial={reducedMotion ? false : { opacity: 0, scale: 0.94, y: 10 }}
                 animate={{ opacity: 1, scale: 1, y: 0 }}
-                exit={{ opacity: 0, scale: 0.96 }}
-                transition={{ duration: MOTION_TIMING.fast, ease: EASE_OUT_EXPO }}
-                onClick={(e) => e.stopPropagation()}
+                exit={{ opacity: 0, scale: 0.94, y: 10 }}
+                transition={reducedMotion ? { duration: 0.01 } : SPRING_SHARED_ELEMENT}
                 className="w-full max-w-md"
               >
                 <GlassCard glow="crimson" className="p-5">
@@ -516,7 +629,7 @@ export default function AgentControlRoomPage() {
                   </div>
 
                   <p className="mt-2 text-xs leading-relaxed text-slate-400">
-                    The Control Room runs with realistic mock telemetry while you evaluate the redesign. Jump directly to live operational consoles or simulate an event:
+                    Register a new agent passport, issue an SDK key, or configure guardrails directly in the operational consoles:
                   </p>
 
                   <div className="mt-4 flex flex-col gap-2">

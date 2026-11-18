@@ -65,7 +65,7 @@ export function SettingsPanel({ settings, busy, onSaveRetention, onSetCapture, o
   const inputClass = "w-20 rounded-[8px] border border-rh-hairline px-2 py-1 text-[12px] disabled:bg-rh-subtle";
 
   return (
-    <section className="mb-4 rounded-[10px] border border-rh-hairline bg-rh-card p-4 text-[12px]">
+    <section className="rh-glass mb-4 rounded-rh-md p-4 text-[12px]">
       <h2 className="mb-3 text-[14px] font-semibold">Recording settings</h2>
 
       <div className="mb-4 flex flex-wrap items-end gap-4">
@@ -94,7 +94,7 @@ export function SettingsPanel({ settings, busy, onSaveRetention, onSetCapture, o
             </label>
             <button
               onClick={saveRetention} disabled={busy || !retentionChanged || !retentionValid}
-              className="rounded-full bg-rh-teal px-3 py-1.5 font-semibold text-rh-canvas disabled:opacity-40"
+              className="rounded-full bg-gradient-to-r from-control-crimsonDeep to-control-crimson px-3 py-1.5 font-semibold text-white shadow-rh-crimson transition hover:to-control-crimsonDeep disabled:opacity-40"
             >
               Save retention
             </button>
@@ -145,8 +145,8 @@ export function SettingsPanel({ settings, busy, onSaveRetention, onSetCapture, o
       </div>
 
       {captureDialog ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-rh-teal/40 p-4" role="dialog" aria-modal="true">
-          <div className="max-w-lg rounded-[12px] bg-rh-card p-5 text-[13px]">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-control-scrim p-4 backdrop-blur-sm" role="dialog" aria-modal="true">
+          <div className="rh-glass max-w-lg rounded-rh-lg p-5 text-[13px]">
             <h3 className="mb-2 text-[16px] font-bold">Turn on payload capture?</h3>
             <ul className="mb-3 list-disc space-y-2 pl-5 text-rh-text">
               {captureWarning(settings.payload_retention_days).map((line) => (
@@ -164,7 +164,7 @@ export function SettingsPanel({ settings, busy, onSaveRetention, onSetCapture, o
               <button
                 disabled={!understood || busy}
                 onClick={() => { setCaptureDialog(false); onSetCapture(true, reason); }}
-                className="rounded-full bg-rh-crimson px-3 py-1.5 font-semibold text-rh-canvas disabled:opacity-40"
+                className="rounded-full bg-control-crimson px-3 py-1.5 font-semibold text-white shadow-rh-crimson transition hover:bg-control-crimsonDeep disabled:opacity-40"
               >
                 Turn capture on
               </button>

@@ -59,32 +59,32 @@ export default function JoinPage() {
   }
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-rh-subtle px-4">
-      <div className="w-full max-w-[400px] rounded-[12px] border border-rh-hairline bg-rh-card p-6">
-        <div className="mb-4 flex items-center gap-2">
-          <div className="flex h-7 w-9 items-center justify-center rounded-[8px] bg-rh-chrome-active">
-            <Hand className="h-4 w-4 text-rh-canvas" />
+    <main className="flex min-h-screen items-center justify-center px-4">
+      <div className="rh-glass w-full max-w-[400px] rounded-rh-lg p-6">
+        <div className="mb-4 flex items-center gap-2.5">
+          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-control-crimsonBright to-control-crimsonDeep shadow-rh-crimson ring-1 ring-control-borderStrong">
+            <Hand className="h-4 w-4 text-white" />
           </div>
-          <span className="text-[20px] font-bold tracking-tight">RedHand</span>
+          <span className="text-[20px] font-bold tracking-tight text-rh-text">RedHand</span>
         </div>
-        <h1 className="text-[16px] font-semibold">{JOIN_TEXT.title}</h1>
+        <h1 className="text-[16px] font-semibold text-rh-text">{JOIN_TEXT.title}</h1>
         {token === null ? null : token === "invalid" ? (
-          <p role="alert" className="mt-3 rounded-[8px] bg-rh-chrome-active-wash p-3 text-[13px] text-rh-crimson-text">{JOIN_TEXT.refused}</p>
+          <p role="alert" className="mt-3 rounded-[8px] border border-rh-crimson bg-rh-crimson-wash p-3 text-[13px] text-rh-crimson-text">{JOIN_TEXT.refused}</p>
         ) : !ready ? null : session ? (
           <>
             <p className="mb-3 mt-1 text-[12px] text-rh-text-2">{JOIN_TEXT.intro}</p>
-            <p className="mb-3 text-[13px]">Signed in as {session.email}.</p>
-            <button onClick={accept} disabled={busy} className="rounded-full bg-rh-crimson px-4 py-2 text-[13px] font-semibold text-rh-canvas disabled:opacity-50">
+            <p className="mb-3 text-[13px] text-rh-text">Signed in as {session.email}.</p>
+            <button onClick={accept} disabled={busy} className="rounded-full bg-gradient-to-r from-control-crimsonDeep to-control-crimson px-4 py-2 text-[13px] font-semibold text-white shadow-rh-crimson transition hover:to-control-crimsonDeep disabled:opacity-50">
               {busy ? "Joining..." : "Accept invite"}
             </button>
           </>
         ) : (
           <>
             <p className="mb-3 mt-1 text-[13px] text-rh-text-2">{JOIN_TEXT.signInFirst}</p>
-            <a href="/login" className="inline-block rounded-full bg-rh-crimson px-4 py-2 text-[13px] font-semibold text-rh-canvas">Sign in or create an account</a>
+            <a href="/login" className="inline-block rounded-full bg-gradient-to-r from-control-crimsonDeep to-control-crimson px-4 py-2 text-[13px] font-semibold text-white shadow-rh-crimson transition hover:to-control-crimsonDeep">Sign in or create an account</a>
           </>
         )}
-        {error && <div role="alert" className="mt-4 rounded-[8px] bg-rh-chrome-active-wash p-3 text-[13px] text-rh-crimson-text">{error}</div>}
+        {error && <div role="alert" className="mt-4 rounded-[8px] border border-rh-crimson bg-rh-crimson-wash p-3 text-[13px] text-rh-crimson-text">{error}</div>}
       </div>
     </main>
   );

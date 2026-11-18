@@ -74,7 +74,7 @@ export function EventDrawer({ event, token, canViewPayload, onClose, onUnauthori
   };
 
   return (
-    <aside className="fixed right-0 top-0 z-40 h-full w-full max-w-md overflow-auto border-l border-rh-hairline bg-rh-card p-4 text-[12px]" aria-label="Event detail">
+    <aside className="rh-glass fixed right-0 top-0 z-40 h-full w-full max-w-md overflow-auto border-l border-control-border p-4 text-[12px]" aria-label="Event detail">
       <div className="mb-3 flex items-center justify-between">
         <h2 className="text-[15px] font-bold">Event {event.seq}</h2>
         <button onClick={onClose} aria-label="Close" className="rounded-full p-1 hover:bg-rh-elevated">

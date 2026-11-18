@@ -191,7 +191,7 @@ export default function HoneytokensPage() {
               </button>
               <button
                 onClick={() => setRevealed(null)}
-                className="rounded-full bg-rh-teal px-3 py-1.5 font-semibold text-rh-canvas"
+                className="rounded-full bg-gradient-to-r from-control-crimsonDeep to-control-crimson px-3 py-1.5 font-semibold text-white shadow-rh-crimson transition hover:to-control-crimsonDeep"
               >
                 I have saved it
               </button>
@@ -206,7 +206,7 @@ export default function HoneytokensPage() {
           </div>
         ) : null}
 
-        <section className="mb-6 rounded-[10px] border border-rh-hairline bg-rh-card p-4 text-[12px]">
+        <section className="rh-glass mb-6 rounded-rh-md p-4 text-[12px]">
           <h2 className="mb-1 text-[14px] font-semibold">Honeytokens (fake credentials) and system-prompt canaries</h2>
           <p className="mb-3 text-rh-text-2">
             A canary is a honeytoken you paste into an agent&apos;s own system prompt: if it later appears in a tool call or a tool answer,
@@ -247,7 +247,7 @@ export default function HoneytokensPage() {
             </label>
             <button
               onClick={createToken} disabled={busy || label.trim().length === 0}
-              className="rounded-full bg-rh-teal px-3 py-1.5 font-semibold text-rh-canvas disabled:opacity-40"
+              className="rounded-full bg-gradient-to-r from-control-crimsonDeep to-control-crimson px-3 py-1.5 font-semibold text-white shadow-rh-crimson transition hover:to-control-crimsonDeep disabled:opacity-40"
             >
               Create honeytoken
             </button>
@@ -294,7 +294,7 @@ export default function HoneytokensPage() {
           </table>
         </section>
 
-        <section className="rounded-[10px] border border-rh-hairline bg-rh-card p-4 text-[12px]">
+        <section className="rh-glass rounded-rh-md p-4 text-[12px]">
           <h2 className="mb-1 text-[14px] font-semibold">Decoy tools</h2>
           <p className="mb-3 text-rh-text-2">
             A tempting tool added to one agent&apos;s tool list on one MCP server (for example
@@ -336,7 +336,7 @@ export default function HoneytokensPage() {
             <button
               onClick={createTool}
               disabled={busy || !toolAgent || !toolServer.trim() || !toolNameValid || !toolDescription.trim()}
-              className="rounded-full bg-rh-teal px-3 py-1.5 font-semibold text-rh-canvas disabled:opacity-40"
+              className="rounded-full bg-gradient-to-r from-control-crimsonDeep to-control-crimson px-3 py-1.5 font-semibold text-white shadow-rh-crimson transition hover:to-control-crimsonDeep disabled:opacity-40"
             >
               Add decoy tool
             </button>

@@ -118,7 +118,7 @@ export default function ScannerPage() {
 
         {error ? <div className="mb-3 rounded-[8px] border border-rh-crimson bg-rh-crimson-wash px-3 py-2 text-rh-crimson-text">{error}</div> : null}
 
-        <section className="mb-4 rounded-[10px] border border-rh-hairline bg-rh-card p-4">
+        <section className="rh-glass mb-4 rounded-rh-md p-4">
           <div className="mb-2 flex items-center justify-between">
             <h2 className="text-[14px] font-semibold">Scan a registered server</h2>
             <button onClick={() => load()} className="flex items-center gap-1 rounded-full border border-rh-hairline px-3 py-1 font-semibold hover:bg-rh-elevated">
@@ -149,7 +149,7 @@ export default function ScannerPage() {
                       <button
                         disabled={busy !== null}
                         onClick={() => run(s.id, () => scannerApi.scanServer(token, s.id))}
-                        className="rounded-full bg-rh-teal px-3 py-1.5 font-semibold text-rh-canvas disabled:opacity-50"
+                        className="rounded-full bg-gradient-to-r from-control-crimsonDeep to-control-crimson px-3 py-1.5 font-semibold text-white shadow-rh-crimson transition hover:to-control-crimsonDeep disabled:opacity-50"
                       >
                         {busy === s.id ? "Scanning…" : "Scan"}
                       </button>
@@ -172,7 +172,7 @@ export default function ScannerPage() {
           )}
         </section>
 
-        <section className="mb-4 rounded-[10px] border border-rh-hairline bg-rh-card p-4">
+        <section className="rh-glass mb-4 rounded-rh-md p-4">
           <h2 className="mb-2 text-[14px] font-semibold">Check a pasted manifest</h2>
           <p className="mb-2 text-rh-text-2">
             Paste an MCP server manifest as JSON (name, command, args, env, tools). Nothing is fetched or stored. Do not paste real
@@ -190,7 +190,7 @@ export default function ScannerPage() {
           <button
             disabled={busy !== null || manifestText.trim().length === 0}
             onClick={checkManifest}
-            className="rounded-full bg-rh-teal px-3 py-1.5 font-semibold text-rh-canvas disabled:opacity-40"
+            className="rounded-full bg-gradient-to-r from-control-crimsonDeep to-control-crimson px-3 py-1.5 font-semibold text-white shadow-rh-crimson transition hover:to-control-crimsonDeep disabled:opacity-40"
           >
             {busy === "manifest" ? "Checking…" : "Check manifest"}
           </button>
@@ -205,7 +205,7 @@ export default function ScannerPage() {
 function ResultView({ result }: { result: ScanResult }) {
   const high = result.findings.filter((f) => f.severity === "HIGH" || f.severity === "CRITICAL").length;
   return (
-    <section className="rounded-[10px] border border-rh-hairline bg-rh-card p-4" aria-label="Scan result">
+    <section className="rh-glass rounded-rh-md p-4" aria-label="Scan result">
       <div className="mb-3 flex flex-wrap items-center gap-3">
         <span className={`rounded-full px-3 py-1 text-[13px] font-bold ${VERDICT_STYLE[result.verdict]}`}>{result.verdict}</span>
         <span>

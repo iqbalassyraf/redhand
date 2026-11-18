@@ -47,7 +47,7 @@ export function RiskPanel(props: { token: string; agentId: string; agentName: st
 
   const agent = detail?.agent;
   return (
-    <section className="rounded-[12px] border-2 border-rh-strong bg-rh-card p-4 text-[12px]" aria-label="Risk">
+    <section className="rh-glass rounded-rh-md border-2 border-control-borderStrong p-4 text-[12px]" aria-label="Risk">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 className="text-[15px] font-semibold">Risk for {props.agentName}</h2>
         <div className="flex gap-2">

@@ -33,8 +33,8 @@ export default function LoginPage() {
     try {
       await action();
       let pending = false;
-      try { pending = Boolean(window.sessionStorage.getItem(PENDING_INVITE_KEY)); } catch { /* storage unavailable: go to the passports page */ }
-      window.location.href = pending ? "/join" : "/passports";
+      try { pending = Boolean(window.sessionStorage.getItem(PENDING_INVITE_KEY)); } catch { /* storage unavailable: go to the control room */ }
+      window.location.href = pending ? "/join" : "/";
     } catch (err) {
       setError(err instanceof Error ? err.message : "Sign-in failed.");
     } finally {
@@ -44,12 +44,12 @@ export default function LoginPage() {
 
   if (provider === "clerk") {
     return (
-      <main className="flex min-h-screen flex-col items-center justify-center gap-6 bg-rh-subtle px-4 py-8">
-        <div className="flex items-center gap-2">
-          <div className="flex h-7 w-9 items-center justify-center rounded-[8px] bg-rh-chrome-active">
-            <Hand className="h-4 w-4 text-rh-canvas" />
+      <main className="flex min-h-screen flex-col items-center justify-center gap-6 px-4 py-8">
+        <div className="flex items-center gap-2.5">
+          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-control-crimsonBright to-control-crimsonDeep shadow-rh-crimson ring-1 ring-control-borderStrong">
+            <Hand className="h-4 w-4 text-white" />
           </div>
-          <span className="text-[20px] font-bold tracking-tight">RedHand</span>
+          <span className="text-[20px] font-bold tracking-tight text-rh-text">RedHand</span>
         </div>
         <ClerkLogin />
       </main>
@@ -57,13 +57,13 @@ export default function LoginPage() {
   }
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-rh-subtle px-4">
-      <div className="w-full max-w-[380px] rounded-[12px] border border-rh-hairline bg-rh-card p-6">
-        <div className="mb-6 flex items-center gap-2">
-          <div className="flex h-7 w-9 items-center justify-center rounded-[8px] bg-rh-chrome-active">
-            <Hand className="h-4 w-4 text-rh-canvas" />
+    <main className="flex min-h-screen items-center justify-center px-4">
+      <div className="rh-glass w-full max-w-[380px] rounded-rh-lg p-6">
+        <div className="mb-6 flex items-center gap-2.5">
+          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-control-crimsonBright to-control-crimsonDeep shadow-rh-crimson ring-1 ring-control-borderStrong">
+            <Hand className="h-4 w-4 text-white" />
           </div>
-          <span className="text-[20px] font-bold tracking-tight">RedHand</span>
+          <span className="text-[20px] font-bold tracking-tight text-rh-text">RedHand</span>
         </div>
 
         {supabaseConfigured && mode === "forgot" ? (
@@ -96,12 +96,12 @@ export default function LoginPage() {
               required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="h-[38px] rounded-[8px] border border-rh-hairline px-3 text-[14px] focus:border-rh-strong focus:outline-none"
+              className="h-[38px] rounded-[8px] border border-control-border bg-rh-subtle px-3 text-[14px] text-rh-text focus:border-control-crimson focus:outline-none"
             />
             <button
               type="submit"
               disabled={busy}
-              className="mt-2 h-[38px] rounded-full bg-rh-teal text-[14px] font-semibold text-rh-canvas disabled:opacity-50"
+              className="mt-2 h-[38px] rounded-full bg-gradient-to-r from-control-crimsonDeep to-control-crimson text-[14px] font-semibold text-white shadow-rh-crimson transition hover:to-control-crimsonDeep disabled:opacity-50"
             >
               Send reset link
             </button>
@@ -112,7 +112,7 @@ export default function LoginPage() {
                 setError(null);
                 setNotice(null);
               }}
-              className="text-[13px] text-rh-text-2 underline"
+              className="text-[13px] text-rh-text-2 underline hover:text-rh-text"
             >
               Back to sign in
             </button>
@@ -130,7 +130,7 @@ export default function LoginPage() {
                   setNotice("Almost there: open the link we e-mailed you to confirm the address, then sign in here.");
                   setMode("signin");
                 } else {
-                  window.location.href = "/passports"; // no organization yet: the page sends you to create or join one
+                  window.location.href = "/"; // no organization yet: the page sends you to create or join one
                 }
               } catch (err) {
                 setError(err instanceof Error ? err.message : "Could not create the account.");
@@ -140,20 +140,20 @@ export default function LoginPage() {
             }}
             className="flex flex-col gap-3"
           >
-            <h1 className="text-[15px] font-semibold">Create an account</h1>
+            <h1 className="text-[15px] font-semibold text-rh-text">Create an account</h1>
             <label className="text-[12px] font-semibold text-rh-text-2" htmlFor="signup-email">Email</label>
             <input id="signup-email" type="email" autoComplete="username" required value={email} onChange={(e) => setEmail(e.target.value)}
-              className="h-[38px] rounded-[8px] border border-rh-hairline px-3 text-[14px] focus:border-rh-strong focus:outline-none" />
+              className="h-[38px] rounded-[8px] border border-control-border bg-rh-subtle px-3 text-[14px] text-rh-text focus:border-control-crimson focus:outline-none" />
             <label className="text-[12px] font-semibold text-rh-text-2" htmlFor="signup-password">Password (at least 10 characters)</label>
             <input id="signup-password" type="password" autoComplete="new-password" required minLength={10} value={password} onChange={(e) => setPassword(e.target.value)}
-              className="h-[38px] rounded-[8px] border border-rh-hairline px-3 text-[14px] focus:border-rh-strong focus:outline-none" />
+              className="h-[38px] rounded-[8px] border border-control-border bg-rh-subtle px-3 text-[14px] text-rh-text focus:border-control-crimson focus:outline-none" />
             <p className="text-[12px] text-rh-text-2">
               An account lets you join a team you were invited to, or create an organization with a sign-up code. RedHand is invite-only for now.
             </p>
-            <button type="submit" disabled={busy} className="mt-1 h-[38px] rounded-full bg-rh-teal text-[14px] font-semibold text-rh-canvas disabled:opacity-50">
+            <button type="submit" disabled={busy} className="mt-1 h-[38px] rounded-full bg-gradient-to-r from-control-crimsonDeep to-control-crimson text-[14px] font-semibold text-white shadow-rh-crimson transition hover:to-control-crimsonDeep disabled:opacity-50">
               Create account
             </button>
-            <button type="button" onClick={() => { setMode("signin"); setError(null); }} className="text-[13px] text-rh-text-2 underline">Back to sign in</button>
+            <button type="button" onClick={() => { setMode("signin"); setError(null); }} className="text-[13px] text-rh-text-2 underline hover:text-rh-text">Back to sign in</button>
           </form>
         ) : supabaseConfigured ? (
           <form
@@ -173,7 +173,7 @@ export default function LoginPage() {
               required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="h-[38px] rounded-[8px] border border-rh-hairline px-3 text-[14px] focus:border-rh-strong focus:outline-none"
+              className="h-[38px] rounded-[8px] border border-control-border bg-rh-subtle px-3 text-[14px] text-rh-text focus:border-control-crimson focus:outline-none"
             />
             <label className="text-[12px] font-semibold text-rh-text-2" htmlFor="password">
               Password
@@ -185,12 +185,12 @@ export default function LoginPage() {
               required
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="h-[38px] rounded-[8px] border border-rh-hairline px-3 text-[14px] focus:border-rh-strong focus:outline-none"
+              className="h-[38px] rounded-[8px] border border-control-border bg-rh-subtle px-3 text-[14px] text-rh-text focus:border-control-crimson focus:outline-none"
             />
             <button
               type="submit"
               disabled={busy}
-              className="mt-2 h-[38px] rounded-full bg-rh-teal text-[14px] font-semibold text-rh-canvas disabled:opacity-50"
+              className="mt-2 h-[38px] rounded-full bg-gradient-to-r from-control-crimsonDeep to-control-crimson text-[14px] font-semibold text-white shadow-rh-crimson transition hover:to-control-crimsonDeep disabled:opacity-50"
             >
               Sign in
             </button>
@@ -200,7 +200,7 @@ export default function LoginPage() {
                 setMode("forgot");
                 setError(null);
               }}
-              className="text-[13px] text-rh-text-2 underline"
+              className="text-[13px] text-rh-text-2 underline hover:text-rh-text"
             >
               Forgot password?
             </button>
@@ -211,14 +211,14 @@ export default function LoginPage() {
                 setError(null);
                 setNotice(null);
               }}
-              className="text-[13px] text-rh-text-2 underline"
+              className="text-[13px] text-rh-text-2 underline hover:text-rh-text"
             >
               Create an account
             </button>
           </form>
         ) : (
           <div className="flex flex-col gap-2">
-            <p className="mb-2 rounded-[8px] bg-rh-ochre-wash p-3 text-[12px] text-rh-ochre">
+            <p className="mb-2 rounded-[8px] border border-control-ochreBorder bg-rh-ochre-wash p-3 text-[12px] text-rh-ochre">
               Development sign-in. Supabase is not configured, so redhand-core must be running
               in development mode with its in-memory store. Never use this in production.
             </p>
@@ -227,7 +227,7 @@ export default function LoginPage() {
                 key={u.id}
                 disabled={busy}
                 onClick={() => run(() => signInDevelopment(u.id))}
-                className="h-[38px] rounded-full border border-rh-hairline text-[14px] font-medium hover:bg-rh-elevated disabled:opacity-50"
+                className="h-[38px] rounded-full border border-control-borderStrong bg-control-glass text-[14px] font-medium text-rh-text transition-colors hover:bg-control-glassHover disabled:opacity-50"
               >
                 Continue as {u.label}
               </button>

@@ -51,7 +51,7 @@ export function RiskLadderCard(props: { token: string; ladder: RiskLadder; onSav
   };
 
   return (
-    <section className="rounded-[12px] border border-rh-hairline bg-rh-card p-4 text-[12px]" aria-label="Risk response">
+    <section className="rh-glass rounded-rh-md p-4 text-[12px]" aria-label="Risk response">
       <h2 className="text-[14px] font-semibold">Risk response</h2>
       <p className="mt-1 text-rh-text-2">
         What RedHand does by itself when an agent&apos;s risk score reaches a number. Leave a box empty to turn that step off. Safe Mode and freeze

@@ -140,12 +140,12 @@ export default function AgentTimelinePage() {
       </Link>
 
       {state === "forbidden" && (
-        <div role="alert" className="rounded-[10px] border border-rh-hairline p-4 text-[12px]">
+        <div role="alert" className="rh-glass rounded-rh-md p-4 text-[12px]">
           Your role cannot see the incident view. Ask an owner or admin to give you the security operator role.
         </div>
       )}
       {state === "missing" && (
-        <div role="alert" className="rounded-[10px] border border-rh-hairline p-4 text-[12px]">
+        <div role="alert" className="rh-glass rounded-rh-md p-4 text-[12px]">
           This agent was not found in your organization.
         </div>
       )}
@@ -213,7 +213,7 @@ export default function AgentTimelinePage() {
                 <button
                   disabled={busy}
                   onClick={() => void freeze()}
-                  className="rounded-full bg-rh-crimson px-3 py-1 font-medium text-rh-canvas disabled:opacity-40"
+                  className="rounded-full bg-control-crimson px-3 py-1 font-medium text-white shadow-rh-crimson transition hover:bg-control-crimsonDeep disabled:opacity-40"
                 >
                   Freeze now
                 </button>
@@ -230,8 +230,10 @@ export default function AgentTimelinePage() {
                 key={f.id}
                 onClick={() => setFilter(f.id)}
                 aria-pressed={filter === f.id}
-                className={`rounded-full border px-2.5 py-1 text-[12px] ${
-                  filter === f.id ? "border-rh-strong bg-rh-teal text-rh-canvas" : "border-rh-hairline hover:bg-rh-elevated"
+                className={`rounded-full border px-2.5 py-1 text-[12px] transition-colors ${
+                  filter === f.id
+                    ? "border-control-crimsonBorder bg-control-crimson text-white shadow-rh-crimson"
+                    : "border-rh-hairline bg-rh-card hover:bg-rh-elevated"
                 }`}
               >
                 {f.label}
@@ -246,7 +248,7 @@ export default function AgentTimelinePage() {
             {days.map((group) => (
               <li key={group.day}>
                 <h2 className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-rh-text-2">{group.day}</h2>
-                <ol className="divide-y divide-rh-hairline rounded-[10px] border border-rh-hairline">
+                <ol className="rh-glass divide-y divide-rh-hairline rounded-rh-md">
                   {group.items.map((item, index) => {
                     const d = describeItem(item);
                     return (

@@ -86,7 +86,7 @@ export function ApprovedModelsCard(props: { token: string; onUnauthorized: () =>
   };
 
   return (
-    <section className="mb-6 rounded-[10px] border border-rh-hairline bg-rh-card p-4 text-[12px]" aria-label="Approved models">
+    <section className="rh-glass mb-6 rounded-rh-md p-4 text-[12px]" aria-label="Approved models">
       <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
         <h2 className="text-[14px] font-semibold">Approved models</h2>
         <button onClick={load} className={button}>Refresh</button>
@@ -136,7 +136,7 @@ export function ApprovedModelsCard(props: { token: string; onUnauthorized: () =>
             />
             <p className="text-rh-text-2">Changing the list needs an admin. A model name can be a dated version (…-20260301) of an approved one.</p>
             <div>
-              <button type="submit" disabled={busy || invalid} className="h-[34px] rounded-full bg-rh-teal px-4 font-semibold text-rh-canvas disabled:opacity-40">
+              <button type="submit" disabled={busy || invalid} className="h-[34px] rounded-full bg-gradient-to-r from-control-crimsonDeep to-control-crimson px-4 font-semibold text-white shadow-rh-crimson transition hover:to-control-crimsonDeep disabled:opacity-40">
                 Save approved models
               </button>
             </div>

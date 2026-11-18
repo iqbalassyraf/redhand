@@ -91,7 +91,7 @@ export function DestinationsPanel(props: { token: string; agentId: string; agent
   const hostProblem = host.trim() === "" ? null : validateHostInput(host);
 
   return (
-    <section className="rounded-[12px] border-2 border-rh-strong bg-rh-card p-4 text-[12px]" aria-label="Allowed destinations">
+    <section className="rh-glass rounded-rh-md border-2 border-control-borderStrong p-4 text-[12px]" aria-label="Allowed destinations">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 className="text-[15px] font-semibold">Allowed destinations for {props.agentName}</h2>
         <button onClick={props.onClose} className={button}>Close</button>

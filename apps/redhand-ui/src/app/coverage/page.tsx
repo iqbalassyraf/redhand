@@ -123,7 +123,7 @@ export default function CoveragePage() {
 
   if (!session) return null;
 
-  const card = "mb-6 rounded-[10px] border border-rh-hairline bg-rh-card p-4 text-[12px]";
+  const card = "rh-glass mb-6 rounded-rh-md p-4 text-[12px]";
 
   return (
     <AppShell title="Coverage" role={session.role}>

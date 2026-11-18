@@ -30,6 +30,8 @@ export interface TopBarProps {
   onOpenNewModal: () => void;
   pendingApprovalsCount: number;
   userInitials: string;
+  dataSource?: "live" | "preview";
+  onToggleDataSource?: () => void;
 }
 
 const VIEW_LABELS: Record<ControlRoomView, string> = {
@@ -56,6 +58,8 @@ export function TopBar({
   onOpenNewModal,
   pendingApprovalsCount,
   userInitials,
+  dataSource = "live",
+  onToggleDataSource,
 }: TopBarProps) {
   const reducedMotion = usePrefersReducedMotion();
 
@@ -169,8 +173,28 @@ export function TopBar({
           <span className="hidden xl:inline">Simulate Threat</span>
         </button>
 
-        {/* Pulsing Live Pill */}
-        <StatusPill status="live" label="Live" pulse size="md" />
+        {/* Live / Preview Data Toggle */}
+        {onToggleDataSource ? (
+          <button
+            type="button"
+            onClick={onToggleDataSource}
+            title={dataSource === "live" ? "Live organization data active. Click to preview sample topology." : "Sample preview active. Click to switch to live organization telemetry."}
+            className={`inline-flex h-8 items-center gap-1.5 rounded-full px-3 text-xs font-semibold transition-all ${
+              dataSource === "live"
+                ? "border border-emerald-500/40 bg-emerald-500/15 text-emerald-300 shadow-[0_0_12px_rgba(16,185,129,0.25)] hover:bg-emerald-500/25"
+                : "border border-amber-500/40 bg-amber-500/15 text-amber-200 hover:bg-amber-500/25"
+            }`}
+          >
+            <span
+              className={`h-2 w-2 rounded-full ${
+                dataSource === "live" ? "bg-emerald-400 animate-pulse" : "bg-amber-400"
+              }`}
+            />
+            <span>{dataSource === "live" ? "Live Data" : "Sample Preview"}</span>
+          </button>
+        ) : (
+          <StatusPill status="live" label="Live" pulse size="md" />
+        )}
 
         {/* Notification Bell */}
         <button
