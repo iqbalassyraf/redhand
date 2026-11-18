@@ -2354,9 +2354,34 @@ def _control_member_set_role(store: LocalSupabaseAdapter, p: dict[str, Any]) -> 
     return {"changed": True, "user_id": user, "from": previous, "to": role}
 
 
+def _operator_resolve(store: LocalSupabaseAdapter, p: dict[str, Any]) -> str:
+    """Mirrors operator_resolve() (20261203000000_operator_identity.sql): Clerk only, created on first use, never matched by e-mail."""
+    provider, subject, email = p.get("p_provider"), p.get("p_subject"), p.get("p_email")
+    if provider != "clerk":
+        raise _error("22023", "operator_resolve is for clerk identities only")
+    if not isinstance(subject, str) or not 1 <= len(subject) <= 255:
+        raise _error("22023", "subject is required")
+    if email is not None and len(str(email)) > 320:
+        raise _error("22023", "e-mail too long")
+    identities = store.tables.setdefault("operator_identities", [])
+    operators = store.tables.setdefault("operators", [])
+    found = next((i for i in identities if i["provider"] == "clerk" and i["subject"] == subject), None)
+    if found is None:
+        operator_id = str(uuid4())
+        operators.append({"id": operator_id, "email": email, "created_at": _now()})
+        identities.append({"provider": "clerk", "subject": subject, "operator_id": operator_id, "created_at": _now()})
+        return operator_id
+    if email is not None:
+        for op in operators:
+            if op["id"] == found["operator_id"]:
+                op["email"] = email
+    return str(found["operator_id"])
+
+
 def _list_organization_members(store: LocalSupabaseAdapter, p: dict[str, Any]) -> list[dict[str, Any]]:
     org = str(p["p_org"])
-    emails = {op["id"]: op["email"] for op in DEV_OPERATORS.values()}
+    emails: dict[str, str | None] = {op["id"]: op["email"] for op in DEV_OPERATORS.values()}
+    emails.update({str(op["id"]): op.get("email") for op in store.tables.get("operators", [])})
     rows = [m for m in _members(store) if str(m["organization_id"]) == org]
     rows.sort(key=lambda m: (-_rank(m["role"]), str(m.get("created_at"))))
     return [{"user_id": m["user_id"], "email": emails.get(str(m["user_id"])), "role": m["role"], "joined_at": m.get("created_at")} for m in rows]
@@ -2496,6 +2521,7 @@ HANDLERS: dict[str, RpcHandler] = {
     "telegram_claim_update": _telegram_claim_update,
     "record_events": _record_events,
     "verify_events": _verify_events,
+    "operator_resolve": _operator_resolve,
     "insights_summary": _insights_summary,
     "agent_risk_signals": _agent_risk_signals,
     "control_risk_ladder": _control_risk_ladder,

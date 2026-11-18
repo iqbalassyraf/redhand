@@ -47,6 +47,10 @@ These are baked in at build time, so changing one needs a redeploy.
 | `OPERATOR_JWT_SECRET` | none | yes | HS256 mode: the shared secret that signs operator access tokens. Local development and tests only: any other ENVIRONMENT refuses to start with it set. In development/test a random per-process secret is generated when unset. Mutually exclusive with OPERATOR_JWKS_URL. |
 | `OPERATOR_JWKS_URL` | None |  | JWKS mode: URL of the public keys that verify operator tokens, e.g. https://<ref>.supabase.co/auth/v1/.well-known/jwks.json (Supabase projects using asymmetric signing keys). Accepts ES256 and RS256 only. When set, HS256 tokens are rejected and OPERATOR_JWT_SECRET is ignored. |
 | `OPERATOR_JWT_ISSUER` | None |  | Required with OPERATOR_JWKS_URL: the `iss` claim operator tokens must carry, e.g. https://<ref>.supabase.co/auth/v1. |
+| `OPERATOR_AUTH_PROVIDER` | 'supabase' |  | Who signs operators in (ADR 0032): 'supabase' (default) or 'clerk'. In Clerk mode Supabase operator tokens are refused, and a person maps to RedHand's own operator id on first use, never by e-mail. |
+| `CLERK_ISSUER` | None |  | Clerk mode: the Clerk instance URL that issues operator tokens (the `iss` claim). |
+| `CLERK_JWKS_URL` | None |  | Clerk mode: the instance's public keys; defaults to CLERK_ISSUER + /.well-known/jwks.json. RS256 only. |
+| `CLERK_AUDIENCE` | 'redhand-core' |  | Clerk mode: the `aud` the JWT template 'redhand' must set. |
 | `SLACK_ORGANIZATION_ID` | None |  | Organization whose HITL interventions the configured Slack app may resolve. |
 | `SCIM_BEARER_TOKEN` | none | yes | Bearer token required on /scim/v2 endpoints. Unset disables SCIM. |
 | `AGENT_TOKEN_SIGNING_KEY` | none | yes | Ed25519 private key (PEM) that signs agent access tokens. Required outside development/test; a random per-process key is used there when unset. |

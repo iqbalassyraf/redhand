@@ -125,6 +125,27 @@ class Settings(BaseSettings):
         description="Required with OPERATOR_JWKS_URL: the `iss` claim operator tokens must carry, "
         "e.g. https://<ref>.supabase.co/auth/v1.",
     )
+    OPERATOR_AUTH_PROVIDER: Literal["supabase", "clerk"] = Field(
+        default="supabase",
+        description=(
+            "Who signs operators in (ADR 0032). 'supabase' (default): Supabase Auth tokens, verified with OPERATOR_JWKS_URL or "
+            "OPERATOR_JWT_SECRET. 'clerk': Clerk session tokens from the JWT template 'redhand', verified with CLERK_ISSUER and "
+            "CLERK_JWKS_URL; a person is mapped to RedHand's own operator id on first use and never matched by e-mail."
+        ),
+    )
+    CLERK_ISSUER: str | None = Field(
+        default=None,
+        description="Clerk mode: the Clerk instance URL that issues operator tokens (the `iss` claim), e.g. https://<instance>.clerk.accounts.dev.",
+    )
+    CLERK_JWKS_URL: str | None = Field(
+        default=None,
+        description="Clerk mode: the instance's public keys. Defaults to CLERK_ISSUER + /.well-known/jwks.json. RS256 only.",
+    )
+    CLERK_AUDIENCE: str = Field(
+        default="redhand-core",
+        min_length=1,
+        description="Clerk mode: the `aud` claim the JWT template 'redhand' must set; a token minted for anything else is refused.",
+    )
     SLACK_ORGANIZATION_ID: str | None = Field(
         default=None,
         description="Organization whose HITL interventions the configured Slack app may resolve.",
@@ -225,6 +246,19 @@ class Settings(BaseSettings):
     def _operator_auth_mode(self) -> Settings:
         """Exactly one operator verification mode; refuse to start otherwise (fail closed)."""
         local = self.ENVIRONMENT in ("development", "test")
+        if self.OPERATOR_AUTH_PROVIDER == "clerk":
+            if not self.CLERK_ISSUER:
+                raise ValueError("OPERATOR_AUTH_PROVIDER=clerk needs CLERK_ISSUER (the Clerk instance URL).")
+            self.CLERK_ISSUER = self.CLERK_ISSUER.rstrip("/")
+            if not self.CLERK_JWKS_URL:
+                self.CLERK_JWKS_URL = f"{self.CLERK_ISSUER}/.well-known/jwks.json"
+            if not local and not (self.CLERK_ISSUER.startswith("https://") and self.CLERK_JWKS_URL.startswith("https://")):
+                raise ValueError("CLERK_ISSUER and CLERK_JWKS_URL must use https outside development/test.")
+            # Clerk mode never accepts Supabase or shared-secret operator tokens.
+            self.OPERATOR_JWT_SECRET = None
+            self.OPERATOR_JWKS_URL = None
+            self.OPERATOR_JWT_ISSUER = None
+            return self
         if self.OPERATOR_JWKS_URL:
             if self.OPERATOR_JWT_SECRET is not None and not local:
                 raise ValueError(

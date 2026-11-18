@@ -2,6 +2,9 @@
 
 Both tools work on RedHand and its demo projects. This file is how each learns what the other did. Newest entry first.
 
+## 2026-11-18, Claude Code: Clerk C2 (core verification)
+`auth/operator.py` (`_clerk_verifier`, `operator_identity`), `auth/operator_jwks.py` (audience and algorithm parameters), settings `OPERATOR_AUTH_PROVIDER`, `CLERK_ISSUER`, `CLERK_JWKS_URL`, `CLERK_AUDIENCE`, twin `_operator_resolve`, tests `test_clerk_operator_auth.py` (23). Needs C1 (#129) applied first. Next: C3 dashboard, blocked on the owner's yes for `@clerk/nextjs` 7.9.24.
+
 ## 2026-11-18, Claude Code: dashboard redesign S6 (docs)
 `docs/design/matte-executive-dark.md` and ADR 0031. The redesign (S1 to S5) is complete once #126 merges. Owner to look at it on staging after tonight's deploy.
 
