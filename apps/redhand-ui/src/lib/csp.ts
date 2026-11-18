@@ -12,6 +12,8 @@ export interface CspInput {
   coreUrl: string | undefined;
   gatewayUrl: string | undefined;
   supabaseUrl: string | undefined;
+  /** Clerk mode (ADR 0032): the publishable key, from which the instance's own origin is derived. Absent in Supabase mode: nothing of Clerk is allowed. */
+  clerkPublishableKey?: string | undefined;
   nonce: string;
   development: boolean;
 }
@@ -27,6 +29,24 @@ export function originOf(url: string | undefined): string | null {
   }
 }
 
+/** The Clerk instance's frontend origin, read from a publishable key (pk_test_ or pk_live_ followed by base64 of "host$"). Null for anything else. */
+export function clerkFrontendOrigin(publishableKey: string | undefined): string | null {
+  const match = /^pk_(?:test|live)_([A-Za-z0-9+/=_-]+)$/.exec(publishableKey ?? "");
+  if (!match) return null;
+  try {
+    const decoded = atob(match[1].replace(/-/g, "+").replace(/_/g, "/"));
+    if (!decoded.endsWith("$")) return null; // a real key always carries the terminator
+    const host = decoded.slice(0, -1);
+    return /^[a-z0-9-]+(\.[a-z0-9-]+)+$/.test(host) ? `https://${host}` : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Hosts Clerk's sign-in widgets need besides the instance itself: user images, and Cloudflare's bot challenge. */
+export const CLERK_IMAGE_ORIGIN = "https://img.clerk.com";
+export const CLERK_CHALLENGE_ORIGIN = "https://challenges.cloudflare.com";
+
 /** 128 random bits, base64. Works in the Edge runtime (Web Crypto). */
 export function makeNonce(): string {
   const bytes = new Uint8Array(16);
@@ -39,15 +59,19 @@ export function buildCsp(input: CspInput): string {
   for (const origin of [originOf(input.coreUrl), originOf(input.gatewayUrl), originOf(input.supabaseUrl)]) {
     if (origin && !connect.includes(origin)) connect.push(origin);
   }
+  const clerk = clerkFrontendOrigin(input.clerkPublishableKey);
+  if (clerk) connect.push(clerk);
   const script = ["'self'", `'nonce-${input.nonce}'`, "'strict-dynamic'"];
+  if (clerk) script.push(clerk, CLERK_CHALLENGE_ORIGIN); // ignored by browsers that honour 'strict-dynamic'; for the ones that do not
   if (input.development) script.push("'unsafe-eval'"); // the development server's hot reload; never in production
   const directives = [
     "default-src 'self'",
     `script-src ${script.join(" ")}`,
     "style-src 'self' 'unsafe-inline'",
-    "img-src 'self' data: blob:",
+    clerk ? `img-src 'self' data: blob: ${CLERK_IMAGE_ORIGIN}` : "img-src 'self' data: blob:",
     "font-src 'self'",
     `connect-src ${connect.join(" ")}`,
+    ...(clerk ? ["worker-src 'self' blob:", `frame-src 'self' ${CLERK_CHALLENGE_ORIGIN}`] : []),
     "object-src 'none'",
     "base-uri 'self'",
     "form-action 'self'",

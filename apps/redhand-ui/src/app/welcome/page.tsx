@@ -40,8 +40,7 @@ export default function WelcomePage() {
       window.location.href = "/passports";
     } catch (err) {
       if (err instanceof ApiError && err.status === 401) {
-        signOut();
-        window.location.href = "/login";
+        signOut("/login");
         return;
       }
       setError(err instanceof Error ? err.message : "Something went wrong.");
@@ -92,7 +91,7 @@ export default function WelcomePage() {
         </form>
 
         {error && <div role="alert" className="mt-4 rounded-[8px] bg-rh-chrome-active-wash p-3 text-[13px] text-rh-crimson-text">{error}</div>}
-        <button onClick={() => { signOut(); window.location.href = "/login"; }} className="mt-4 text-[12px] text-rh-text-2 underline">Sign out</button>
+        <button onClick={() => { signOut("/login"); }} className="mt-4 text-[12px] text-rh-text-2 underline">Sign out</button>
       </div>
     </main>
   );

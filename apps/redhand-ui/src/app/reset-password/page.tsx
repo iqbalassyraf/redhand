@@ -14,7 +14,7 @@ import {
 type Stage = "reading" | "invalid" | "form" | "done";
 
 export default function ResetPasswordPage() {
-  const { completePasswordReset } = useAuth();
+  const { provider, completePasswordReset } = useAuth();
   const [stage, setStage] = useState<Stage>("reading");
   const [tokens, setTokens] = useState<RecoveryTokens | null>(null);
   const [password, setPassword] = useState("");
@@ -29,6 +29,17 @@ export default function ResetPasswordPage() {
     setTokens(found);
     setStage(found ? "form" : "invalid");
   }, []);
+
+  if (provider === "clerk") {
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-rh-subtle px-4">
+        <div className="w-full max-w-[380px] rounded-[12px] border border-rh-hairline bg-rh-card p-6 text-[13px]">
+          <p className="mb-3">Password resets are handled on the sign-in screen: choose "Forgot password?" there.</p>
+          <a href="/login" className="underline">Go to sign in</a>
+        </div>
+      </main>
+    );
+  }
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();

@@ -174,8 +174,7 @@ export default function RedHandCommandCenterPage() {
         }
       } catch (err) {
         if (err instanceof ApiError && err.status === 401) {
-          signOut();
-          window.location.href = "/login";
+          signOut("/login");
           return;
         }
         if (isMounted) setEngineConnected(false);
@@ -903,8 +902,7 @@ export default function RedHandCommandCenterPage() {
         <div className="flex items-center gap-3">
           <button
             onClick={() => {
-              signOut();
-              window.location.href = "/login";
+              signOut("/login");
             }}
             className="whitespace-nowrap text-[12px] text-rh-text-2 hover:underline"
             title={session.email}

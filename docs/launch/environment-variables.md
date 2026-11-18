@@ -23,7 +23,7 @@ Secrets go in the platform's secrets manager (Cloud Run: Secret Manager through 
 **AgentWall gateway** (all with the `AGENTWALL_` prefix): `ENVIRONMENT`, `CORE_URL`, `CORE_SERVICE_TOKEN` (secret, the same value as core's `INTERNAL_SERVICE_TOKEN`), `CONTEXT_CACHE_TTL_SECONDS` (2; capped at 2.5, see
 `docs/security/measurements/2026-11-17-revocation-drill-after-lookup-timeout.md`), `TRUSTED_PROXY_HOPS`, `CORS_ALLOWED_ORIGINS`. The kill switches `AGENTWALL_*_ENABLED` stay **unset** unless you mean to turn a check off.
 
-**Dashboard (Vercel)**: `NEXT_PUBLIC_REDHAND_CORE_URL`, `NEXT_PUBLIC_REDHAND_GATEWAY_URL`, `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` (the anon key is public by design; row-level security is what protects the data).
+**Dashboard (Vercel)**: `NEXT_PUBLIC_REDHAND_CORE_URL`, `NEXT_PUBLIC_REDHAND_GATEWAY_URL`, `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` (the anon key is public by design; row-level security is what protects the data). Clerk mode (`docs/runbooks/clerk-auth.md`): `NEXT_PUBLIC_AUTH_PROVIDER=clerk`, `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` (public by design), `NEXT_PUBLIC_CLERK_TELEMETRY_DISABLED=1`.
 These are baked in at build time, so changing one needs a redeploy.
 
 ## redhand-core (`services/redhand-core`)

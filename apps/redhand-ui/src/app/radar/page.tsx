@@ -119,8 +119,7 @@ export default function RadarPage() {
   const handleError = useCallback(
     (err: unknown) => {
       if (err instanceof ApiError && err.status === 401) {
-        signOut();
-        window.location.href = "/login";
+        signOut("/login");
         return;
       }
       if (err instanceof ApiError && err.status === 403) {
@@ -278,8 +277,7 @@ export default function RadarPage() {
       setSelfTest(await selfTestApi.run(token));
     } catch (err) {
       if (err instanceof ApiError && err.status === 401) {
-        signOut();
-        window.location.href = "/login";
+        signOut("/login");
         return;
       }
       setSelfTest(null); // never leave an older result next to a failure
@@ -426,8 +424,7 @@ export default function RadarPage() {
                 token={token}
                 onSaved={() => loadFindings(false)}
                 onUnauthorized={() => {
-                  signOut();
-                  window.location.href = "/login";
+                  signOut("/login");
                 }}
               />
             )}

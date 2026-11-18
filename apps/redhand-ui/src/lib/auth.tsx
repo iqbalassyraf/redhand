@@ -11,37 +11,23 @@
  * httpOnly cookies via a server-side session is a tracked follow-up.
  */
 
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useContext, useEffect, useMemo, useState } from "react";
+import dynamic from "next/dynamic";
 import { createClient } from "@supabase/supabase-js";
 
 import { apiFetch } from "@/lib/api";
+import { AuthContext, type AuthContextValue, type OperatorSession } from "@/lib/authContext";
 import type { RecoveryTokens } from "@/lib/passwordReset";
 
 const STORAGE_KEY = "redhand.operator.session";
 
-export interface OperatorSession {
-  token: string;
-  email: string;
-  role: string | null;
-  mode: "supabase" | "development";
-}
+export type { OperatorSession, AuthContextValue } from "@/lib/authContext";
 
-interface AuthContextValue {
-  session: OperatorSession | null;
-  ready: boolean;
-  supabaseConfigured: boolean;
-  signInWithPassword: (email: string, password: string) => Promise<void>;
-  signInDevelopment: (user: string) => Promise<void>;
-  /** Creates an account with Supabase Auth. `confirm` is true when the person must click a link in an e-mail before signing in. */
-  signUpWithPassword: (email: string, password: string) => Promise<{ confirm: boolean }>;
-  /** Emails a reset link. Resolves the same way whether or not the account exists. */
-  requestPasswordReset: (email: string) => Promise<void>;
-  /** Sets a new password using the one-time recovery session from the emailed link. */
-  completePasswordReset: (tokens: RecoveryTokens, newPassword: string) => Promise<void>;
-  signOut: () => void;
-}
+export const AUTH_PROVIDER: "supabase" | "clerk" = process.env.NEXT_PUBLIC_AUTH_PROVIDER === "clerk" ? "clerk" : "supabase";
 
-const AuthContext = createContext<AuthContextValue | null>(null);
+// The Clerk code is only loaded when the build is in Clerk mode (and never during server rendering): Supabase mode ships none of it.
+const ClerkAuthProvider = dynamic(() => import("@/components/clerk/ClerkAuthProvider"), { ssr: false });
+
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -65,6 +51,11 @@ function storeSession(session: OperatorSession | null): void {
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
+  if (AUTH_PROVIDER === "clerk") return <ClerkAuthProvider>{children}</ClerkAuthProvider>;
+  return <SupabaseAuthProvider>{children}</SupabaseAuthProvider>;
+}
+
+function SupabaseAuthProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<OperatorSession | null>(null);
   const [ready, setReady] = useState(false);
 
@@ -146,12 +137,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     [update]
   );
 
-  const signOut = useCallback(() => update(null), [update]);
+  const signOut = useCallback(
+    (redirectTo?: string) => {
+      update(null);
+      if (redirectTo) window.location.href = redirectTo;
+    },
+    [update]
+  );
 
   const value = useMemo<AuthContextValue>(
     () => ({
       session,
       ready,
+      provider: "supabase",
       supabaseConfigured: Boolean(SUPABASE_URL && SUPABASE_ANON_KEY),
       signInWithPassword,
       signInDevelopment,

@@ -1,10 +1,14 @@
 "use client";
 
 import React, { useState } from "react";
+import dynamic from "next/dynamic";
 import { Hand } from "lucide-react";
 
 import { useAuth } from "@/lib/auth";
 import { PENDING_INVITE_KEY } from "@/lib/onboarding";
+
+// Clerk's screens load only in a Clerk build.
+const ClerkLogin = dynamic(() => import("@/components/clerk/ClerkLogin"), { ssr: false });
 
 const DEV_USERS: Array<{ id: string; label: string }> = [
   { id: "owner", label: "Owner" },
@@ -15,7 +19,7 @@ const DEV_USERS: Array<{ id: string; label: string }> = [
 ];
 
 export default function LoginPage() {
-  const { supabaseConfigured, signInWithPassword, signInDevelopment, signUpWithPassword, requestPasswordReset } = useAuth();
+  const { provider, supabaseConfigured, signInWithPassword, signInDevelopment, signUpWithPassword, requestPasswordReset } = useAuth();
   const [mode, setMode] = useState<"signin" | "forgot" | "signup">("signin");
   const [notice, setNotice] = useState<string | null>(null);
   const [email, setEmail] = useState("");
@@ -36,6 +40,20 @@ export default function LoginPage() {
     } finally {
       setBusy(false);
     }
+  }
+
+  if (provider === "clerk") {
+    return (
+      <main className="flex min-h-screen flex-col items-center justify-center gap-6 bg-rh-subtle px-4 py-8">
+        <div className="flex items-center gap-2">
+          <div className="flex h-7 w-9 items-center justify-center rounded-[8px] bg-rh-chrome-active">
+            <Hand className="h-4 w-4 text-rh-canvas" />
+          </div>
+          <span className="text-[20px] font-bold tracking-tight">RedHand</span>
+        </div>
+        <ClerkLogin />
+      </main>
+    );
   }
 
   return (

@@ -96,8 +96,7 @@ export default function PassportsPage() {
   const handleError = useCallback(
     (err: unknown) => {
       if (err instanceof ApiError && err.status === 401) {
-        signOut();
-        window.location.href = "/login";
+        signOut("/login");
         return;
       }
       if (err instanceof ApiError && err.status === 403 && isNoOrganizationMessage(err.message)) {
@@ -357,8 +356,7 @@ export default function PassportsPage() {
             agentName={destinationsFor.name}
             onClose={() => setDestinationsFor(null)}
             onUnauthorized={() => {
-              signOut();
-              window.location.href = "/login";
+              signOut("/login");
             }}
           />
         )}
@@ -372,8 +370,7 @@ export default function PassportsPage() {
             onClose={() => setSpendFor(null)}
             onChanged={refresh}
             onUnauthorized={() => {
-              signOut();
-              window.location.href = "/login";
+              signOut("/login");
             }}
           />
         )}
@@ -386,8 +383,7 @@ export default function PassportsPage() {
             agentName={riskFor.name}
             onClose={() => setRiskFor(null)}
             onUnauthorized={() => {
-              signOut();
-              window.location.href = "/login";
+              signOut("/login");
             }}
           />
         )}
@@ -464,8 +460,7 @@ export default function PassportsPage() {
         <SdkKeysCard
           token={token}
           onUnauthorized={() => {
-            signOut();
-            window.location.href = "/login";
+            signOut("/login");
           }}
         />
 
@@ -475,8 +470,7 @@ export default function PassportsPage() {
             ownRole={me.role}
             ownUserId={me.user_id}
             onUnauthorized={() => {
-              signOut();
-              window.location.href = "/login";
+              signOut("/login");
             }}
           />
         )}
