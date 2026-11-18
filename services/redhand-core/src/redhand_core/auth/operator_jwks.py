@@ -85,7 +85,14 @@ class OperatorJwksVerifier:
         issuer: str,
         http_client: httpx.AsyncClient | None = None,
         clock: Callable[[], float] = time.monotonic,
+        audience: str = OPERATOR_JWT_AUDIENCE,
+        algorithms: tuple[str, ...] = JWKS_ALGORITHMS,
     ) -> None:
+        # Clerk (ADR 0032) uses its own audience and RS256 only; any algorithm outside the allowlist is refused before a key is looked up.
+        if not algorithms or any(a not in JWKS_ALGORITHMS for a in algorithms):
+            raise ValueError("algorithms must be a non-empty subset of ES256 and RS256")
+        self._audience = audience
+        self._algorithms = algorithms
         self._url = jwks_url
         self._issuer = issuer
         self._http = http_client or httpx.AsyncClient(
@@ -151,7 +158,7 @@ class OperatorJwksVerifier:
         except jwt.PyJWTError as exc:
             raise OperatorTokenError("Malformed token.") from exc
         algorithm, kid = header.get("alg"), header.get("kid")
-        if algorithm not in JWKS_ALGORITHMS:
+        if algorithm not in self._algorithms:
             raise OperatorTokenError("Unsupported token algorithm.")
         if not isinstance(kid, str) or not kid:
             raise OperatorTokenError("Token has no key id.")
@@ -164,7 +171,7 @@ class OperatorJwksVerifier:
                 token,
                 verification_key.key,
                 algorithms=[verification_key.algorithm],
-                audience=OPERATOR_JWT_AUDIENCE,
+                audience=self._audience,
                 issuer=self._issuer,
                 leeway=LEEWAY_SECONDS,
                 options={"require": ["exp", "iat", "sub", "aud", "iss"]},

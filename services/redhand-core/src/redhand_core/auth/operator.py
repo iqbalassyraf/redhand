@@ -27,6 +27,7 @@ from uuid import UUID
 
 from fastapi import Depends, Header, HTTPException, Request, status
 import jwt
+from postgrest.exceptions import APIError
 
 from redhand_core.auth import bearer_token
 from redhand_core.auth.operator_jwks import OperatorJwksVerifier, OperatorTokenError
@@ -122,8 +123,30 @@ def _jwks_verifier(settings: Settings) -> OperatorJwksVerifier:
     return _jwks_verifiers[cache_key]
 
 
+CLERK_ALGORITHMS = ("RS256",)
+CLERK_SUBJECT_MAX = 255
+_clerk_verifiers: dict[tuple[str, str, str], OperatorJwksVerifier] = {}
+
+
+def _clerk_verifier(settings: Settings) -> OperatorJwksVerifier:
+    """Clerk mode (ADR 0032): RS256 only, the Clerk instance as issuer, our own audience. One key cache per configuration."""
+    url, issuer, audience = settings.CLERK_JWKS_URL, settings.CLERK_ISSUER, settings.CLERK_AUDIENCE
+    if not url or not issuer:
+        raise _unauthorized()  # unreachable: Settings validation requires them in Clerk mode
+    cache_key = (url, issuer, audience)
+    if cache_key not in _clerk_verifiers:
+        _clerk_verifiers[cache_key] = OperatorJwksVerifier(jwks_url=url, issuer=issuer, audience=audience, algorithms=CLERK_ALGORITHMS)
+    return _clerk_verifiers[cache_key]
+
+
 async def verify_operator_token(token: str, settings: Settings) -> dict[str, Any]:
     """Verifies an operator token in whichever mode is configured. Raises 401 on any failure."""
+    if settings.OPERATOR_AUTH_PROVIDER == "clerk":
+        try:
+            return await _clerk_verifier(settings).verify(token)
+        except OperatorTokenError as exc:
+            logger.info("Operator token rejected: %s", exc)
+            raise _unauthorized("Invalid or expired operator token.") from exc
     if settings.OPERATOR_JWKS_URL:
         try:
             return await _jwks_verifier(settings).verify(token)
@@ -132,6 +155,36 @@ async def verify_operator_token(token: str, settings: Settings) -> dict[str, Any
             logger.info("Operator token rejected: %s", exc)
             raise _unauthorized("Invalid or expired operator token.") from exc
     return decode_operator_token(token, settings)
+
+
+async def operator_identity(claims: dict[str, Any], settings: Settings, supabase: Any) -> tuple[UUID, str | None]:
+    """RedHand's operator id and display e-mail for verified claims.
+
+    Supabase mode: the subject IS the operator id (same UUID). Clerk mode: the subject is Clerk's user id; the database maps it to RedHand's own
+    operator id, creating it on first use, and never matches an existing account by e-mail (ADR 0032). A Clerk token without a verified e-mail is
+    refused. A database failure denies (503), never lets the request through."""
+    if settings.OPERATOR_AUTH_PROVIDER != "clerk":
+        try:
+            user_id = UUID(str(claims["sub"]))
+        except (KeyError, ValueError) as exc:
+            raise _unauthorized("Invalid operator identity.") from exc
+        email = claims.get("email")
+        return user_id, str(email) if email else None
+
+    subject = claims.get("sub")
+    email = claims.get("email")
+    if not isinstance(subject, str) or not 1 <= len(subject) <= CLERK_SUBJECT_MAX:
+        raise _unauthorized("Invalid operator identity.")
+    if claims.get("email_verified") is not True or not isinstance(email, str) or not email or len(email) > 320:
+        raise _unauthorized("A verified e-mail address is required.")
+    try:
+        res = await supabase.rpc("operator_resolve", {"p_provider": "clerk", "p_subject": subject, "p_email": email}).execute()
+        return UUID(str(res.data)), email
+    except APIError as exc:
+        logger.error("Operator identity could not be resolved: sqlstate=%s", exc.code)
+    except (TypeError, ValueError):
+        logger.error("Operator identity could not be resolved: unexpected answer")
+    raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Sign-in could not be completed. Try again.")
 
 
 async def resolve_membership(
@@ -207,22 +260,15 @@ async def get_operator(
     if token is None:
         raise _unauthorized()
     claims = await verify_operator_token(token, settings)
-
     try:
-        user_id = UUID(str(claims["sub"]))
         requested_org = UUID(x_redhand_org) if x_redhand_org else None
     except ValueError as exc:
         raise _unauthorized("Invalid operator identity.") from exc
+    user_id, email = await operator_identity(claims, settings, supabase)
 
     org_id, role = await resolve_membership(supabase, user_id, requested_org)
     await _refuse_if_deletion_pending(supabase, request, org_id)
-    email = claims.get("email")
-    return OperatorContext(
-        user_id=user_id,
-        organization_id=org_id,
-        role=role,
-        email=str(email) if email else None,
-    )
+    return OperatorContext(user_id=user_id, organization_id=org_id, role=role, email=email)
 
 
 @dataclass(frozen=True, slots=True)
@@ -237,17 +283,14 @@ class AuthenticatedUser:
 async def get_authenticated_user(
     authorization: Annotated[str | None, Header(alias="Authorization")] = None,
     settings: Settings = Depends(get_settings),
+    supabase: Any = Depends(get_supabase_service_client),
 ) -> AuthenticatedUser:
     token = bearer_token(authorization)
     if token is None:
         raise _unauthorized()
     claims = await verify_operator_token(token, settings)
-    try:
-        user_id = UUID(str(claims["sub"]))
-    except (KeyError, ValueError) as exc:
-        raise _unauthorized("Invalid operator identity.") from exc
-    email = claims.get("email")
-    return AuthenticatedUser(user_id=user_id, email=str(email) if email else None)
+    user_id, email = await operator_identity(claims, settings, supabase)
+    return AuthenticatedUser(user_id=user_id, email=email)
 
 
 def require_role(minimum: Role) -> Any:

@@ -2,6 +2,9 @@
 
 Both tools work on RedHand and its demo projects. This file is how each learns what the other did. Newest entry first.
 
+## 2026-11-18, Claude Code: Clerk C2 (core verification)
+`auth/operator.py` (`_clerk_verifier`, `operator_identity`), `auth/operator_jwks.py` (audience and algorithm parameters), settings `OPERATOR_AUTH_PROVIDER`, `CLERK_ISSUER`, `CLERK_JWKS_URL`, `CLERK_AUDIENCE`, twin `_operator_resolve`, tests `test_clerk_operator_auth.py` (23). Needs C1 (#129) applied first. Next: C3 dashboard, blocked on the owner's yes for `@clerk/nextjs` 7.9.24.
+
 ## 2026-11-18, Claude Code: Clerk C1 (operator identity migration)
 `20261203000000_operator_identity.sql` (+ rollback that refuses with Clerk-only operators, SQL test). Safe to apply in Supabase mode (backfill + trigger, same ids). Tonight's brief Part 0.2 now applies it after 20261202. Next: C2 core (Clerk token verification behind `OPERATOR_AUTH_PROVIDER`, twin handler).
 
