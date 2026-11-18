@@ -5,6 +5,15 @@ Both tools work on RedHand and its demo projects. This file is how each learns w
 ## 2026-11-18, Claude Code: full-history secret scan (gitleaks, one-off)
 No new real-looking credential; the battleground Stripe and OpenAI look-alikes remain the owner's to revoke. Details in `docs/release-readiness.md` 3.1.
 
+## 2026-11-18, Claude Code: tonight's brief
+`docs/testing/briefs/2026-11-18-tonight.md` for owner + Antigravity: Part 0 (migration 20261201, core then gateway then dashboard, Supabase Site URL, smoke with the new 404 checks), Parts R and S (copied word for word), Q5, Q9, J2/J2b, T1/T3, clean-up. Guarded by `agentwall/tests/test_tonight_brief.py`. Results on `docs/test-results-2026-11-18-tonight`. Leave Night Test Org pending: purge rehearsal 2026-11-25.
+
+## 2026-11-18, Claude Code: production deploy target (not run)
+`deploy/cloudrun/deploy.sh` gains `DEPLOY_ENV=production` (names `-prod`, min 1, ENVIRONMENT=production, explicit and confirmed project). Staging default unchanged. Runbook `docs/runbooks/production-deploy.md`. Owner runs it; Claude Code never does.
+
+## 2026-11-18, Claude Code: launch decisions recorded
+ADR 0028 Accepted (option A, prices blank for the owner); ADR 0025 no-go for launch; CLAUDE.md phase line + Black Box wording applied (owner "apply"); briefing rows 4.5 and Hosting; owner checklist (newest migration, CodeQL, purge rehearsal). Next: production deploy target, tonight's brief, gitleaks run.
+
 ## 2026-11-18, Claude Code: one audit trail (ADR 0030), gateway ledger retired
 Removed `agentwall/src/telemetry/audit_logger.py`, `/v1/audit/logs`, `/v1/audit/verify`, `AGENTWALL_AUDIT_LOG_FILE`. Black Box is the only trail. Tests moved to the recorder (`Harness.decisions()`), e2e done-tests read `agent_events`. Smoke scripts expect 404 at the old path: deploy the new gateway BEFORE running them. Night brief J2 now uses "Verify chain" (+ J2b curl expects 404). Not run: staging. CLAUDE.md wording proposed in the PR, not applied.
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Deploys redhand-core and the AgentWall gateway to Google Cloud Run (staging).
+# Deploys redhand-core and the AgentWall gateway to Google Cloud Run (staging, or production with DEPLOY_ENV=production; ADR 0028).
 #
 #   deploy/cloudrun/deploy.sh [all|secrets|core|gateway|cors|telegram]
 #
@@ -13,7 +13,10 @@
 #            Then run scripts/telegram_webhook.py to point Telegram at core.
 #
 # Configuration comes from environment variables (defaults in brackets):
-#   PROJECT_ID          [gcloud's current project]
+#   DEPLOY_ENV          [staging] or production. Production uses its own service, secret and identity names (suffix -prod),
+#                       at least one warm instance and ENVIRONMENT=production, and needs PROJECT_ID set explicitly plus
+#                       CONFIRM_PROJECT=<the same project id> (never gcloud's default project). Run production only from a clean main.
+#   PROJECT_ID          [gcloud's current project; required for production]
 #   REGION              [asia-southeast1]
 #   SUPABASE_URL        [required: https://<project-ref>.supabase.co]
 #   DASHBOARD_ORIGIN    [required for all/core/gateway/cors: the dashboard's https origin; several may be given,
@@ -27,6 +30,8 @@ set -euo pipefail
 cd "$(dirname "$0")/../.."
 
 COMMAND="${1:-all}"
+DEPLOY_ENV="${DEPLOY_ENV:-staging}"
+PROJECT_ID_GIVEN="${PROJECT_ID:-}"
 PROJECT_ID="${PROJECT_ID:-$(gcloud config get-value project 2>/dev/null || true)}"
 REGION="${REGION:-asia-southeast1}"
 REPO="${REPO:-redhand}"
@@ -34,13 +39,21 @@ SUPABASE_URL="${SUPABASE_URL:-}"
 DASHBOARD_ORIGIN="${DASHBOARD_ORIGIN:-}"
 TAG="${TAG:-$(git rev-parse --short HEAD 2>/dev/null || date +%Y%m%d%H%M%S)}"
 
-SECRET_SUPABASE="redhand-supabase-secret-key"
-SECRET_INTERNAL="redhand-internal-service-token"
-SECRET_SIGNING="redhand-agent-token-signing-key"
-CORE_SA="redhand-core-sa"
-GATEWAY_SA="redhand-gateway-sa"
-SECRET_TG_TOKEN="redhand-telegram-bot-token"
-SECRET_TG_WEBHOOK="redhand-telegram-webhook-secret"
+# Production gets its own names even in its own project, so a mistaken project can never overwrite staging's secrets or services.
+case "$DEPLOY_ENV" in
+  staging) SUFFIX=""; MIN_INSTANCES=0;;
+  production) SUFFIX="-prod"; MIN_INSTANCES=1;;  # ADR 0028: a cold core takes longer than the gateway's 1 s lookup and calls would be refused
+  *) echo "error: DEPLOY_ENV must be staging or production (got '$DEPLOY_ENV')" >&2; exit 1;;
+esac
+CORE_SERVICE="redhand-core${SUFFIX}"
+GATEWAY_SERVICE="redhand-gateway${SUFFIX}"
+SECRET_SUPABASE="redhand-supabase-secret-key${SUFFIX}"
+SECRET_INTERNAL="redhand-internal-service-token${SUFFIX}"
+SECRET_SIGNING="redhand-agent-token-signing-key${SUFFIX}"
+CORE_SA="redhand-core${SUFFIX}-sa"
+GATEWAY_SA="redhand-gateway${SUFFIX}-sa"
+SECRET_TG_TOKEN="redhand-telegram-bot-token${SUFFIX}"
+SECRET_TG_WEBHOOK="redhand-telegram-webhook-secret${SUFFIX}"
 TELEGRAM_BOT_USERNAME="${TELEGRAM_BOT_USERNAME:-}"
 
 die() { echo "error: $*" >&2; exit 1; }
@@ -50,6 +63,10 @@ say() { echo "==> $*"; }
 . deploy/cloudrun/origins.sh
 
 preflight() {
+  if [ "$DEPLOY_ENV" = "production" ]; then
+    [ -n "$PROJECT_ID_GIVEN" ] || die "production needs PROJECT_ID set explicitly (gcloud's default project is never used for production)"
+    [ "${CONFIRM_PROJECT:-}" = "$PROJECT_ID" ] || die "production needs CONFIRM_PROJECT=$PROJECT_ID (type the project id again)"
+  fi
   command -v gcloud >/dev/null || die "gcloud is not installed"
   command -v openssl >/dev/null || die "openssl is not installed"
   [ -n "$PROJECT_ID" ] || die "no project: run 'gcloud config set project <id>' or set PROJECT_ID"
@@ -68,6 +85,7 @@ preflight() {
   clean_dashboard_origins "$DASHBOARD_ORIGIN" >/dev/null || exit 1
   case "$SUPABASE_URL" in ""|https://*.supabase.co) ;; *) die "SUPABASE_URL must look like https://<ref>.supabase.co";; esac
   echo "Account : $(gcloud auth list --filter=status:ACTIVE --format='value(account)')"
+  echo "Target  : $DEPLOY_ENV"
   echo "Project : $PROJECT_ID"
   echo "Region  : $REGION"
   echo "Command : $COMMAND"
@@ -89,7 +107,7 @@ telegram_env_args() {
 # has to be passed on every core deploy. Empty when the gateway has not been deployed yet (then live scans answer 503).
 gateway_env_args() {
   local url
-  url="$(gcloud run services describe redhand-gateway --region "$REGION" --project "$PROJECT_ID" --format='value(status.url)' 2>/dev/null || true)"
+  url="$(gcloud run services describe "$GATEWAY_SERVICE" --region "$REGION" --project "$PROJECT_ID" --format='value(status.url)' 2>/dev/null || true)"
   if [ -n "$url" ]; then printf '@GATEWAY_URL=%s' "$url"; fi
 }
 
@@ -207,14 +225,14 @@ service_url() { gcloud run services describe "$1" --region "$REGION" --project "
 
 deploy_core() {
   build_image redhand-core deploy/cloudrun/Dockerfile.core
-  say "Deploying redhand-core"
+  say "Deploying $CORE_SERVICE ($DEPLOY_ENV)"
   # ^@^ makes '@' the separator so the JSON list in CORS_ALLOWED_ORIGINS can contain commas.
-  gcloud run deploy redhand-core --image "$IMAGE" --region "$REGION" --project "$PROJECT_ID" \
+  gcloud run deploy "$CORE_SERVICE" --image "$IMAGE" --region "$REGION" --project "$PROJECT_ID" \
     --service-account "$(sa_email "$CORE_SA")" \
-    --allow-unauthenticated --min-instances 0 --max-instances 1 --cpu 1 --memory 512Mi --timeout 300 \
-    --set-env-vars "^@^ENVIRONMENT=staging@LOG_LEVEL=INFO@SUPABASE_URL=${SUPABASE_URL}@OPERATOR_JWKS_URL=${SUPABASE_URL}/auth/v1/.well-known/jwks.json@OPERATOR_JWT_ISSUER=${SUPABASE_URL}/auth/v1@TRUSTED_PROXY_HOPS=1@CORS_ALLOWED_ORIGINS=$(cors_json)$(telegram_env_args)$(gateway_env_args)$(dashboard_env_args)" \
+    --allow-unauthenticated --min-instances "$MIN_INSTANCES" --max-instances 1 --cpu 1 --memory 512Mi --timeout 300 \
+    --set-env-vars "^@^ENVIRONMENT=${DEPLOY_ENV}@LOG_LEVEL=INFO@SUPABASE_URL=${SUPABASE_URL}@OPERATOR_JWKS_URL=${SUPABASE_URL}/auth/v1/.well-known/jwks.json@OPERATOR_JWT_ISSUER=${SUPABASE_URL}/auth/v1@TRUSTED_PROXY_HOPS=1@CORS_ALLOWED_ORIGINS=$(cors_json)$(telegram_env_args)$(gateway_env_args)$(dashboard_env_args)" \
     --set-secrets "SUPABASE_SERVICE_ROLE_KEY=${SECRET_SUPABASE}:latest,INTERNAL_SERVICE_TOKEN=${SECRET_INTERNAL}:latest,AGENT_TOKEN_SIGNING_KEY=${SECRET_SIGNING}:latest$(telegram_secret_args)"
-  say "redhand-core: $(service_url redhand-core)"
+  say "$CORE_SERVICE: $(service_url "$CORE_SERVICE")"
   if secret_exists "$SECRET_TG_TOKEN" && [ -z "$TELEGRAM_BOT_USERNAME" ]; then
     echo "note: TELEGRAM_BOT_USERNAME is not set, so the dashboard's one-tap Telegram link is off until you re-run with it." >&2
   fi
@@ -222,15 +240,16 @@ deploy_core() {
 
 deploy_gateway() {
   local core_url
-  core_url="$(service_url redhand-core)" || die "deploy redhand-core first"
+  core_url="$(service_url "$CORE_SERVICE")" || die "deploy $CORE_SERVICE first"
   build_image redhand-gateway deploy/cloudrun/Dockerfile.gateway
   say "Deploying the gateway (talks to core at $core_url)"
-  gcloud run deploy redhand-gateway --image "$IMAGE" --region "$REGION" --project "$PROJECT_ID" \
+  # The model proxy is never switched on here: it is a no-go for launch and refuses to start in production (ADR 0025).
+  gcloud run deploy "$GATEWAY_SERVICE" --image "$IMAGE" --region "$REGION" --project "$PROJECT_ID" \
     --service-account "$(sa_email "$GATEWAY_SA")" \
-    --allow-unauthenticated --min-instances 0 --max-instances 1 --cpu-throttling --cpu 1 --memory 512Mi --timeout 300 \
-    --set-env-vars "^@^AGENTWALL_ENVIRONMENT=staging@AGENTWALL_CORE_URL=${core_url}@AGENTWALL_CONTEXT_CACHE_TTL_SECONDS=2@AGENTWALL_TRUSTED_PROXY_HOPS=1@AGENTWALL_CORS_ALLOWED_ORIGINS=$(cors_json)" \
+    --allow-unauthenticated --min-instances "$MIN_INSTANCES" --max-instances 1 --cpu-throttling --cpu 1 --memory 512Mi --timeout 300 \
+    --set-env-vars "^@^AGENTWALL_ENVIRONMENT=${DEPLOY_ENV}@AGENTWALL_CORE_URL=${core_url}@AGENTWALL_CONTEXT_CACHE_TTL_SECONDS=2@AGENTWALL_TRUSTED_PROXY_HOPS=1@AGENTWALL_CORS_ALLOWED_ORIGINS=$(cors_json)" \
     --set-secrets "AGENTWALL_CORE_SERVICE_TOKEN=${SECRET_INTERNAL}:latest"
-  say "gateway: $(service_url redhand-gateway)"
+  say "$GATEWAY_SERVICE: $(service_url "$GATEWAY_SERVICE")"
 }
 
 setup_telegram() {
@@ -254,21 +273,21 @@ setup_telegram() {
   fi
   allow_secret "$SECRET_TG_TOKEN" "$CORE_SA"
   allow_secret "$SECRET_TG_WEBHOOK" "$CORE_SA"
-  say "Giving redhand-core the Telegram settings"
-  gcloud run services update redhand-core --region "$REGION" --project "$PROJECT_ID" \
+  say "Giving $CORE_SERVICE the Telegram settings"
+  gcloud run services update "$CORE_SERVICE" --region "$REGION" --project "$PROJECT_ID" \
     --update-secrets "TELEGRAM_BOT_TOKEN=${SECRET_TG_TOKEN}:latest,TELEGRAM_WEBHOOK_SECRET=${SECRET_TG_WEBHOOK}:latest" \
     --update-env-vars "TELEGRAM_BOT_USERNAME=${TELEGRAM_BOT_USERNAME}"
   echo
   echo "Done. Now point Telegram at core:"
-  echo "  python3 scripts/telegram_webhook.py set --project ${PROJECT_ID} --core-url \"$(gcloud run services describe redhand-core --region ${REGION} --format='value(status.url)')\""
+  echo "  python3 scripts/telegram_webhook.py set --project ${PROJECT_ID} --core-url \"$(gcloud run services describe ${CORE_SERVICE} --region ${REGION} --format='value(status.url)')\""
 }
 
 update_cors() {
   [ -n "$DASHBOARD_ORIGIN" ] || die "set DASHBOARD_ORIGIN (for example https://your-dashboard.vercel.app)"
   say "Allowing the dashboard origins $(clean_dashboard_origins "$DASHBOARD_ORIGIN" | paste -sd, -) (this replaces the previous list)"
-  gcloud run services update redhand-core --region "$REGION" --project "$PROJECT_ID" \
+  gcloud run services update "$CORE_SERVICE" --region "$REGION" --project "$PROJECT_ID" \
     --update-env-vars "^@^CORS_ALLOWED_ORIGINS=$(cors_json)"
-  gcloud run services update redhand-gateway --region "$REGION" --project "$PROJECT_ID" \
+  gcloud run services update "$GATEWAY_SERVICE" --region "$REGION" --project "$PROJECT_ID" \
     --update-env-vars "^@^AGENTWALL_CORS_ALLOWED_ORIGINS=$(cors_json)"
 }
 
@@ -277,8 +296,8 @@ summary() {
   echo "Done. Next:"
   echo "  1. Open https://console.cloud.google.com/run?project=${PROJECT_ID} and check both services show a green tick."
   echo "  2. Run the smoke test:"
-  echo "       deploy/cloudrun/smoke.sh \"\$(gcloud run services describe redhand-core --region ${REGION} --format='value(status.url)')\" \\"
-  echo "                                \"\$(gcloud run services describe redhand-gateway --region ${REGION} --format='value(status.url)')\""
+  echo "       deploy/cloudrun/smoke.sh \"\$(gcloud run services describe ${CORE_SERVICE} --region ${REGION} --format='value(status.url)')\" \\"
+  echo "                                \"\$(gcloud run services describe ${GATEWAY_SERVICE} --region ${REGION} --format='value(status.url)')\""
 }
 
 preflight
