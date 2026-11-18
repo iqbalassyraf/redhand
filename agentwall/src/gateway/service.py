@@ -25,7 +25,7 @@ from uuid import UUID, uuid4
 import structlog
 
 from ..firewall.engine import FirewallPolicyEngine
-from ..telemetry.audit_logger import TamperEvidentAuditLogger
+from .digest import argument_keys, digest_arguments
 from .context import AgentUnknownError, ContextUnavailableError, CoreContextClient, GatewayContext
 from .identity import AgentAuthError, AgentIdentity, AgentTokenVerifier, KeyUnavailableError
 from .budget import BudgetMeter
@@ -91,7 +91,6 @@ class McpGateway:
         contexts: CoreContextClient,
         forwarder: UpstreamForwarder,
         firewall: FirewallPolicyEngine,
-        audit_logger: TamperEvidentAuditLogger,
         metrics: GatewayMetrics,
         budget: BudgetMeter,
         recorder: EventRecorder,
@@ -109,7 +108,6 @@ class McpGateway:
         self.contexts = contexts
         self.forwarder = forwarder
         self.firewall = firewall
-        self.audit = audit_logger
         self.metrics = metrics
         self.budget = budget
         self.recorder = recorder
@@ -143,11 +141,9 @@ class McpGateway:
         reasons: list[str], tool_name: str, arguments: dict[str, Any], started: float,
     ) -> None:
         """
-        The in-process ledger gets one audit record per agent per minute for repeated refusals over
-        the limit, so a runaway agent retrying in a loop cannot flood it; every refusal is still
-        counted in the metrics AND still reaches the Black Box (`_record` always pushes to
-        `self.recorder`, uncoalesced): the ledger's once-a-minute throttle is only about keeping the
-        gateway's own forensic log short, not about the durable record owners see on the dashboard.
+        A runaway agent retrying over its limit gets the FULL Black Box row (argument digest and, when the organization turned capture on, a
+        payload excerpt) once per agent per minute; every other refusal in between is still counted in the metrics AND still reaches the
+        Black Box as a slim row without those (see `_record_repeat_refusal`), so no refusal is missing from the durable record.
         """
         self._record_repeat_refusal(
             self._budget_refusal_logged, identity, context, method, message, reasons, tool_name, arguments, started,
@@ -157,8 +153,8 @@ class McpGateway:
         self, logged: dict[UUID, float], identity: AgentIdentity, context: GatewayContext, method: str | None, message: Any,
         reasons: list[str], tool_name: str, arguments: dict[str, Any], started: float,
     ) -> None:
-        """The once-a-minute ledger limit shared by every refusal an agent can repeat (budget, loop). `logged` is that refusal's own
-        table, so one kind of refusal cannot silence the ledger record of another."""
+        """The once-a-minute limit on the FULL row (digest and payload excerpt) shared by every refusal an agent can repeat (budget, loop,
+        destination). `logged` is that refusal's own table, so one kind of refusal cannot silence another's full row. Every refusal reaches the Black Box."""
         now = time.monotonic()
         last = logged.get(identity.agent_id)
         if last is None or now - last >= BUDGET_REFUSAL_LOG_INTERVAL_SECONDS:
@@ -684,7 +680,7 @@ class McpGateway:
             reasons=reasons[:10],
             upstream_status=status,
             latency_ms=round((time.perf_counter() - started) * 1000, 2),
-            argument_keys=[],  # filled in by _record, which reuses the ledger record's own digest
+            argument_keys=[],  # filled in by _record (names and digest)
             result_size_bytes=result_size_bytes,
             redaction_count=redaction_count,
             credential_jti=identity.token_id,
@@ -708,34 +704,21 @@ class McpGateway:
         result: Any = None,
         capture: bool = True,
     ) -> None:
-        record_obj = self.audit.record(
-            trace_id=uuid4().hex,
-            span_id=uuid4().hex[:16],
-            agent_id=str(identity.agent_id),
-            caller_identity=f"agent:{identity.agent_id}",
-            organization_id=str(identity.organization_id),
-            server=context.server_slug,
-            tool_name=tool_name or str(method or ""),
-            arguments=arguments or {},
-            firewall_decision=decision,  # type: ignore[arg-type]  # validated Literal by the model
-            policy_violation_reasons=reasons,
-            downstream_status=status,
-            execution_latency_ms=0.0 if started is None else (time.perf_counter() - started) * 1000,
-            credential_jti=identity.token_id,
+        # Every decision reaches the Black Box (core's per-organization, append-only, hash-chained record; ADR 0030): there is no second, local ledger.
+        # `started` is the call's start on the monotonic clock; a caller with none gets a latency of about zero.
+        event = self._event(
+            identity, context, method, decision, reasons, status, tool_name or str(method or ""),
+            time.perf_counter() if started is None else started,
+            result_size_bytes=result_size_bytes, redaction_count=redaction_count,
         )
-        if started is not None:
-            event = self._event(
-                identity, context, method, decision, reasons, status, tool_name or str(method or ""), started,
-                result_size_bytes=result_size_bytes, redaction_count=redaction_count,
-            )
-            # Reuse the ledger record's own digest: raw arguments are never stored (CLAUDE.md §10),
-            # and the audit logger already computed the name list and the SHA-256 the same way.
-            event = replace(event, argument_keys=record_obj.argument_keys, arguments_sha256=record_obj.arguments_sha256)
-            # Never capture the payload of a trip: it may hold the bait itself, and the password format is
-            # not something the redaction patterns can recognise.
-            if context.payload_capture and capture:
-                event = self._with_payloads(event, arguments, result)
-            self.recorder.record(event)
+        # Raw arguments are never stored (CLAUDE.md section 10): the Black Box row carries the names and a SHA-256 digest only.
+        args = arguments or {}
+        event = replace(event, argument_keys=argument_keys(args), arguments_sha256=digest_arguments(args))
+        # Never capture the payload of a trip: it may hold the bait itself, and the password format is
+        # not something the redaction patterns can recognise.
+        if context.payload_capture and capture:
+            event = self._with_payloads(event, arguments, result)
+        self.recorder.record(event)
 
     def _with_payloads(self, event: GatewayEvent, arguments: dict[str, Any] | None, result: Any) -> GatewayEvent:
         """Adds redacted, size-capped excerpts of the arguments and the (already secret-scrubbed) result.

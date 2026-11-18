@@ -139,8 +139,8 @@ async def test_the_sixth_call_is_refused_with_a_clear_message_and_logged() -> No
         "tool_name": "list_invoices", "daily_call_limit": 5, "used": 5, "resets_at": RESETS.isoformat(),
     }
     assert len(forwarded(h)) == 5  # the refused call never reached the upstream server
-    record = h.audit.get_recent(1)[0]
-    assert record["firewall_decision"] == "BLOCK" and "Daily limit of 5 tool calls reached" in record["policy_violation_reasons"][0]
+    record = h.decisions(1)[-1]
+    assert record["decision"] == "BLOCK" and "Daily limit of 5 tool calls reached" in record["reasons"][0]
     assert 'reason="budget_exceeded"' in h.gateway.metrics.render()
 
 
@@ -563,12 +563,12 @@ async def test_repeated_refusals_over_the_limit_are_audited_once_a_minute_but_al
     await h.call(token, params=tool("list_invoices"))
     for _ in range(50):  # a runaway agent retrying in a loop
         assert "error" in (await h.call(token, params=tool("list_invoices"))).body
-    blocks = [r for r in h.audit.get_recent(100) if r["firewall_decision"] == "BLOCK"]
+    blocks = [r for r in h.full_rows(100) if r["decision"] == "BLOCK"]
     assert len(blocks) == 1  # one record, not fifty
     assert 'redhand_gateway_decisions_total{method="tools/call",outcome="deny",reason="budget_exceeded"} 50' in h.gateway.metrics.render()
     h.gateway._budget_refusal_logged[next(iter(h.gateway._budget_refusal_logged))] -= 61.0  # a minute passes
     await h.call(token, params=tool("list_invoices"))
-    assert len([r for r in h.audit.get_recent(100) if r["firewall_decision"] == "BLOCK"]) == 2
+    assert len([r for r in h.full_rows(100) if r["decision"] == "BLOCK"]) == 2
 
 
 @pytest.mark.asyncio

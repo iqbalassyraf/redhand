@@ -64,8 +64,8 @@ async def test_done_2_agent_safe_mode_allows_reads_and_refuses_writes(monkeypatc
     assert _executed().count("delete_invoice") == writes_before  # no write reached the server after the flip
     assert _executed().count("list_invoices") == 1
 
-    blocked = [r for r in stack.audit.get_recent(20) if r["firewall_decision"] == "BLOCK"]
-    assert blocked and "not declared read-only" in blocked[-1]["policy_violation_reasons"][0]
+    blocked = [e for e in await stack.blackbox_events() if e["decision"] == "BLOCK"]
+    assert blocked and "not declared read-only" in blocked[-1]["reasons"][0]
     actions = [e["action"] for e in (await stack.core.get("/v1/audit/control", headers=stack.operator("viewer"))).json()]
     assert "passport.safe_mode_enabled" in actions
 

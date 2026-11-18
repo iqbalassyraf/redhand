@@ -5,8 +5,8 @@ Public surface:
 - POST /mcp/{server}   agents' MCP traffic (agent access token required)
 - POST /v1/mcp/vet     static MCP manifest vetting (public, size- and rate-limited)
 - GET  /health, /healthz   liveness (use /health on Cloud Run)
-Operational endpoints (/v1/policies, /v1/audit/*, /metrics) require the internal
-service token; operators reach audit data through redhand-core.
+Operational endpoints (/v1/policies, /metrics) require the internal
+service token; the one audit trail is the Black Box in redhand-core (ADR 0030).
 """
 
 from __future__ import annotations
@@ -19,7 +19,7 @@ import time
 from typing import Annotated, Any, AsyncGenerator
 from uuid import UUID, uuid4
 
-from fastapi import Depends, FastAPI, Header, HTTPException, Path, Query, Request, status
+from fastapi import Depends, FastAPI, Header, HTTPException, Path, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, PlainTextResponse, Response
 import httpx
@@ -47,7 +47,6 @@ from .gateway.model_proxy import MemoryUsageSink, ModelProxy, ModelProxyConfig, 
 from .gateway.model_usage_reporter import ReportingUsageSink
 from .gateway.service import McpGateway
 from .gateway.upstream import UpstreamForwarder
-from .telemetry.audit_logger import TamperEvidentAuditLogger
 from .telemetry.tracer import setup_telemetry
 
 logger = structlog.get_logger(__name__)
@@ -57,7 +56,7 @@ MAX_VET_BYTES = 256 * 1024
 VET_REQUESTS_PER_MINUTE = 30
 
 
-def build_gateway(settings: Settings, firewall: FirewallPolicyEngine, audit: TamperEvidentAuditLogger) -> McpGateway:
+def build_gateway(settings: Settings, firewall: FirewallPolicyEngine) -> McpGateway:
     core = settings.CORE_URL.rstrip("/")
     token = settings.CORE_SERVICE_TOKEN.get_secret_value() if settings.CORE_SERVICE_TOKEN else None
     instance_id = f"gw-{uuid4().hex}"  # identifies this process in usage reports; a restart gets a new one
@@ -79,7 +78,6 @@ def build_gateway(settings: Settings, firewall: FirewallPolicyEngine, audit: Tam
             total_timeout=settings.UPSTREAM_TIMEOUT_SECONDS,
         ),
         firewall=firewall,
-        audit_logger=audit,
         metrics=metrics,
         budget=BudgetMeter(
             instance_id=instance_id,
@@ -113,8 +111,7 @@ def build_gateway(settings: Settings, firewall: FirewallPolicyEngine, audit: Tam
 
 settings = get_settings()
 firewall_engine = FirewallPolicyEngine(settings.POLICY_FILE_PATH)
-audit_logger = TamperEvidentAuditLogger(log_file_path=settings.AUDIT_LOG_FILE)
-gateway = build_gateway(settings, firewall_engine, audit_logger)
+gateway = build_gateway(settings, firewall_engine)
 # PROTOTYPE, off by default (ADR 0025): a disabled proxy mounts no route at all.
 model_proxy = ModelProxy(
     verifier=gateway.verifier,
@@ -145,8 +142,6 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     logger.info("Starting AgentWall gateway", env=settings.ENVIRONMENT, port=settings.PORT)
     if settings.CORE_SERVICE_TOKEN is None:
         logger.error("AGENTWALL_CORE_SERVICE_TOKEN is not set: every agent call will be denied")
-    if settings.AUDIT_LOG_FILE is None and settings.ENVIRONMENT not in ("development", "test"):
-        logger.warning("AGENTWALL_AUDIT_LOG_FILE is not set: gateway audit records are in memory only")
     setup_telemetry(settings.OTEL_SERVICE_NAME)
     firewall_engine.load_policies()
     gateway.budget.start()
@@ -390,26 +385,6 @@ async def radar_self_test() -> SelfTestResponse:
 @app.get("/v1/policies", dependencies=[Depends(require_service_token)])
 async def get_policies() -> dict[str, Any]:
     return firewall_engine.policies
-
-
-@app.get("/v1/audit/logs", dependencies=[Depends(require_service_token)])
-async def get_audit_logs(limit: int = Query(default=50, ge=1, le=1000)) -> list[dict[str, Any]]:
-    return audit_logger.get_recent(limit=limit)
-
-
-@app.get("/v1/audit/verify", dependencies=[Depends(require_service_token)])
-async def verify_audit_chain() -> dict[str, Any]:
-    is_valid, reason = audit_logger.verify_chain_integrity()
-    stats = audit_logger.stats()
-    return {
-        "tamper_evident_chain_intact": is_valid,
-        "scope": "the most recent records held in memory by this gateway process since start; older ones are dropped from memory "
-                 "(the complete record of every decision is the Black Box in redhand-core)",
-        "records_verified": stats.retained,
-        "records_dropped_from_memory": stats.dropped,
-        "records_total": stats.total,
-        "details": reason or "All retained records verified.",
-    }
 
 
 @app.get("/metrics", dependencies=[Depends(require_service_token)])

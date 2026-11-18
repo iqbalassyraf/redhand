@@ -80,8 +80,8 @@ async def test_done_3_an_agent_over_its_daily_limit_is_refused_and_the_owner_is_
     assert error["data"]["daily_call_limit"] == 5 and error["data"]["used"] == 5
     assert _executed() == ["list_invoices"] * 5  # the sixth call never reached the MCP server
 
-    blocked = [r for r in stack.audit.get_recent(20) if r["firewall_decision"] == "BLOCK"]
-    assert blocked and "Daily limit of 5 tool calls reached" in blocked[-1]["policy_violation_reasons"][0]
+    blocked = [e for e in await stack.blackbox_events() if e["decision"] == "BLOCK"]
+    assert blocked and "Daily limit of 5 tool calls reached" in blocked[-1]["reasons"][0]
 
     # The owner was alerted at 80% (the 4th call) and at the limit (the 5th), once each, in plain "calls".
     alerts = _alerts(fake)

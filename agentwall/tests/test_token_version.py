@@ -68,7 +68,7 @@ async def test_the_refusal_is_recorded_and_counted_with_its_own_reason() -> None
     agent = h.add_agent(INVOICES_READ)
     bump(h, agent, 2)
     await h.call(h.token(agent, ver=1), params=tool("list_invoices"))
-    assert h.audit.get_recent(1)[0]["policy_violation_reasons"] == ["token_stale"]
+    assert h.decisions(1)[0]["reasons"] == ["token_stale"]
     assert 'reason="token_stale"' in h.metrics.render()
     await h.recorder.flush()
     assert [e["reasons"] for e in h.event_reporter.events] == [["token_stale"]]

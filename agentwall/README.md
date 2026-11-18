@@ -26,7 +26,7 @@ Every failure denies: missing or invalid token → 401, inactive passport → 40
 | Endpoint | Access |
 |---|---|
 | `POST /v1/mcp/vet` | Public, rate-limited. Heuristic static vetting of a pasted MCP manifest; fetches nothing |
-| `GET /v1/policies`, `GET /v1/audit/logs`, `GET /v1/audit/verify`, `GET /metrics` | Service token (`AGENTWALL_CORE_SERVICE_TOKEN`) |
+| `GET /v1/policies`, `GET /metrics` | Service token (`AGENTWALL_CORE_SERVICE_TOKEN`) |
 | `GET /health` (also `/healthz`) | Public. Use `/health` on Cloud Run, which can intercept `/healthz` |
 
 ## Configuration
@@ -38,7 +38,6 @@ The important ones:
   `INTERNAL_SERVICE_TOKEN`; without it every call is denied).
 - `AGENTWALL_AGENT_TOKEN_PUBLIC_KEY` (optional; otherwise core's JWKS is used).
 - `AGENTWALL_CONTEXT_CACHE_TTL_SECONDS` (default 2, max 2.5).
-- `AGENTWALL_AUDIT_LOG_FILE` (append-only JSON lines; recommended outside development).
 
 ## Run
 

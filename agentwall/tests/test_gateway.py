@@ -9,7 +9,7 @@ MockTransport). Tokens are signed with a test Ed25519 key in the same format cor
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 import json
 import time
 from typing import Any
@@ -47,7 +47,6 @@ from agentwall.src.gateway.upstream import (
     check_destination,
     parse_sse_messages,
 )
-from agentwall.src.telemetry.audit_logger import TamperEvidentAuditLogger
 
 ORG = UUID("00000000-0000-0000-0000-000000000010")
 OTHER_ORG = UUID("00000000-0000-0000-0000-0000000000f0")
@@ -231,11 +230,18 @@ class Harness:
         self.core = FakeCore()
         self.upstream = FakeUpstream()
         self.clock = FakeClock()
-        self.audit = TamperEvidentAuditLogger()
         self.reporter = FakeReporter()
         self.budget = BudgetMeter(instance_id="test-gateway-0001", reporter=self.reporter, clock=self.clock, jitter=lambda: 0.5)
         self.event_reporter = FakeEventReporter()
         self.recorder = EventRecorder(instance_id="test-gateway-0001", reporter=self.event_reporter)
+        self._decisions: list[dict[str, Any]] = []
+        record_event = self.recorder.record
+
+        def capture_and_record(event: Any) -> None:
+            self._decisions.append(asdict(event))
+            record_event(event)
+
+        self.recorder.record = capture_and_record  # type: ignore[method-assign]  # test spy: every decision the gateway hands to the Black Box recorder
         self.trip_reporter = FakeTripReporter()
         self.trips = TripDispatcher(reporter=self.trip_reporter, retry_delays=())
         self.pin_reporter = FakePinReporter()
@@ -259,7 +265,6 @@ class Harness:
                 http_client=httpx.AsyncClient(transport=httpx.MockTransport(self.upstream.handler)),
             ),
             firewall=gateway_main.firewall_engine,
-            audit_logger=self.audit,
             metrics=self.metrics,
             budget=self.budget,
             recorder=self.recorder,
@@ -267,6 +272,14 @@ class Harness:
             pins=self.pins,
             radar=self.radar,
         )
+
+    def decisions(self, limit: int = 50) -> list[dict[str, Any]]:
+        """The decisions the gateway reported to the Black Box (the one audit trail, ADR 0030), oldest first, last `limit`."""
+        return self._decisions[-limit:]
+
+    def full_rows(self, limit: int = 200) -> list[dict[str, Any]]:
+        """Only the full rows (argument digest present). A repeated refusal inside its minute is reported as a slim row without one."""
+        return [d for d in self._decisions if d["arguments_sha256"]][-limit:]
 
     def add_agent(
         self, scopes: list[dict[str, str]], status: str = "active", org: UUID = ORG, safe_mode: bool = False,
@@ -377,11 +390,11 @@ async def test_in_scope_tool_call_is_forwarded_and_audited() -> None:
     assert forwarded_headers["authorization"] == "Bearer xero-api-key"
     assert token not in json.dumps(forwarded_headers)
 
-    record = h.audit.get_recent(1)[0]
-    assert record["firewall_decision"] == "ALLOW"
-    assert record["organization_id"] == str(ORG) and record["server"] == "xero"
+    record = h.decisions(1)[-1]
+    assert record["decision"] == "ALLOW"
+    assert str(record["organization_id"]) == str(ORG) and record["server"] == "xero"
     assert record["tool_name"] == "list_invoices" and record["argument_keys"] == ["month"]
-    assert "2026-10" not in json.dumps(record)
+    assert "2026-10" not in json.dumps(record, default=str)
 
 
 @pytest.mark.asyncio
@@ -393,9 +406,9 @@ async def test_out_of_scope_tool_call_is_denied_and_logged() -> None:
     assert resp.body["error"]["code"] == JSONRPC_POLICY_VIOLATION
     assert "out of scope" in resp.body["error"]["message"]
     assert h.upstream.received == []
-    record = h.audit.get_recent(1)[0]
-    assert record["firewall_decision"] == "BLOCK" and record["tool_name"] == "delete_invoice"
-    assert "not in this agent's passport scopes" in record["policy_violation_reasons"][0]
+    record = h.decisions(1)[-1]
+    assert record["decision"] == "BLOCK" and record["tool_name"] == "delete_invoice"
+    assert "not in this agent's passport scopes" in record["reasons"][0]
 
 
 @pytest.mark.asyncio
@@ -495,7 +508,7 @@ async def test_inactive_passports_are_denied(status: str) -> None:
         assert resp.body["error"]["code"] == JSONRPC_PASSPORT_INACTIVE
         assert resp.body["error"]["data"]["passport_status"] == status
     assert h.upstream.received == []
-    assert h.audit.get_recent(1)[0]["policy_violation_reasons"] == [f"passport_{status}"]
+    assert h.decisions(1)[0]["reasons"] == [f"passport_{status}"]
 
 
 @pytest.mark.asyncio
@@ -586,7 +599,7 @@ async def test_upstream_failures_return_errors(mode: str) -> None:
     assert resp.status_code == 502
     assert resp.body["error"]["code"] == JSONRPC_UPSTREAM_UNAVAILABLE
     assert "result" not in resp.body
-    assert h.audit.get_recent(1)[0]["firewall_decision"] == "ERROR"
+    assert h.decisions(1)[0]["decision"] == "ERROR"
 
 
 @pytest.mark.asyncio
@@ -700,7 +713,7 @@ async def test_http_endpoint_and_operational_endpoints(monkeypatch: pytest.Monke
             headers={"Authorization": f"Bearer {h.token(agent)}"},
         )
         legacy = await client.post("/mcp", json=message, headers={"X-User-Roles": "admin"})
-        ops = [await client.get(p) for p in ("/v1/policies", "/v1/audit/logs", "/v1/audit/verify", "/metrics")]
+        ops = [await client.get(p) for p in ("/v1/policies", "/metrics")]
     assert ok.status_code == 200 and "result" in ok.json()
     assert anon.status_code == 401 and anon.headers["www-authenticate"].startswith("Bearer")
     assert bad_slug.status_code == 422
@@ -722,31 +735,21 @@ async def test_operational_endpoints_accept_service_token(monkeypatch: pytest.Mo
     auth = {"Authorization": f"Bearer {SERVICE_TOKEN}"}
     async with AsyncClient(transport=ASGITransport(app=gateway_main.app), base_url="http://test") as client:
         metrics = await client.get("/metrics", headers=auth)
-        verify = await client.get("/v1/audit/verify", headers=auth)
         wrong = await client.get("/metrics", headers={"Authorization": "Bearer nope"})
     assert metrics.status_code == 200
     assert 'outcome="deny",reason="out_of_scope"' in metrics.text
-    assert verify.json()["tamper_evident_chain_intact"] is True
     assert wrong.status_code == 401
 
 
 @pytest.mark.asyncio
-async def test_the_audit_verify_answer_states_what_it_covers_after_old_records_are_dropped(monkeypatch: pytest.MonkeyPatch) -> None:
-    from pydantic import SecretStr
-
-    from agentwall.src.telemetry.audit_logger import TamperEvidentAuditLogger
-
-    monkeypatch.setattr(gateway_main.settings, "CORE_SERVICE_TOKEN", SecretStr(SERVICE_TOKEN))
-    small = TamperEvidentAuditLogger(max_records=5)
-    for i in range(12):
-        small.record(trace_id=f"t{i}", span_id="s", agent_id="a", caller_identity="c", tool_name="x", arguments={}, firewall_decision="ALLOW")
-    monkeypatch.setattr(gateway_main, "audit_logger", small)
+async def test_the_gateway_keeps_no_audit_ledger_of_its_own() -> None:
+    """ADR 0030: the Black Box in core is the one audit trail. The gateway's old local ledger routes are gone (404, not merely guarded),
+    even for a caller that holds the service token."""
     auth = {"Authorization": f"Bearer {SERVICE_TOKEN}"}
     async with AsyncClient(transport=ASGITransport(app=gateway_main.app), base_url="http://test") as client:
-        body = (await client.get("/v1/audit/verify", headers=auth)).json()
-    assert body["tamper_evident_chain_intact"] is True
-    assert (body["records_verified"], body["records_dropped_from_memory"], body["records_total"]) == (5, 7, 12)
-    assert "most recent records" in body["scope"] and "Black Box" in body["scope"]
+        gone = [await client.get(p, headers=auth) for p in ("/v1/audit/logs", "/v1/audit/verify", "/v1/audit")]
+    assert [r.status_code for r in gone] == [404, 404, 404]
+    assert not hasattr(gateway_main, "audit_logger")
 
 
 # ---------------------------------------------------------------------------
@@ -773,9 +776,9 @@ async def test_safe_mode_allows_read_and_refuses_write() -> None:
     assert refused.body["error"]["code"] == JSONRPC_POLICY_VIOLATION
     assert "Safe Mode is on" in refused.body["error"]["message"]
     assert [m["params"]["name"] for m in h.upstream.received if m["method"] == "tools/call"] == ["list_invoices"]
-    record = h.audit.get_recent(1)[0]
-    assert record["firewall_decision"] == "BLOCK" and record["tool_name"] == "delete_invoice"
-    assert "not declared read-only" in record["policy_violation_reasons"][0]
+    record = h.decisions(1)[-1]
+    assert record["decision"] == "BLOCK" and record["tool_name"] == "delete_invoice"
+    assert "not declared read-only" in record["reasons"][0]
 
 
 @pytest.mark.asyncio
@@ -811,7 +814,7 @@ async def test_safe_mode_keeps_reporting_plain_out_of_scope_for_uncovered_tools(
     agent = h.add_agent(INVOICES_READ, safe_mode=True)
     resp = await h.call(h.token(agent), params=tool("execute_sql", query="select 1"))
     assert "out of scope" in resp.body["error"]["message"]
-    assert "not in this agent's passport scopes" in h.audit.get_recent(1)[0]["policy_violation_reasons"][0]
+    assert "not in this agent's passport scopes" in h.decisions(1)[0]["reasons"][0]
 
 
 @pytest.mark.asyncio

@@ -169,11 +169,9 @@ PROMISES = [
     ("this would have flagged", "apps/redhand-ui/src/lib/behaviour.ts"),
     ("Usual hour: ", "apps/redhand-ui/src/lib/behaviour.ts"),
     # Part J (hardening round H1)
-    ("records_verified", "agentwall/src/main.py"),
-    ("records_dropped_from_memory", "agentwall/src/main.py"),
-    ("records_total", "agentwall/src/main.py"),
-    ("most recent records", "agentwall/src/main.py"),
-    ("Black Box", "agentwall/src/main.py"),
+    ("Verify chain", "apps/redhand-ui/src/app/blackbox/page.tsx"),
+    ("chain intact.", "apps/redhand-ui/src/app/blackbox/page.tsx"),
+    ("Verified: ", "apps/redhand-ui/src/app/blackbox/page.tsx"),
     ("call refused (outside the passport)", "services/redhand-core/src/redhand_core/risk/scoring.py"),
     # Part O (model spend)
     ("Estimated from what the agent's SDK reported; prices as of", "apps/redhand-ui/src/lib/spend.ts"),

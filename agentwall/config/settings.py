@@ -173,7 +173,6 @@ class Settings(BaseSettings):
 
     LOG_LEVEL: str = Field(default="INFO", description="Structured logging level")
     OTEL_SERVICE_NAME: str = Field(default="agentwall-proxy", description="OpenTelemetry service name")
-    AUDIT_LOG_FILE: str | None = Field(default=None, description="Optional path to append WORM audit records")
 
     @model_validator(mode="after")
     def _model_proxy_is_local_or_staging_only(self) -> Settings:

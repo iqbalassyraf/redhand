@@ -105,7 +105,6 @@ These are baked in at build time, so changing one needs a redeploy.
 | `AGENTWALL_MAX_REQUEST_BYTES` | 1048576 |  |  |
 | `AGENTWALL_LOG_LEVEL` | 'INFO' |  | Structured logging level |
 | `AGENTWALL_OTEL_SERVICE_NAME` | 'agentwall-proxy' |  | OpenTelemetry service name |
-| `AGENTWALL_AUDIT_LOG_FILE` | None |  | Optional path to append WORM audit records |
 | `AGENTWALL_MODEL_PROXY_ENABLED` | False |  | PROTOTYPE (Phase 4.5 B5, ADR 0025). True mounts POST /v1/model/anthropic/v1/messages. Off by default: the route does not exist. Prototype only (ADR 0025): refuses to start outside development, dev, test, local and staging. |
 | `AGENTWALL_MODEL_PROXY_ANTHROPIC_URL` | 'https://api.anthropic.com' |  | Provider base URL for the model proxy prototype. Prototype only (ADR 0025): refuses to start outside development, dev, test, local and staging. |
 | `AGENTWALL_MODEL_PROXY_ANTHROPIC_KEY` | none | yes | The deployment's own provider key, held only in this process and sent only to the provider. Without it the proxy refuses every call. Prototype only (ADR 0025): refuses to start outside development, dev, test, local and staging. |

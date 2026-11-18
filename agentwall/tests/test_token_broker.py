@@ -11,7 +11,6 @@ from agentwall.src.broker.providers.local_mock import LocalMockSTSProvider
 from agentwall.src.broker.providers.saas_token import SaaSTokenProvider
 from agentwall.src.broker.providers.vault import VaultSTSProvider
 from agentwall.src.broker.token_manager import EphemeralTokenBroker
-from agentwall.src.telemetry.audit_logger import TamperEvidentAuditLogger
 
 
 @pytest.mark.asyncio
@@ -136,46 +135,6 @@ async def test_aws_azure_and_saas_providers_with_delegated_identity() -> None:
     )
     assert gsuite_token.access_token.startswith("ya29.gsuite_obo_")
     assert await saas_prov.validate_token(gsuite_token) is True
-
-
-def test_tamper_evident_audit_logger_hash_chain() -> None:
-    logger = TamperEvidentAuditLogger()
-
-    rec1 = logger.record(
-        trace_id="trace-001",
-        span_id="span-001",
-        agent_id="agent-secops",
-        caller_identity="alice@corp.internal",
-        tool_name="execute_sql",
-        arguments={"query": "SELECT 1;"},
-        firewall_decision="ALLOW",
-        execution_latency_ms=1.2,
-    )
-
-    rec2 = logger.record(
-        trace_id="trace-002",
-        span_id="span-002",
-        agent_id="agent-secops",
-        caller_identity="alice@corp.internal",
-        tool_name="execute_sql",
-        arguments={"query": "DROP TABLE users;"},
-        firewall_decision="BLOCK",
-        policy_violation_reasons=["Prohibited destructive AST node: Drop"],
-        execution_latency_ms=0.4,
-    )
-
-    assert rec2.prev_record_hash == rec1.record_hash
-
-    is_valid, reason = logger.verify_chain_integrity()
-    assert is_valid is True
-    assert reason is None
-
-    # Simulate unauthorized record tampering
-    logger._records[0].argument_keys.append("TAMPERED_KEY")
-    is_valid_after_tamper, tamper_reason = logger.verify_chain_integrity()
-    assert is_valid_after_tamper is False
-    assert "Tampered hash" in str(tamper_reason)
-
 
 
 @pytest.mark.asyncio

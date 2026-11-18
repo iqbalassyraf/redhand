@@ -1,7 +1,7 @@
 """
 The gateway's route sweep (release-readiness 3.2, CLAUDE.md 5.3): the gateway is the control point, so every route either needs a credential that is checked
 before anything happens, or is on a short allowlist with the reason. Built from the live route table: a route added later is covered, or this test fails.
-  - operational routes (/metrics, /v1/audit/*, /v1/policies) need the service token, and are closed when none is configured;
+  - operational routes (/metrics, /v1/policies) need the service token, and are closed when none is configured;
   - /mcp/{server} needs an agent access token: missing, malformed, someone else's kind of token, signed by another key, expired, wrong audience: all refused;
   - the public routes are health and static manifest vetting (size- and rate-limited, covered in its own tests).
 """
@@ -30,7 +30,7 @@ PUBLIC = {
 }
 AGENT_TOKEN_ROUTES = {("GET", "/mcp/{server}"), ("POST", "/mcp/{server}")}
 SERVICE_ROUTES = {
-    ("GET", "/metrics"), ("GET", "/v1/audit/logs"), ("GET", "/v1/audit/verify"), ("GET", "/v1/policies"),
+    ("GET", "/metrics"), ("GET", "/v1/policies"),
     ("POST", "/internal/v1/radar/self-test"), ("POST", "/internal/v1/scan"),  # called by core with the service token; not in the public OpenAPI file
 }
 

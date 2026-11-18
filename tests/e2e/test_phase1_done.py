@@ -36,7 +36,6 @@ from agentwall.src.gateway.radar_scan import HttpFindingsReporter, HttpScanCount
 from agentwall.src.gateway.trips import HttpTripReporter, TripDispatcher
 from agentwall.src.gateway.service import McpGateway
 from agentwall.src.gateway.upstream import UpstreamForwarder
-from agentwall.src.telemetry.audit_logger import TamperEvidentAuditLogger
 from examples import demo_mcp_server
 from redhand_core.auth.operator import issue_operator_token
 from redhand_core.config import Settings, get_settings
@@ -67,7 +66,6 @@ class Stack:
         self.core = httpx.AsyncClient(transport=httpx.ASGITransport(app=core_app), base_url="http://core")
 
         demo_mcp_server.calls.clear()
-        self.audit = TamperEvidentAuditLogger()
         self.gateway = McpGateway(
             verifier=AgentTokenVerifier(
                 public_key_pem=None, jwks_url="http://core/v1/agent-auth/jwks", http_client=self.core
@@ -84,7 +82,6 @@ class Stack:
                 http_client=httpx.AsyncClient(transport=httpx.ASGITransport(app=demo_mcp_server.app)),
             ),
             firewall=FirewallPolicyEngine(POLICY_FILE),
-            audit_logger=self.audit,
             metrics=GatewayMetrics(),
             budget=BudgetMeter(
                 instance_id="e2e-gateway-0001",
@@ -134,6 +131,11 @@ class Stack:
         resp = await self.core.post("/v1/agent-auth/token", headers={"Authorization": f"Bearer {agent_key}"})
         assert resp.status_code == 200, resp.text
         return resp.json()["access_token"]
+
+    async def blackbox_events(self) -> list[dict[str, Any]]:
+        """What the gateway reported to the Black Box (the one audit trail), oldest first, after flushing the recorder."""
+        await self.gateway.recorder.flush()
+        return sorted((e for e in self.store.tables.get("agent_events", []) if str(e["organization_id"]) == str(DEFAULT_ORG_ID)), key=lambda e: e["seq"])
 
     async def call_tool(self, token: str, tool: str, **args: Any) -> httpx.Response:
         return await self.edge.post(
@@ -192,12 +194,12 @@ async def test_done_2_in_scope_allowed_out_of_scope_denied_and_logged(monkeypatc
     executed = [c["params"]["name"] for c in demo_mcp_server.calls if c["method"] == "tools/call"]
     assert executed == ["list_invoices"]  # the out-of-scope call never reached the server
 
-    records = stack.audit.get_recent(10)
-    assert [(r["tool_name"], r["firewall_decision"]) for r in records] == [
+    records = [e for e in await stack.blackbox_events() if e["method"] == "tools/call"]
+    assert [(r["tool_name"], r["decision"]) for r in records] == [
         ("list_invoices", "ALLOW"),
         ("delete_invoice", "BLOCK"),
     ]
-    assert all(r["organization_id"] == DEFAULT_ORG_ID for r in records)
+    assert all(str(r["organization_id"]) == str(DEFAULT_ORG_ID) for r in records)
 
     listed = await stack.edge.post(
         "/mcp/xero", json={"jsonrpc": "2.0", "id": 2, "method": "tools/list"},
