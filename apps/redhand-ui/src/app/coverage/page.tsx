@@ -71,7 +71,7 @@ function BlockGateSection({ gate, className }: { gate: BlockGate; className: str
           <li key={rule.id}><b className="text-rh-text">{rule.name}.</b> {rule.description}</li>
         ))}
       </ul>
-      <div className="grid gap-3 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         {gate.checks.map((check) => (
           <div key={check.category} className="rounded-[8px] border border-rh-hairline p-3">
             <div className="mb-2 flex items-center justify-between gap-2">
@@ -173,7 +173,7 @@ export default function CoveragePage() {
               <p className="mb-3 text-rh-text-2">
                 &ldquo;Reviewed by a native speaker&rdquo; means someone fluent checked the rules and samples. For every language below the answer is no.
               </p>
-              <div className="grid gap-3 sm:grid-cols-2">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 {data.languages.map((lang) => (
                   <div key={lang.code} className="rounded-[8px] border border-rh-hairline p-3">
                     <div className="mb-1 flex items-center justify-between">

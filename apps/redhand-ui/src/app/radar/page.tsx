@@ -507,7 +507,7 @@ export default function RadarPage() {
                 </p>
               ) : null}
               {readiness ? (
-                <div className="grid gap-3 sm:grid-cols-2">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   {readiness.checks.map((check) => (
                     <div key={check.kind} className="rounded-[8px] border border-rh-hairline p-3">
                       <div className="mb-1 flex items-center justify-between gap-2">
@@ -607,7 +607,7 @@ export default function RadarPage() {
             <section className="mb-6 rounded-[10px] border border-rh-hairline bg-rh-card p-4 text-[12px]">
               <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
                 <h2 className="text-[14px] font-semibold">Findings</h2>
-                <div className="flex gap-2">
+                <div className="flex flex-wrap gap-2">
                   <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className={field} aria-label="Filter by review">
                     <option value="">Any review</option>
                     <option value="open">Not reviewed</option>

@@ -63,6 +63,13 @@
   color: var(--rh-text-primary);
   font-family: var(--font-rh-sans), system-ui, -apple-system, sans-serif;
 }
+/* Form controls sit one step below the cards (matte, not the browser's default grey). */
+.rh-dark input:not([type="checkbox"]):not([type="radio"]),
+.rh-dark select,
+.rh-dark textarea {
+  background-color: var(--rh-surface-subtle);
+  color: var(--rh-text-primary);
+}
 .rh-dark :focus-visible {
   outline: 1px solid var(--rh-teal);
   outline-offset: 2px;

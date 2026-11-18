@@ -207,7 +207,7 @@ export default function PassportsPage() {
   return (
     <AppShell title="Passports" organization={me?.organization_name} role={me?.role}>
 
-      <div className="mx-auto flex max-w-[1200px] flex-col gap-6 px-4 py-6">
+      <div className="mx-auto flex max-w-[1200px] min-w-0 flex-col gap-6">
         <section className="flex flex-wrap items-center justify-between gap-4 rounded-[12px] border border-rh-hairline bg-rh-card p-4">
           <div className="flex flex-wrap gap-4 text-[13px]">
             {(Object.keys(counts) as PassportStatus[]).map((s) => (
@@ -425,7 +425,7 @@ export default function PassportsPage() {
           />
         )}
 
-        <div className="grid gap-6 lg:grid-cols-2">
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
           {me && !admin ? (
             <section className="rounded-[12px] border border-rh-hairline bg-rh-card p-4 text-[13px] text-rh-text-2">
               <h2 className="text-[15px] font-semibold text-rh-text">Register an agent</h2>
@@ -726,7 +726,7 @@ function RegisterAgentForm(props: {
           onChange={(e) => setName(e.target.value)}
           className="h-[36px] rounded-[8px] border border-rh-hairline px-3 focus:border-rh-strong focus:outline-none"
         />
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <select
             value={framework}
             onChange={(e) => setFramework(e.target.value)}
@@ -790,7 +790,7 @@ function ScopeFields(props: { servers: McpServer[]; scopes: Scope[]; onChange: (
         </button>
       </div>
       {scopes.map((s, i) => (
-        <div key={i} className="flex gap-2">
+        <div key={i} className="flex flex-wrap gap-2">
           <select
             value={s.server}
             onChange={(e) => update(i, { server: e.target.value })}
@@ -811,7 +811,7 @@ function ScopeFields(props: { servers: McpServer[]; scopes: Scope[]; onChange: (
             placeholder="tool name or *"
             value={s.tool}
             onChange={(e) => update(i, { tool: e.target.value })}
-            className="h-[34px] flex-1 rounded-[8px] border border-rh-hairline px-2 font-mono text-[12px]"
+            className="h-[34px] min-w-0 flex-1 rounded-[8px] border border-rh-hairline px-2 font-mono text-[12px]"
           />
           <select
             value={s.access}
@@ -940,7 +940,7 @@ function McpServersPanel(props: {
           setUrl("");
         }}
       >
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <input
             required
             pattern="[a-z0-9][a-z0-9\-]{0,62}"
@@ -954,7 +954,7 @@ function McpServersPanel(props: {
             placeholder="Display name"
             value={name}
             onChange={(e) => setName(e.target.value)}
-            className="h-[34px] flex-1 rounded-[8px] border border-rh-hairline px-2"
+            className="h-[34px] min-w-0 flex-1 rounded-[8px] border border-rh-hairline px-2"
           />
         </div>
         <input
