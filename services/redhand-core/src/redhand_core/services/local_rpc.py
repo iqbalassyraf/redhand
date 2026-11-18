@@ -1608,6 +1608,85 @@ _SCOPE_REFUSAL = "is not in this agent's passport scopes."
 _PIN_REFUSAL = "is not approved: its current version has not been reviewed."
 
 
+
+def _insights_summary(store: LocalSupabaseAdapter, p: dict[str, Any]) -> dict[str, Any]:
+    """Mirrors insights_summary() (20261202000000_insights.sql): organization-scoped, start inclusive and end exclusive, bounded."""
+    org, bucket = p.get("p_org"), p.get("p_bucket_seconds")
+    since, until = p.get("p_since"), p.get("p_until")
+    if org is None or since is None or until is None or bucket is None:
+        raise _error("22023", "organization, window and bucket are required")
+    since_dt, until_dt = datetime.fromisoformat(str(since)), datetime.fromisoformat(str(until))
+    if not 60 <= int(bucket) <= 86400:
+        raise _error("22023", "bucket must be between 60 and 86400 seconds")
+    if until_dt <= since_dt or until_dt - since_dt > timedelta(days=8):
+        raise _error("22023", "window must be positive and at most 8 days")
+    first, last = math.floor(since_dt.timestamp() / bucket), math.floor(until_dt.timestamp() / bucket)
+    if last - first + 1 > 60:
+        raise _error("22023", "window holds more than 60 buckets")
+
+    def at(row: dict[str, Any]) -> datetime:
+        value = row["occurred_at"]
+        return value if isinstance(value, datetime) else datetime.fromisoformat(str(value))
+
+    ev = [e for e in store.tables.get("agent_events", []) if str(e["organization_id"]) == str(org) and since_dt <= at(e) < until_dt]
+    def iso(dt: datetime) -> str:
+        return dt.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+    def count(rows: list[dict[str, Any]], decision: str) -> int:
+        return sum(1 for r in rows if r["decision"] == decision)
+
+    def size(rows: list[dict[str, Any]]) -> int:
+        return sum(int(r.get("result_size_bytes") or 0) for r in rows if r["decision"] == "ALLOW")
+
+    series = []
+    for g in range(first, last + 1):
+        rows = [e for e in ev if math.floor(at(e).timestamp() / bucket) == g]
+        series.append({"bucket_start": iso(datetime.fromtimestamp(g * bucket, timezone.utc)), "allowed": count(rows, "ALLOW"), "refused": count(rows, "BLOCK"),
+                       "errors": count(rows, "ERROR"), "bytes": size(rows)})
+
+    def ranked(keys: Callable[[dict[str, Any]], Any], limit: int) -> list[tuple[Any, list[dict[str, Any]]]]:
+        groups: dict[Any, list[dict[str, Any]]] = {}
+        for e in ev:
+            groups.setdefault(keys(e), []).append(e)
+        return sorted(groups.items(), key=lambda kv: (-len(kv[1]), str(kv[0])))[:limit]
+
+    top = ranked(lambda e: str(e["agent_id"]), 5)
+    agents = [{"agent_id": a, "decisions": len(r), "refused": count(r, "BLOCK"), "errors": count(r, "ERROR")} for a, r in top]
+    tools = [{"server": k[0], "tool": k[1], "calls": len(r), "refused": count(r, "BLOCK")}
+             for k, r in ranked(lambda e: (e.get("server") or "", e.get("tool_name") or ""), 10**6) if k[1]][:5]
+    servers = [{"server": k, "decisions": len(r), "allowed": count(r, "ALLOW"), "refused": count(r, "BLOCK"), "errors": count(r, "ERROR")}
+               for k, r in ranked(lambda e: e.get("server") or "", 8)]
+    reason_counts: dict[str, int] = {}
+    for e in ev:
+        if e["decision"] != "ALLOW":
+            for reason in e.get("reasons") or []:
+                reason_counts[reason] = reason_counts.get(reason, 0) + 1
+    reasons = [{"reason": k, "count": v} for k, v in sorted(reason_counts.items(), key=lambda kv: (-kv[1], kv[0]))[:8]]
+    samples = sorted(float(e["latency_ms"]) for e in ev if e["decision"] == "ALLOW" and e.get("latency_ms") is not None)
+
+    def percentile(q: float) -> float | None:
+        if not samples:
+            return None
+        pos = q * (len(samples) - 1)
+        lo, hi = math.floor(pos), math.ceil(pos)
+        value = samples[lo] + (samples[hi] - samples[lo]) * (pos - lo)
+        return float(Decimal(str(value)).quantize(Decimal("0.01"), rounding="ROUND_HALF_UP"))
+
+    top_ids = {a for a, _ in top}
+    flow_groups: dict[tuple[str, str, str], int] = {}
+    for e in ev:
+        if str(e["agent_id"]) in top_ids:
+            key = (str(e["agent_id"]), e.get("server") or "", e["decision"])
+            flow_groups[key] = flow_groups.get(key, 0) + 1
+    flow = [{"agent_id": a, "server": sv, "decision": d, "count": n}
+            for (a, sv, d), n in sorted(flow_groups.items(), key=lambda kv: (-kv[1], kv[0]))[:40]]
+    return {
+        "window_start": iso(since_dt), "window_end": iso(until_dt), "bucket_seconds": int(bucket),
+        "totals": {"decisions": len(ev), "allowed": count(ev, "ALLOW"), "refused": count(ev, "BLOCK"), "errors": count(ev, "ERROR"), "bytes_returned": size(ev)},
+        "series": series, "agents": agents, "tools": tools, "servers": servers, "reasons": reasons,
+        "latency": {"samples": len(samples), "p50_ms": percentile(0.5), "p95_ms": percentile(0.95)}, "flow": flow,
+    }
+
 def _agent_risk_signals(store: LocalSupabaseAdapter, p: dict[str, Any]) -> list[dict[str, Any]]:
     org = str(p["p_org"])
     only = str(p["p_agent"]) if p.get("p_agent") else None
@@ -2391,6 +2470,7 @@ HANDLERS: dict[str, RpcHandler] = {
     "telegram_claim_update": _telegram_claim_update,
     "record_events": _record_events,
     "verify_events": _verify_events,
+    "insights_summary": _insights_summary,
     "agent_risk_signals": _agent_risk_signals,
     "control_risk_ladder": _control_risk_ladder,
     "risk_mark_alerted": _risk_mark_alerted,

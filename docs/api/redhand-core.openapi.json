@@ -366,6 +366,61 @@
         "title": "AgentRiskSummary",
         "type": "object"
       },
+      "AgentRow": {
+        "additionalProperties": false,
+        "properties": {
+          "agent_id": {
+            "format": "uuid",
+            "title": "Agent Id",
+            "type": "string"
+          },
+          "decisions": {
+            "minimum": 0.0,
+            "title": "Decisions",
+            "type": "integer"
+          },
+          "errors": {
+            "minimum": 0.0,
+            "title": "Errors",
+            "type": "integer"
+          },
+          "framework": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Framework"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "refused": {
+            "minimum": 0.0,
+            "title": "Refused",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "agent_id",
+          "decisions",
+          "refused",
+          "errors"
+        ],
+        "title": "AgentRow",
+        "type": "object"
+      },
       "AgentSafeModeResponse": {
         "properties": {
           "changed": {
@@ -1408,6 +1463,30 @@
         "title": "ControlAuditEntry",
         "type": "object"
       },
+      "Controls": {
+        "additionalProperties": false,
+        "properties": {
+          "radar_mode": {
+            "enum": [
+              "off",
+              "observe",
+              "block"
+            ],
+            "title": "Radar Mode",
+            "type": "string"
+          },
+          "safe_mode": {
+            "title": "Safe Mode",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "safe_mode",
+          "radar_mode"
+        ],
+        "title": "Controls",
+        "type": "object"
+      },
       "CreateOrganizationRequest": {
         "additionalProperties": false,
         "properties": {
@@ -2302,6 +2381,42 @@
         "title": "FirewallVerdict",
         "type": "string"
       },
+      "FlowRow": {
+        "additionalProperties": false,
+        "properties": {
+          "agent_id": {
+            "format": "uuid",
+            "title": "Agent Id",
+            "type": "string"
+          },
+          "count": {
+            "minimum": 0.0,
+            "title": "Count",
+            "type": "integer"
+          },
+          "decision": {
+            "enum": [
+              "ALLOW",
+              "BLOCK",
+              "ERROR"
+            ],
+            "title": "Decision",
+            "type": "string"
+          },
+          "server": {
+            "title": "Server",
+            "type": "string"
+          }
+        },
+        "required": [
+          "agent_id",
+          "server",
+          "decision",
+          "count"
+        ],
+        "title": "FlowRow",
+        "type": "object"
+      },
       "FreezeAllRequest": {
         "additionalProperties": false,
         "properties": {
@@ -2967,6 +3082,106 @@
         "title": "HoneytokenView",
         "type": "object"
       },
+      "InsightsResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "agents": {
+            "items": {
+              "$ref": "#/components/schemas/AgentRow"
+            },
+            "title": "Agents",
+            "type": "array"
+          },
+          "bucket_seconds": {
+            "title": "Bucket Seconds",
+            "type": "integer"
+          },
+          "controls": {
+            "$ref": "#/components/schemas/Controls"
+          },
+          "flow": {
+            "items": {
+              "$ref": "#/components/schemas/FlowRow"
+            },
+            "title": "Flow",
+            "type": "array"
+          },
+          "latency": {
+            "$ref": "#/components/schemas/Latency"
+          },
+          "passports": {
+            "$ref": "#/components/schemas/Passports"
+          },
+          "reasons": {
+            "items": {
+              "$ref": "#/components/schemas/ReasonRow"
+            },
+            "title": "Reasons",
+            "type": "array"
+          },
+          "series": {
+            "items": {
+              "$ref": "#/components/schemas/SeriesPoint"
+            },
+            "title": "Series",
+            "type": "array"
+          },
+          "servers": {
+            "items": {
+              "$ref": "#/components/schemas/ServerRow"
+            },
+            "title": "Servers",
+            "type": "array"
+          },
+          "tools": {
+            "items": {
+              "$ref": "#/components/schemas/ToolRow"
+            },
+            "title": "Tools",
+            "type": "array"
+          },
+          "totals": {
+            "$ref": "#/components/schemas/Totals"
+          },
+          "window": {
+            "enum": [
+              "1h",
+              "24h",
+              "7d"
+            ],
+            "title": "Window",
+            "type": "string"
+          },
+          "window_end": {
+            "format": "date-time",
+            "title": "Window End",
+            "type": "string"
+          },
+          "window_start": {
+            "format": "date-time",
+            "title": "Window Start",
+            "type": "string"
+          }
+        },
+        "required": [
+          "window",
+          "window_start",
+          "window_end",
+          "bucket_seconds",
+          "totals",
+          "series",
+          "agents",
+          "tools",
+          "servers",
+          "reasons",
+          "latency",
+          "flow",
+          "passports",
+          "controls"
+        ],
+        "title": "InsightsResponse",
+        "type": "object"
+      },
       "InviteCreateRequest": {
         "additionalProperties": false,
         "properties": {
@@ -3278,6 +3493,44 @@
           "capabilities"
         ],
         "title": "LadderView",
+        "type": "object"
+      },
+      "Latency": {
+        "additionalProperties": false,
+        "description": "The whole call as the gateway saw it, tool time included, over allowed calls only. NOT the gateway's own overhead.",
+        "properties": {
+          "p50_ms": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "P50 Ms"
+          },
+          "p95_ms": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "P95 Ms"
+          },
+          "samples": {
+            "minimum": 0.0,
+            "title": "Samples",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "samples"
+        ],
+        "title": "Latency",
         "type": "object"
       },
       "LinkCodeResponse": {
@@ -4128,6 +4381,40 @@
         "title": "PassportView",
         "type": "object"
       },
+      "Passports": {
+        "additionalProperties": false,
+        "properties": {
+          "frozen": {
+            "minimum": 0.0,
+            "title": "Frozen",
+            "type": "integer"
+          },
+          "managed_active": {
+            "minimum": 0.0,
+            "title": "Managed Active",
+            "type": "integer"
+          },
+          "reported_only": {
+            "description": "Agents seen only through SDK telemetry: they have no gateway access until promoted.",
+            "minimum": 0.0,
+            "title": "Reported Only",
+            "type": "integer"
+          },
+          "revoked": {
+            "minimum": 0.0,
+            "title": "Revoked",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "managed_active",
+          "frozen",
+          "revoked",
+          "reported_only"
+        ],
+        "title": "Passports",
+        "type": "object"
+      },
       "PayloadCaptureRequest": {
         "additionalProperties": false,
         "description": "Turn payload capture on or off for the organization.",
@@ -4575,6 +4862,26 @@
           "note"
         ],
         "title": "ReadinessResponse",
+        "type": "object"
+      },
+      "ReasonRow": {
+        "additionalProperties": false,
+        "properties": {
+          "count": {
+            "minimum": 0.0,
+            "title": "Count",
+            "type": "integer"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "reason",
+          "count"
+        ],
+        "title": "ReasonRow",
         "type": "object"
       },
       "RemoveMemberResponse": {
@@ -5566,6 +5873,83 @@
         "title": "SelfTestResponse",
         "type": "object"
       },
+      "SeriesPoint": {
+        "additionalProperties": false,
+        "properties": {
+          "allowed": {
+            "minimum": 0.0,
+            "title": "Allowed",
+            "type": "integer"
+          },
+          "bucket_start": {
+            "format": "date-time",
+            "title": "Bucket Start",
+            "type": "string"
+          },
+          "bytes": {
+            "minimum": 0.0,
+            "title": "Bytes",
+            "type": "integer"
+          },
+          "errors": {
+            "minimum": 0.0,
+            "title": "Errors",
+            "type": "integer"
+          },
+          "refused": {
+            "minimum": 0.0,
+            "title": "Refused",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "bucket_start",
+          "allowed",
+          "refused",
+          "errors",
+          "bytes"
+        ],
+        "title": "SeriesPoint",
+        "type": "object"
+      },
+      "ServerRow": {
+        "additionalProperties": false,
+        "properties": {
+          "allowed": {
+            "minimum": 0.0,
+            "title": "Allowed",
+            "type": "integer"
+          },
+          "decisions": {
+            "minimum": 0.0,
+            "title": "Decisions",
+            "type": "integer"
+          },
+          "errors": {
+            "minimum": 0.0,
+            "title": "Errors",
+            "type": "integer"
+          },
+          "refused": {
+            "minimum": 0.0,
+            "title": "Refused",
+            "type": "integer"
+          },
+          "server": {
+            "title": "Server",
+            "type": "string"
+          }
+        },
+        "required": [
+          "server",
+          "decisions",
+          "allowed",
+          "refused",
+          "errors"
+        ],
+        "title": "ServerRow",
+        "type": "object"
+      },
       "SetRoleRequest": {
         "additionalProperties": false,
         "properties": {
@@ -6463,6 +6847,79 @@
           "pins"
         ],
         "title": "ToolPinsResponse",
+        "type": "object"
+      },
+      "ToolRow": {
+        "additionalProperties": false,
+        "properties": {
+          "calls": {
+            "minimum": 0.0,
+            "title": "Calls",
+            "type": "integer"
+          },
+          "refused": {
+            "minimum": 0.0,
+            "title": "Refused",
+            "type": "integer"
+          },
+          "server": {
+            "title": "Server",
+            "type": "string"
+          },
+          "tool": {
+            "title": "Tool",
+            "type": "string"
+          }
+        },
+        "required": [
+          "server",
+          "tool",
+          "calls",
+          "refused"
+        ],
+        "title": "ToolRow",
+        "type": "object"
+      },
+      "Totals": {
+        "additionalProperties": false,
+        "properties": {
+          "allowed": {
+            "minimum": 0.0,
+            "title": "Allowed",
+            "type": "integer"
+          },
+          "bytes_returned": {
+            "description": "Result bytes returned to agents on allowed calls.",
+            "minimum": 0.0,
+            "title": "Bytes Returned",
+            "type": "integer"
+          },
+          "decisions": {
+            "minimum": 0.0,
+            "title": "Decisions",
+            "type": "integer"
+          },
+          "errors": {
+            "description": "Decision ERROR: the call was allowed but failed to reach or return from the server.",
+            "minimum": 0.0,
+            "title": "Errors",
+            "type": "integer"
+          },
+          "refused": {
+            "description": "Decision BLOCK: the gateway refused the call.",
+            "minimum": 0.0,
+            "title": "Refused",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "decisions",
+          "allowed",
+          "refused",
+          "errors",
+          "bytes_returned"
+        ],
+        "title": "Totals",
         "type": "object"
       },
       "TraceSpanItem": {
@@ -9434,6 +9891,86 @@
         "summary": "Mint a Single-Use Downscoped GCP OAuth2 Token via STS Credential Access Boundary",
         "tags": [
           "Ephemeral IAM (Multi-Cloud STS Broker)"
+        ]
+      }
+    },
+    "/v1/insights/summary": {
+      "get": {
+        "operationId": "insights_summary_v1_insights_summary_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "window",
+            "required": false,
+            "schema": {
+              "default": "24h",
+              "enum": [
+                "1h",
+                "24h",
+                "7d"
+              ],
+              "title": "Window",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-RedHand-Org",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Redhand-Org"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InsightsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Insights Summary",
+        "tags": [
+          "Insights"
         ]
       }
     },

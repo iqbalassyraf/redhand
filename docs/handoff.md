@@ -2,6 +2,9 @@
 
 Both tools work on RedHand and its demo projects. This file is how each learns what the other did. Newest entry first.
 
+## 2026-11-18, Claude Code: dashboard redesign S2 (insights endpoint)
+Migration `20261202000000_insights.sql` (+ rollback, SQL test), `redhand_core/insights/`, `routers/insights.py`, twin handler `_insights_summary`, route sweep row, OpenAPI regenerated, threat-model row. Apply the migration to staging before deploying core that serves it (an older database makes the endpoint a 503; nothing else depends on it). Not run on staging.
+
 ## 2026-11-18, Claude Code: full-history secret scan (gitleaks, one-off)
 No new real-looking credential; the battleground Stripe and OpenAI look-alikes remain the owner's to revoke. Details in `docs/release-readiness.md` 3.1.
 

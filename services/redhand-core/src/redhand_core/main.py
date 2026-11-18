@@ -31,6 +31,7 @@ from redhand_core.routers.iam_broker import get_sts_downscoper, router as iam_br
 from redhand_core.routers.scim import router as scim_router
 from redhand_core.routers.state import router as state_router
 from redhand_core.routers.blackbox import router as blackbox_router
+from redhand_core.routers.insights import router as insights_router
 from redhand_core.routers.honeytokens import router as honeytokens_router
 from redhand_core.routers.mcp_scan import router as mcp_scan_router
 from redhand_core.routers.radar import router as radar_router
@@ -173,6 +174,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(usage_router)
     app.include_router(events_router)
     app.include_router(blackbox_router)
+    app.include_router(insights_router)
     app.include_router(honeytokens_router)
     app.include_router(mcp_scan_router)
     app.include_router(tool_pins_router)

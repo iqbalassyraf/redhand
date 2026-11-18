@@ -2,6 +2,8 @@
 
 ## Unreleased: Phase 3 (See things), in progress
 
+- Insights endpoint (dashboard redesign S2): `GET /v1/insights/summary?window=1h|24h|7d` (viewer and above) returns one organization's gateway decisions as aggregates: totals (allowed, refused, errors, bytes returned), a time series, top agents, tools and servers, refusal reasons, latency p50 and p95 (the whole call including the tool's time) and the agent-to-server-to-outcome flow, plus passport counts (reported-only apart from managed) and the organization's Safe Mode and Radar mode. New migration `20261202000000_insights` (an index and a read-only function, rollback tested). A failed read is a 503, never zeros. Route sweep, SQL tests and core tests, with mutants on the organization filter and the window.
+
 - Full-history secret scan (release-readiness 3.1): one-off gitleaks 8.28.0 over 383 commits, 63 findings triaged: the known battleground Stripe look-alike (owner revokes), test fixtures, demo data and placeholders. No new real-looking credential. Values never printed or committed.
 
 - Production deploy target (ADR 0028): `DEPLOY_ENV=production deploy/cloudrun/deploy.sh` deploys `redhand-core-prod` and `redhand-gateway-prod` with their own secret and identity names, at least one warm instance and `ENVIRONMENT=production`; it refuses without an explicit `PROJECT_ID` and `CONFIRM_PROJECT` equal to it. Staging is unchanged (default). Runbook `docs/runbooks/production-deploy.md`. Tested with a recording gcloud stub; nothing was deployed.
