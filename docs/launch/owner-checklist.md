@@ -15,7 +15,7 @@ One page, in order. Each line is something only the owner (or a person with the 
 8. **Support contact and status page**: fill in `docs/launch/support-and-status.md`.
 
 ## C. Build the production environment (after B5)
-9. **Supabase production project** in the chosen region. Apply every migration in `supabase/migrations/` in order (the current newest is `20261201000000_model_measured_usage`). Check row-level security is on for every table (the Supabase advisor, "Security", must show no table without it).
+9. **Supabase production project** in the chosen region. Apply every migration in `supabase/migrations/` in order (the current newest is `20261202000000_insights`). Check row-level security is on for every table (the Supabase advisor, "Security", must show no table without it).
 10. **Supabase Auth**: SMTP provider for sign-up confirmation and password reset (the built-in mailer is rate-limited and not for production), e-mail templates with your name, the redirect allow-list including the dashboard `/login` URL, password rules, e-mail confirmation on.
 11. **Secrets** into the platform's secrets manager (never `.env`, never chat): `SUPABASE_SERVICE_ROLE_KEY`, `INTERNAL_SERVICE_TOKEN` (long random, the same value for core and the gateway), `AGENT_TOKEN_SIGNING_KEY`, Telegram bot token and webhook secret if you offer the panic command. List and meanings: `docs/launch/environment-variables.md`.
 12. **Deploy core, then the gateway, then the dashboard** (`deploy/cloudrun/deploy.sh`, `docs/runbooks/cloud-run-staging.md` is the staging version). Set minimum instances so the first call after an idle period is not refused (see ADR 0028: the gateway refuses when core takes longer than 1 s).

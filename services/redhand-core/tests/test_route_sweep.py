@@ -138,6 +138,7 @@ EXPECTED_MINIMUM_ROLE: dict[str, list[tuple[Method, str]]] = {
         ("GET", "/v1/blackbox/events"),
         ("GET", "/v1/blackbox/settings"),
         ("GET", "/v1/blackbox/verify"),
+        ("GET", "/v1/insights/summary"),
         ("GET", "/v1/mcp-servers"),
         ("GET", "/v1/organization/approved-models"),
         ("GET", "/v1/organization/budget-default"),
