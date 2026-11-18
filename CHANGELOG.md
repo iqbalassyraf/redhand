@@ -2,6 +2,8 @@
 
 ## Unreleased: Phase 3 (See things), in progress
 
+- ADR 0032: operator sign-in, sign-up and Google SSO through Clerk (plan accepted), with our own operator UUIDs, no e-mail linking, a switch back to Supabase, and a dependency request for `@clerk/nextjs` 7.9.24 that awaits the owner's yes.
+
 - Dashboard redesign, docs (slice 6): `docs/design/matte-executive-dark.md` (tokens, meanings, rules, accessibility) and ADR 0031 (design system and the Insights summary).
 
 - Dashboard redesign, slices 4 and 5: **every page now uses the Matte Executive Dark design system and the shared app shell** (pine-slate rail, header band, phone menu): Passports, Black Box, Radar, MCP Scanner, Honeytokens, Coverage, Organization and the incident timeline; the sign-in pages keep their centred card. About 1,400 hard-coded colours became `rh-*` tokens (with lighter text-safe siblings of the accents so small text stays above WCAG AA), the old light palette, Roboto and all shadows are gone, form controls follow the tokens, and layout fixes keep every page free of horizontal scroll at 375 px. No copy or behaviour changed (the guarded night-brief strings still pass). New guard test `no-raw-colours.test.mjs` fails on any raw hex colour, shadow, glow, gradient, blur, pure black or white, or a page drawing its own chrome. Real-browser sweep: 4 roles x 2 widths x 9 pages, no overflow and no crash; the only console messages are the 403s core returns when a role may not read something a page asks about (existing behaviour).
