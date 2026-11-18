@@ -36,7 +36,7 @@ RedHand is a security product. Our customers trust us to stop their AI agents fr
 | 5 | Prove it | Compliance reports (PDPA, ISO/IEC 42001, questionnaires), Trust Score |
 | Parked | Higher tiers | Red Team service, Shadow Agent Finder, Cross-agent firewall, Policy marketplace |
 
-**Current phase:** Phase 4.5 (decision layer). Phases 1 to 4 are built and on `main`; Phase 4's Radar stays Watch only until its false-alarm goal and blind round 4 pass (`docs/plans/phase4-finish-plan.md`). Phase 4.5 B1 to B4b, C1 (SDK keys, telemetry trust) and D1 (onboarding, invites, tenant export and deletion, launch kit) are merged and deployed to staging (2026-11-17; the onboarding and deletion flows are not yet exercised there). B5 (model proxy) is a measured prototype behind an off switch, not approved for release (ADR 0025). Everything runs on a staging environment (Supabase Postgres, Cloud Run, a Vercel dashboard); production hosting is proposed in ADR 0028 and not decided. Do not build Phase 5 features unless explicitly asked. Design each phase so later ones can plug in, but don't implement them.
+**Current phase:** Phase 4.5 (decision layer) is complete on `main`: B1 to B5d, C1 (SDK keys, telemetry trust), D1 (onboarding, invites, tenant export and deletion, launch kit) and one audit trail (ADR 0030). Phases 1 to 4 are built; Phase 4's Radar stays Watch only until its false-alarm goal and blind round 4 pass (`docs/plans/phase4-finish-plan.md`). B5 (model proxy) is a **no-go for launch** (2026-11-18): off by default and refused in production (ADR 0025). Production hosting is decided (ADR 0028, option A: Supabase, Cloud Run, Vercel as separate production projects) and not yet built; everything runs on staging today. Remaining before launch: staging proof of the D1 and C1 flows, the production build, and a first design partner. Do not build Phase 5 features unless explicitly asked. Design each phase so later ones can plug in, but don't implement them.
 
 **Product truth we must never violate in code or copy:** RedHand only controls what flows through RedHand. Never imply protection over agents or credentials outside the gateway.
 
@@ -47,14 +47,14 @@ RedHand is a security product. Our customers trust us to stop their AI agents fr
 | AgentWall | `agentwall/` | Inline reverse proxy and firewall (:8080): MCP JSON-RPC and REST parsing, SQL/shell guardrails, schema validation | Gateway (Phase 1) |
 | STS broker | `agentwall/src/broker/` | Just-in-time credentials, TTL ≤ 60s | Short-lived credentials (Phase 1) |
 | MCP manifest auditor | `agentwall/src/firewall/`, `POST /v1/mcp/vet` | Pre-install MCP server vetting | MCP Scanner (Phase 4) |
-| WORM ledger | `agentwall/src/telemetry/` | SHA-256 hash-chained audit records, `GET /v1/audit/verify` | Audit trail, Black Box Recorder (Phase 3) |
+| Black Box | `services/redhand-core/` (`blackbox/`), recorder in `agentwall/src/gateway/recorder.py` | Per-organization, append-only, SHA-256 hash-chained decisions; `GET /v1/blackbox/verify` | Audit trail, Black Box Recorder (Phase 3) |
 | redhand-core | `services/redhand-core/` | FastAPI control plane (:8000), HITL four-eyes state machine, SCIM | Control actions, kill switch backend (Phase 1) |
 | redhand-ui | `apps/redhand-ui/` | Next.js 15 command center | Dashboard (Phase 1) |
 | redhand-sdk | `packages/redhand-sdk/` | Python SDK, `@guard`, `redhand scan`, `redhand fuzz` | Red Team (parked) |
 | redhand-sidecar | `packages/redhand-sidecar/` | In-VPC sidecar, Helm | Self-hosted / higher tier |
 | battleground | `battleground/` | Red vs. blue simulation | Demos and testing only |
 
-**Phase 1 gaps from the original review (now built; see `docs/briefing.md` and the ADRs):** the Agent Passport as a stored entity, freeze / revoke / freeze-all, multi-tenancy with tenant isolation, and persistence in Postgres. Still open: production (as opposed to staging) hosting and launch checks, and the gateway's own in-memory ledger remaining separate from the Black Box.
+**Phase 1 gaps from the original review (now built; see `docs/briefing.md` and the ADRs):** the Agent Passport as a stored entity, freeze / revoke / freeze-all, multi-tenancy with tenant isolation, and persistence in Postgres. Still open: production (as opposed to staging) hosting and launch checks.
 
 **Positioning:** much of the current build (SCIM, multi-cloud STS, Helm, OCSF) targets enterprise buyers. The Starter Suite is a simplified, hosted slice of the same engine. Don't remove enterprise capabilities; gate them by tier instead.
 
@@ -401,7 +401,7 @@ Be concise. Don't narrate every step; don't pad.
 3. Revoke one agent → its next call fails within the revocation SLO.
 4. Freeze all → every agent in the tenant is denied; audit log records the action.
 
-**Phase 1 builds on:** AgentWall (enforcement), the STS broker (≤ 60s tokens), `redhand-core` (control actions, HITL), the WORM ledger (audit entries) and `redhand-ui` (dashboard). New work is mainly the Passport entity, freeze/revoke/freeze-all, tenant isolation, and wiring passport status into every AgentWall decision.
+**Phase 1 builds on:** AgentWall (enforcement), the STS broker (≤ 60s tokens), `redhand-core` (control actions, HITL), the Black Box (audit entries) and `redhand-ui` (dashboard). New work is mainly the Passport entity, freeze/revoke/freeze-all, tenant isolation, and wiring passport status into every AgentWall decision.
 
 **Open decisions (don't assume; ask):** how agents currently authenticate to AgentWall; production database; tenancy model; how delegated-identity headers are trusted; which STS providers are real vs simulated; hosting for the Starter Suite; which enterprise features are hidden in the Starter tier.
 

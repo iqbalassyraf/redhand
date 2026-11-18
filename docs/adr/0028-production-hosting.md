@@ -1,6 +1,6 @@
 # ADR 0028: Production hosting (Phase 4.5 D1, decision for the owner)
 
-**Status:** Proposed (2026-11-17). Written by Claude Code so the owner can accept it, change it or reject it; nothing is deployed and no account was touched. **Every price and region claim below is unverified**: fill the cost
+**Status:** Accepted by the owner, option A (2026-11-18). Prices are still blank: the owner fills the cost table from each vendor's price page, with the date, before the first invoice. Proposed 2026-11-17. Written by Claude Code so the owner can accept it, change it or reject it; nothing is deployed and no account was touched. **Every price and region claim below is unverified**: fill the cost
 table from each vendor's price page, with the date, before accepting. CLAUDE.md lists production hosting as undecided ("to confirm in review").
 
 ## Context
@@ -39,7 +39,7 @@ Per agent = monthly cost divided by the number of paying agents at the break-eve
 | **Total** | | | |
 Gateway work per call is a lookup and rules, no model calls (CLAUDE.md section 8); the per-agent variable cost is database writes (Black Box events, traces) and is bounded by the retention jobs. Measure it from staging before pricing.
 
-## Decision (proposed)
+## Decision (accepted 2026-11-18)
 Option A. Two environments only (staging, production), same code, different projects and secrets. Region for data: Singapore for Cloud Run (`asia-southeast1`, already used) and the nearest Supabase region; no hardcoded region in code.
 
 ## Consequences and open points

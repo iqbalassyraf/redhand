@@ -72,6 +72,9 @@ limit below: until per-tenant, envelope-encrypted key custody exists, the proxy 
 | 5 | Data-residency and PDPA position for carrying prompts and completions | **Not done.** Carrying content in transit is not the same as storing it; the position must say so and say what is logged (counts only, today). |
 | 6 | Evidence of customer pull | **Not available to me.** The owner's call. |
 
+## Decision for launch (owner, 2026-11-18): no-go
+The proxy is **not part of the launch**. It stays off by default and refused in production (the startup guard above); Black Box rows for proxied calls are not built. ADR 0029 (key custody) stays Draft. Revisit when a design partner asks for model-level control.
+
 ## Decision papers (B5d, 2026-11-18, all drafts)
 Criteria 3 to 5 have draft papers for the owner: `docs/launch/model-proxy-uptime-and-bypass.md`, `docs/adr/0029-model-proxy-provider-key-custody.md`, `docs/launch/model-proxy-pdpa-position.md` (for legal review) and `docs/launch/model-proxy-cost-model.md` (prices blank). They decide nothing and the startup refusal stays.
 
