@@ -2,6 +2,9 @@
 
 Both tools work on RedHand and its demo projects. This file is how each learns what the other did. Newest entry first.
 
+## 2026-11-18, Claude Code: picomatch accepted, CI dev-audit gate loosened (owner approved)
+Main's Dashboard job was red since the B5c merge (`npm audit` also checked dev dependencies; picomatch has no fixed release). `.github/workflows/ci.yml`: production audit gates (`--omit=dev`), dev audit informational. Revert when picomatch > 4.0.7 exists. Details in `docs/release-readiness.md` 3.2.
+
 ## 2026-11-18, Claude Code: pre-release pass, second run (docs only)
 Results in `docs/release-readiness.md` section 3.2. Bandit 0 new, Semgrep Python+TypeScript 0 new, pip-audit clean, npm audit clean for production (10 high dev-only, `picomatch` via Tailwind 3), licences: no copyleft in Python, LGPL `sharp-libvips` and CC-BY `caniuse-lite` in npm (owner/lawyer note), OpenAPI in sync.
 Not run: full-history secret scan, CodeQL, staging scans. Owner decisions: Tailwind 4 or a `picomatch` override; the licence for our own packages.
