@@ -2,6 +2,14 @@
 
 Operators can sign in, sign up and use **Google** through Clerk instead of Supabase Auth. Supabase stays the database. This is a switch: the default is Supabase, and going back is a configuration change plus a deploy. Nothing here has been run against a real Clerk instance by Claude Code; Antigravity's Clerk brief (`docs/testing/briefs/2026-11-19-clerk.md`) is the first real test.
 
+## The development instance (set up 2026-11-18)
+Clerk application "RedHand", development instance. Public values only (none is a secret):
+- Issuer / Frontend API: `https://in-flamingo-5696.clerk.accounts.dev`
+- Publishable key: `pk_test_aW4tZmxhbWluZ28tNTY5Ni5jbGVyay5hY2NvdW50cy5kZXYk`
+- Already set through the connection and read back: Google enabled (Clerk's shared development credentials), e-mail codes, **username not required**, **Clerk Organizations off** (RedHand keeps its own organizations; with them on, Clerk forces an organization choice after sign-in).
+- **Still to do by hand:** the JWT template `redhand` below (the connection cannot create templates).
+- A production instance needs its own Google OAuth client, a domain and DNS, and the same settings again.
+
 ## What you set up in Clerk (owner)
 1. **A Clerk application** (use a *development* instance first, a *production* one for launch). Enable **Email** and **Google** (Configure, SSO connections). In production, Google needs your own OAuth client (Clerk's guide), not Clerk's shared development one.
 2. **Require verified e-mail** for sign-up (Configure, Email, Verification). RedHand refuses a token whose e-mail is not verified.
