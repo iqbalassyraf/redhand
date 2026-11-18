@@ -2,6 +2,9 @@
 
 Both tools work on RedHand and its demo projects. This file is how each learns what the other did. Newest entry first.
 
+## 2026-11-18, Claude Code: dashboard redesign S1 (tokens, shell, primitives)
+Plan in the session plan file (S1 to S6). S1 adds `src/app/globals.css` tokens, `tailwind.config.ts` `rh-*`, fonts in `layout.tsx`, `src/components/shell/AppShell.tsx`, `src/components/ui/primitives.tsx`, `src/lib/nav.ts`, tests `tokens.test.mjs` and `nav.test.mjs`. Real-browser check of the shell at 1280 and 375 px: no overflow, no console errors. No page changed yet.
+
 ## 2026-11-18, Claude Code: full-history secret scan (gitleaks, one-off)
 No new real-looking credential; the battleground Stripe and OpenAI look-alikes remain the owner's to revoke. Details in `docs/release-readiness.md` 3.1.
 
