@@ -160,8 +160,14 @@ jobs:
       - name: Install locked dependencies
         run: npm ci --no-audit --no-fund
 
-      # Fails on a known high or critical vulnerability in a locked dependency. Same note as the Python audit: new advisories can turn it red.
-      - name: Dependency audit (npm audit, high and above)
+      # Fails on a known high or critical vulnerability in a dependency that SHIPS (production tree). Same note as the Python audit: new advisories can turn it red.
+      # Dev dependencies are audited in the next step but do not fail the build: the picomatch ReDoS (GHSA-fc5q-39xc-vjpf) has no patched release and only reaches
+      # build tooling (tailwindcss 3). Accepted by the owner 2026-11-18; restore the strict gate when a fixed picomatch exists (docs/release-readiness.md 3.2).
+      - name: Dependency audit (npm audit, production, high and above)
+        run: npm audit --omit=dev --audit-level=high
+
+      - name: Dependency audit (npm audit, dev dependencies, informational)
+        continue-on-error: true
         run: npm audit --audit-level=high
 
       - name: Type-check

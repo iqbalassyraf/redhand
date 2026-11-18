@@ -6,6 +6,8 @@
 
 - Test hygiene: the honeytoken end-to-end tests no longer depend on which alert reaches the phone last (a background tool-pinning alert can arrive in either order; seen failing on CI once).
 
+- CI: the dashboard job's `npm audit` gate now covers production dependencies only (`--omit=dev`, high and above); a second, non-failing step prints the dev audit. Reason: the `picomatch` ReDoS (GHSA-fc5q-39xc-vjpf, build tooling via Tailwind 3) has no patched release and had turned main red. Owner-approved weakening, to be reverted when a fixed picomatch exists.
+
 - Pre-release pass, second run (docs only): Bandit, Semgrep (Python and TypeScript rules), `pip-audit`, `npm audit`, licence and OpenAPI checks recorded in `docs/release-readiness.md`. No new finding; one accepted dev-only advisory (`picomatch` via Tailwind 3) and two licence notes for the owner.
 
 - Phase 4.5 B5d, decision papers for the model proxy (docs only, all drafts, nothing enabled): ADR 0029 (per-tenant provider-key custody), an uptime and bypass paper, a content-in-transit position marked for legal review, and a cost model with blank prices. A test keeps the markers (draft, legal review, not a decision, blank prices) in place.
