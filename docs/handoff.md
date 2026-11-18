@@ -2,6 +2,9 @@
 
 Both tools work on RedHand and its demo projects. This file is how each learns what the other did. Newest entry first.
 
+## 2026-11-18, Claude Code: production deploy target (not run)
+`deploy/cloudrun/deploy.sh` gains `DEPLOY_ENV=production` (names `-prod`, min 1, ENVIRONMENT=production, explicit and confirmed project). Staging default unchanged. Runbook `docs/runbooks/production-deploy.md`. Owner runs it; Claude Code never does.
+
 ## 2026-11-18, Claude Code: one audit trail (ADR 0030), gateway ledger retired
 Removed `agentwall/src/telemetry/audit_logger.py`, `/v1/audit/logs`, `/v1/audit/verify`, `AGENTWALL_AUDIT_LOG_FILE`. Black Box is the only trail. Tests moved to the recorder (`Harness.decisions()`), e2e done-tests read `agent_events`. Smoke scripts expect 404 at the old path: deploy the new gateway BEFORE running them. Night brief J2 now uses "Verify chain" (+ J2b curl expects 404). Not run: staging. CLAUDE.md wording proposed in the PR, not applied.
 
