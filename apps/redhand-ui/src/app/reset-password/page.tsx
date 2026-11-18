@@ -54,26 +54,26 @@ export default function ResetPasswordPage() {
   }
 
   const input =
-    "h-[38px] rounded-[8px] border border-[#E5E5E5] px-3 text-[14px] focus:border-[#0F0F0F] focus:outline-none";
+    "h-[38px] rounded-[8px] border border-rh-hairline px-3 text-[14px] focus:border-rh-strong focus:outline-none";
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-[#F8F8F8] px-4">
-      <div className="w-full max-w-[380px] rounded-[12px] border border-[#E5E5E5] bg-[#FFFFFF] p-6">
+    <main className="flex min-h-screen items-center justify-center bg-rh-subtle px-4">
+      <div className="w-full max-w-[380px] rounded-[12px] border border-rh-hairline bg-rh-card p-6">
         <div className="mb-6 flex items-center gap-2">
-          <div className="flex h-7 w-9 items-center justify-center rounded-[8px] bg-[#FF0000]">
-            <Hand className="h-4 w-4 text-[#FFFFFF]" />
+          <div className="flex h-7 w-9 items-center justify-center rounded-[8px] bg-rh-chrome-active">
+            <Hand className="h-4 w-4 text-rh-canvas" />
           </div>
           <span className="text-[20px] font-bold tracking-tight">RedHand</span>
         </div>
 
-        {stage === "reading" && <p className="text-[13px] text-[#606060]">Checking your link…</p>}
+        {stage === "reading" && <p className="text-[13px] text-rh-text-2">Checking your link…</p>}
 
         {stage === "invalid" && (
           <div className="flex flex-col gap-3">
-            <p role="alert" className="text-[13px] text-[#CC0000]">
+            <p role="alert" className="text-[13px] text-rh-crimson-text">
               This reset link is invalid or has expired. Reset links work once.
             </p>
-            <a href="/login" className="text-[13px] text-[#606060] underline">
+            <a href="/login" className="text-[13px] text-rh-text-2 underline">
               Request a new link from the sign-in page
             </a>
           </div>
@@ -81,7 +81,7 @@ export default function ResetPasswordPage() {
 
         {stage === "form" && (
           <form onSubmit={submit} className="flex flex-col gap-3">
-            <label className="text-[12px] font-semibold text-[#606060]" htmlFor="new-password">
+            <label className="text-[12px] font-semibold text-rh-text-2" htmlFor="new-password">
               New password ({MIN_PASSWORD_LENGTH}+ characters)
             </label>
             <input
@@ -93,7 +93,7 @@ export default function ResetPasswordPage() {
               onChange={(e) => setPassword(e.target.value)}
               className={input}
             />
-            <label className="text-[12px] font-semibold text-[#606060]" htmlFor="confirm-password">
+            <label className="text-[12px] font-semibold text-rh-text-2" htmlFor="confirm-password">
               Confirm new password
             </label>
             <input
@@ -108,7 +108,7 @@ export default function ResetPasswordPage() {
             <button
               type="submit"
               disabled={busy}
-              className="mt-2 h-[38px] rounded-full bg-[#0F0F0F] text-[14px] font-semibold text-[#FFFFFF] disabled:opacity-50"
+              className="mt-2 h-[38px] rounded-full bg-rh-teal text-[14px] font-semibold text-rh-canvas disabled:opacity-50"
             >
               Set new password
             </button>
@@ -117,7 +117,7 @@ export default function ResetPasswordPage() {
 
         {stage === "done" && (
           <div className="flex flex-col gap-3">
-            <p role="status" className="text-[13px] text-[#0F0F0F]">
+            <p role="status" className="text-[13px] text-rh-text">
               Your password was changed and every other session was signed out.
             </p>
             <a href="/login" className="text-[13px] font-semibold underline">
@@ -127,7 +127,7 @@ export default function ResetPasswordPage() {
         )}
 
         {error && (
-          <p role="alert" className="mt-4 text-[13px] text-[#CC0000]">
+          <p role="alert" className="mt-4 text-[13px] text-rh-crimson-text">
             {error}
           </p>
         )}

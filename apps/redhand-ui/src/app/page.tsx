@@ -227,7 +227,7 @@ export default function InsightsPage() {
                 </div>
               </Card>
 
-              <div className="grid gap-4 lg:grid-cols-3">
+              <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
                 <ChartCard
                   title="Gateway decisions over time" subtitle="Allowed, refused and errors" summary={seriesSummary(summary)}
                   table={{ headers: ["Time (UTC)", "Allowed", "Refused", "Errors"], rows: summary.series.map((p, i) => [labels[i], formatCount(p.allowed), formatCount(p.refused), formatCount(p.errors)]) }}

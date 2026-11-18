@@ -445,10 +445,10 @@ export default function RedHandCommandCenterPage() {
   const edges: Edge[] = useMemo(() => {
     const mainEdgeColor =
       activeGateVerdict === "blocked"
-        ? "#FF0000"
+        ? "var(--rh-crimson)"
         : activeGateVerdict === "hitl_paused"
-          ? "#FB8C00"
-          : "#2BA640";
+          ? "var(--rh-ochre)"
+          : "var(--rh-teal)";
 
     return [
       {
@@ -457,10 +457,10 @@ export default function RedHandCommandCenterPage() {
         target: "agent-finops",
         animated: true,
         style: {
-          stroke: activeGateVerdict === "blocked" ? "#FF0000" : "#606060",
+          stroke: activeGateVerdict === "blocked" ? "var(--rh-crimson)" : "var(--rh-text-secondary)",
           strokeWidth: 1.8,
         },
-        markerEnd: { type: MarkerType.ArrowClosed, color: "#606060" },
+        markerEnd: { type: MarkerType.ArrowClosed, color: "var(--rh-text-secondary)" },
       },
       {
         id: "e-agent-guard",
@@ -473,8 +473,8 @@ export default function RedHandCommandCenterPage() {
             : activeGateVerdict === "hitl_paused"
               ? "FOUR-EYES PAUSED"
               : "AST APPROVED (<0.2ms)",
-        labelStyle: { fill: "#0F0F0F", fontWeight: 600, fontSize: 11 },
-        labelBgStyle: { fill: "#F2F2F2", fillOpacity: 1 },
+        labelStyle: { fill: "var(--rh-text-primary)", fontWeight: 600, fontSize: 11 },
+        labelBgStyle: { fill: "var(--rh-surface-elevated)", fillOpacity: 1 },
         style: { stroke: mainEdgeColor, strokeWidth: 2 },
         markerEnd: { type: MarkerType.ArrowClosed, color: mainEdgeColor },
       },
@@ -487,10 +487,10 @@ export default function RedHandCommandCenterPage() {
           activeGateVerdict === "allow"
             ? "JIT STS DISPATCHED (30s)"
             : "ZERO CREDENTIAL DISPATCHED",
-        labelStyle: { fill: "#606060", fontWeight: 500, fontSize: 11 },
-        labelBgStyle: { fill: "#F2F2F2", fillOpacity: 1 },
+        labelStyle: { fill: "var(--rh-text-secondary)", fontWeight: 500, fontSize: 11 },
+        labelBgStyle: { fill: "var(--rh-surface-elevated)", fillOpacity: 1 },
         style: {
-          stroke: activeGateVerdict === "allow" ? "#2BA640" : "#E5E5E5",
+          stroke: activeGateVerdict === "allow" ? "var(--rh-teal)" : "var(--rh-border-hairline)",
           strokeWidth: 2,
           strokeDasharray: activeGateVerdict === "allow" ? undefined : "5 4",
         },
@@ -840,10 +840,10 @@ export default function RedHandCommandCenterPage() {
   if (!session) return null;
 
   return (
-    <div className="flex h-screen w-screen flex-col overflow-hidden bg-[#FFFFFF] text-[#0F0F0F] select-none">
+    <div className="flex h-screen w-screen flex-col overflow-hidden bg-rh-card text-rh-text select-none">
       <div
         role="status"
-        className="shrink-0 bg-[#FFF4E5] px-4 py-1.5 text-center text-[12px] font-medium text-[#8A4B00]"
+        className="shrink-0 bg-rh-ochre-wash px-4 py-1.5 text-center text-[12px] font-medium text-rh-ochre"
       >
         {engineConnected
           ? "Live: agents and the review queue come from redhand-core. Traces, the canvas and simulations are sample data."
@@ -851,31 +851,31 @@ export default function RedHandCommandCenterPage() {
         Use the Passports page for real control actions.
       </div>
       {/* 1. TOP NAVIGATION BAR */}
-      <header className="flex h-[56px] shrink-0 items-center justify-between border-b border-[#E5E5E5] bg-[#FFFFFF] px-4">
+      <header className="flex h-[56px] shrink-0 items-center justify-between border-b border-rh-hairline bg-rh-card px-4">
         <div className="flex items-center gap-4">
           <button
-            className="flex h-[40px] w-[40px] items-center justify-center rounded-full text-[#606060] hover:bg-[#F2F2F2]"
+            className="flex h-[40px] w-[40px] items-center justify-center rounded-full text-rh-text-2 hover:bg-rh-elevated"
             aria-label="Menu"
           >
-            <Menu className="h-5 w-5 text-[#0F0F0F]" />
+            <Menu className="h-5 w-5 text-rh-text" />
           </button>
 
           <div className="flex items-center gap-2">
-            <div className="flex h-7 w-9 items-center justify-center rounded-[8px] bg-[#FF0000]">
-              <Hand className="h-4 w-4 text-[#FFFFFF]" />
+            <div className="flex h-7 w-9 items-center justify-center rounded-[8px] bg-rh-crimson">
+              <Hand className="h-4 w-4 text-rh-canvas" />
             </div>
-            <span className="text-[20px] leading-[28px] font-bold tracking-tight text-[#0F0F0F]">
+            <span className="text-[20px] leading-[28px] font-bold tracking-tight text-rh-text">
               RedHand
             </span>
-            <span className="text-[11px] font-bold uppercase tracking-wider text-[#606060] bg-[#F2F2F2] px-1.5 py-0.5 rounded">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-rh-text-2 bg-rh-elevated px-1.5 py-0.5 rounded">
               ASPM
             </span>
           </div>
           <nav className="flex gap-1 text-[13px]">
-            <a href="/passports" className="whitespace-nowrap rounded-full px-3 py-1.5 font-medium text-[#606060] hover:bg-[#F2F2F2]">
+            <a href="/passports" className="whitespace-nowrap rounded-full px-3 py-1.5 font-medium text-rh-text-2 hover:bg-rh-elevated">
               Passports
             </a>
-            <span className="whitespace-nowrap rounded-full bg-[#0F0F0F] px-3 py-1.5 font-semibold text-[#FFFFFF]">
+            <span className="whitespace-nowrap rounded-full bg-rh-teal px-3 py-1.5 font-semibold text-rh-canvas">
               Command center
             </span>
           </nav>
@@ -888,14 +888,14 @@ export default function RedHandCommandCenterPage() {
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Filter traces by agent, tool, user identity, or cloud resource..."
-            className="h-[38px] flex-1 rounded-l-full border border-[#E5E5E5] bg-[#FFFFFF] px-4 text-[13px] text-[#0F0F0F] placeholder-[#606060] focus:border-[#0F0F0F] focus:outline-none"
+            className="h-[38px] flex-1 rounded-l-full border border-rh-hairline bg-rh-card px-4 text-[13px] text-rh-text placeholder-rh-muted focus:border-rh-strong focus:outline-none"
           />
           <button
             onClick={() => setSearchQuery("")}
-            className="flex h-[38px] w-[56px] items-center justify-center rounded-r-full border border-l-0 border-[#E5E5E5] bg-[#F8F8F8] hover:bg-[#F2F2F2]"
+            className="flex h-[38px] w-[56px] items-center justify-center rounded-r-full border border-l-0 border-rh-hairline bg-rh-subtle hover:bg-rh-elevated"
             aria-label="Search"
           >
-            <Search className="h-4 w-4 text-[#606060]" />
+            <Search className="h-4 w-4 text-rh-text-2" />
           </button>
         </div>
 
@@ -906,36 +906,36 @@ export default function RedHandCommandCenterPage() {
               signOut();
               window.location.href = "/login";
             }}
-            className="whitespace-nowrap text-[12px] text-[#606060] hover:underline"
+            className="whitespace-nowrap text-[12px] text-rh-text-2 hover:underline"
             title={session.email}
           >
             Sign out
           </button>
 
-          <span className="inline-flex h-[34px] items-center gap-1.5 rounded-full bg-[#F2F2F2] px-3.5 text-[12px] font-medium text-[#0F0F0F]">
+          <span className="inline-flex h-[34px] items-center gap-1.5 rounded-full bg-rh-elevated px-3.5 text-[12px] font-medium text-rh-text">
             {engineConnected ? (
               <>
-                <Radio className="h-3.5 w-3.5 text-[#2BA640]" />
+                <Radio className="h-3.5 w-3.5 text-rh-teal-text" />
                 Live Engine
               </>
             ) : (
               <>
-                <ShieldCheck className="h-4 w-4 text-[#2BA640]" />
+                <ShieldCheck className="h-4 w-4 text-rh-teal-text" />
                 AgentWall Active
               </>
             )}
           </span>
 
           {/* Enterprise SSO User & Delegated RBAC Selector */}
-          <div className="relative flex items-center gap-2 rounded-full border border-[#E5E5E5] bg-[#F2F2F2] py-1 px-3 hover:bg-[#E5E5E5] transition-colors cursor-pointer">
-            <div className="flex h-6 w-6 items-center justify-center rounded-full bg-[#0F0F0F] text-[10px] font-bold text-[#FFFFFF]">
+          <div className="relative flex items-center gap-2 rounded-full border border-rh-hairline bg-rh-elevated py-1 px-3 hover:bg-rh-strong transition-colors cursor-pointer">
+            <div className="flex h-6 w-6 items-center justify-center rounded-full bg-rh-teal text-[10px] font-bold text-rh-canvas">
               {currentUser.avatarInitials}
             </div>
             <div className="flex flex-col text-left">
-              <span className="text-[12px] font-semibold text-[#0F0F0F] leading-tight">
+              <span className="text-[12px] font-semibold text-rh-text leading-tight">
                 {currentUser.name}
               </span>
-              <span className="text-[9px] uppercase tracking-wider text-[#606060] font-mono">
+              <span className="text-[9px] uppercase tracking-wider text-rh-text-2 font-mono">
                 {currentUser.role.replace("_", " ")} [{currentUser.delegatedRoles.join(", ")}]
               </span>
             </div>
@@ -959,12 +959,12 @@ export default function RedHandCommandCenterPage() {
           </div>
 
           <button
-            className="relative flex h-[38px] w-[38px] items-center justify-center rounded-full text-[#606060] hover:bg-[#F2F2F2]"
+            className="relative flex h-[38px] w-[38px] items-center justify-center rounded-full text-rh-text-2 hover:bg-rh-elevated"
             aria-label="Notifications"
           >
-            <Bell className="h-5 w-5 text-[#0F0F0F]" />
+            <Bell className="h-5 w-5 text-rh-text" />
             {pendingHitlCount > 0 && (
-              <span className="absolute right-1 top-1 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-[#FF0000] px-1 text-[10px] font-bold text-[#FFFFFF]">
+              <span className="absolute right-1 top-1 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-rh-crimson px-1 text-[10px] font-bold text-rh-canvas">
                 {pendingHitlCount}
               </span>
             )}
@@ -973,7 +973,7 @@ export default function RedHandCommandCenterPage() {
       </header>
 
       {/* 2. CHIP FILTER BAR */}
-      <div className="flex items-center justify-between border-b border-[#E5E5E5] bg-[#FFFFFF] px-4 py-2">
+      <div className="flex items-center justify-between border-b border-rh-hairline bg-rh-card px-4 py-2">
         <div className="flex items-center gap-1.5 overflow-x-auto">
           {FILTER_CHIPS.map((chip) => {
             const isSelected = selectedChip === chip;
@@ -983,8 +983,8 @@ export default function RedHandCommandCenterPage() {
                 onClick={() => setSelectedChip(chip)}
                 className={`rounded-full px-3 py-1 text-[13px] leading-[18px] font-medium transition-colors whitespace-nowrap ${
                   isSelected
-                    ? "bg-[#0F0F0F] text-[#FFFFFF]"
-                    : "bg-[#F2F2F2] text-[#0F0F0F] hover:bg-[#E5E5E5]"
+                    ? "bg-rh-teal text-rh-canvas"
+                    : "bg-rh-elevated text-rh-text hover:bg-rh-strong"
                 }`}
               >
                 {chip}
@@ -993,23 +993,23 @@ export default function RedHandCommandCenterPage() {
           })}
         </div>
 
-        <div className="hidden lg:flex items-center gap-2 text-[12px] text-[#606060]">
+        <div className="hidden lg:flex items-center gap-2 text-[12px] text-rh-text-2">
           <span
             className={`h-2 w-2 rounded-full ${
               activeGateVerdict === "blocked"
-                ? "bg-[#FF0000]"
+                ? "bg-rh-crimson"
                 : activeGateVerdict === "hitl_paused"
-                  ? "bg-[#FB8C00]"
-                  : "bg-[#2BA640]"
+                  ? "bg-rh-ochre"
+                  : "bg-rh-teal"
             }`}
           />
-          <span className="font-medium text-[#0F0F0F]">{statusMessage}</span>
+          <span className="font-medium text-rh-text">{statusMessage}</span>
         </div>
       </div>
 
       {/* 3. MIDDLE WORKSPACE: CANVAS + INTERVENTION RAIL */}
       <div className="flex flex-1 min-h-0 overflow-hidden">
-        <div className="relative flex-1 h-full bg-[#F9F9F9]">
+        <div className="relative flex-1 h-full bg-rh-subtle">
           <ReactFlow
             nodes={nodes}
             edges={edges}
@@ -1018,7 +1018,7 @@ export default function RedHandCommandCenterPage() {
             fitViewOptions={{ padding: 0.16 }}
             proOptions={{ hideAttribution: true }}
           >
-            <Background color="#D4D4D4" gap={20} size={1} />
+            <Background color="var(--rh-border-hairline)" gap={20} size={1} />
             <Controls position="bottom-left" />
           </ReactFlow>
         </div>

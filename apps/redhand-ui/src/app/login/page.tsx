@@ -39,11 +39,11 @@ export default function LoginPage() {
   }
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-[#F8F8F8] px-4">
-      <div className="w-full max-w-[380px] rounded-[12px] border border-[#E5E5E5] bg-[#FFFFFF] p-6">
+    <main className="flex min-h-screen items-center justify-center bg-rh-subtle px-4">
+      <div className="w-full max-w-[380px] rounded-[12px] border border-rh-hairline bg-rh-card p-6">
         <div className="mb-6 flex items-center gap-2">
-          <div className="flex h-7 w-9 items-center justify-center rounded-[8px] bg-[#FF0000]">
-            <Hand className="h-4 w-4 text-[#FFFFFF]" />
+          <div className="flex h-7 w-9 items-center justify-center rounded-[8px] bg-rh-chrome-active">
+            <Hand className="h-4 w-4 text-rh-canvas" />
           </div>
           <span className="text-[20px] font-bold tracking-tight">RedHand</span>
         </div>
@@ -68,7 +68,7 @@ export default function LoginPage() {
             }}
             className="flex flex-col gap-3"
           >
-            <label className="text-[12px] font-semibold text-[#606060]" htmlFor="reset-email">
+            <label className="text-[12px] font-semibold text-rh-text-2" htmlFor="reset-email">
               Email
             </label>
             <input
@@ -78,12 +78,12 @@ export default function LoginPage() {
               required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="h-[38px] rounded-[8px] border border-[#E5E5E5] px-3 text-[14px] focus:border-[#0F0F0F] focus:outline-none"
+              className="h-[38px] rounded-[8px] border border-rh-hairline px-3 text-[14px] focus:border-rh-strong focus:outline-none"
             />
             <button
               type="submit"
               disabled={busy}
-              className="mt-2 h-[38px] rounded-full bg-[#0F0F0F] text-[14px] font-semibold text-[#FFFFFF] disabled:opacity-50"
+              className="mt-2 h-[38px] rounded-full bg-rh-teal text-[14px] font-semibold text-rh-canvas disabled:opacity-50"
             >
               Send reset link
             </button>
@@ -94,7 +94,7 @@ export default function LoginPage() {
                 setError(null);
                 setNotice(null);
               }}
-              className="text-[13px] text-[#606060] underline"
+              className="text-[13px] text-rh-text-2 underline"
             >
               Back to sign in
             </button>
@@ -123,19 +123,19 @@ export default function LoginPage() {
             className="flex flex-col gap-3"
           >
             <h1 className="text-[15px] font-semibold">Create an account</h1>
-            <label className="text-[12px] font-semibold text-[#606060]" htmlFor="signup-email">Email</label>
+            <label className="text-[12px] font-semibold text-rh-text-2" htmlFor="signup-email">Email</label>
             <input id="signup-email" type="email" autoComplete="username" required value={email} onChange={(e) => setEmail(e.target.value)}
-              className="h-[38px] rounded-[8px] border border-[#E5E5E5] px-3 text-[14px] focus:border-[#0F0F0F] focus:outline-none" />
-            <label className="text-[12px] font-semibold text-[#606060]" htmlFor="signup-password">Password (at least 10 characters)</label>
+              className="h-[38px] rounded-[8px] border border-rh-hairline px-3 text-[14px] focus:border-rh-strong focus:outline-none" />
+            <label className="text-[12px] font-semibold text-rh-text-2" htmlFor="signup-password">Password (at least 10 characters)</label>
             <input id="signup-password" type="password" autoComplete="new-password" required minLength={10} value={password} onChange={(e) => setPassword(e.target.value)}
-              className="h-[38px] rounded-[8px] border border-[#E5E5E5] px-3 text-[14px] focus:border-[#0F0F0F] focus:outline-none" />
-            <p className="text-[12px] text-[#606060]">
+              className="h-[38px] rounded-[8px] border border-rh-hairline px-3 text-[14px] focus:border-rh-strong focus:outline-none" />
+            <p className="text-[12px] text-rh-text-2">
               An account lets you join a team you were invited to, or create an organization with a sign-up code. RedHand is invite-only for now.
             </p>
-            <button type="submit" disabled={busy} className="mt-1 h-[38px] rounded-full bg-[#0F0F0F] text-[14px] font-semibold text-[#FFFFFF] disabled:opacity-50">
+            <button type="submit" disabled={busy} className="mt-1 h-[38px] rounded-full bg-rh-teal text-[14px] font-semibold text-rh-canvas disabled:opacity-50">
               Create account
             </button>
-            <button type="button" onClick={() => { setMode("signin"); setError(null); }} className="text-[13px] text-[#606060] underline">Back to sign in</button>
+            <button type="button" onClick={() => { setMode("signin"); setError(null); }} className="text-[13px] text-rh-text-2 underline">Back to sign in</button>
           </form>
         ) : supabaseConfigured ? (
           <form
@@ -145,7 +145,7 @@ export default function LoginPage() {
             }}
             className="flex flex-col gap-3"
           >
-            <label className="text-[12px] font-semibold text-[#606060]" htmlFor="email">
+            <label className="text-[12px] font-semibold text-rh-text-2" htmlFor="email">
               Email
             </label>
             <input
@@ -155,9 +155,9 @@ export default function LoginPage() {
               required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="h-[38px] rounded-[8px] border border-[#E5E5E5] px-3 text-[14px] focus:border-[#0F0F0F] focus:outline-none"
+              className="h-[38px] rounded-[8px] border border-rh-hairline px-3 text-[14px] focus:border-rh-strong focus:outline-none"
             />
-            <label className="text-[12px] font-semibold text-[#606060]" htmlFor="password">
+            <label className="text-[12px] font-semibold text-rh-text-2" htmlFor="password">
               Password
             </label>
             <input
@@ -167,12 +167,12 @@ export default function LoginPage() {
               required
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="h-[38px] rounded-[8px] border border-[#E5E5E5] px-3 text-[14px] focus:border-[#0F0F0F] focus:outline-none"
+              className="h-[38px] rounded-[8px] border border-rh-hairline px-3 text-[14px] focus:border-rh-strong focus:outline-none"
             />
             <button
               type="submit"
               disabled={busy}
-              className="mt-2 h-[38px] rounded-full bg-[#0F0F0F] text-[14px] font-semibold text-[#FFFFFF] disabled:opacity-50"
+              className="mt-2 h-[38px] rounded-full bg-rh-teal text-[14px] font-semibold text-rh-canvas disabled:opacity-50"
             >
               Sign in
             </button>
@@ -182,7 +182,7 @@ export default function LoginPage() {
                 setMode("forgot");
                 setError(null);
               }}
-              className="text-[13px] text-[#606060] underline"
+              className="text-[13px] text-rh-text-2 underline"
             >
               Forgot password?
             </button>
@@ -193,14 +193,14 @@ export default function LoginPage() {
                 setError(null);
                 setNotice(null);
               }}
-              className="text-[13px] text-[#606060] underline"
+              className="text-[13px] text-rh-text-2 underline"
             >
               Create an account
             </button>
           </form>
         ) : (
           <div className="flex flex-col gap-2">
-            <p className="mb-2 rounded-[8px] bg-[#FFF4E5] p-3 text-[12px] text-[#8A4B00]">
+            <p className="mb-2 rounded-[8px] bg-rh-ochre-wash p-3 text-[12px] text-rh-ochre">
               Development sign-in. Supabase is not configured, so redhand-core must be running
               in development mode with its in-memory store. Never use this in production.
             </p>
@@ -209,7 +209,7 @@ export default function LoginPage() {
                 key={u.id}
                 disabled={busy}
                 onClick={() => run(() => signInDevelopment(u.id))}
-                className="h-[38px] rounded-full border border-[#E5E5E5] text-[14px] font-medium hover:bg-[#F2F2F2] disabled:opacity-50"
+                className="h-[38px] rounded-full border border-rh-hairline text-[14px] font-medium hover:bg-rh-elevated disabled:opacity-50"
               >
                 Continue as {u.label}
               </button>
@@ -218,12 +218,12 @@ export default function LoginPage() {
         )}
 
         {notice && (
-          <p role="status" className="mt-4 text-[13px] text-[#0F0F0F]">
+          <p role="status" className="mt-4 text-[13px] text-rh-text">
             {notice}
           </p>
         )}
         {error && (
-          <p role="alert" className="mt-4 text-[13px] text-[#CC0000]">
+          <p role="alert" className="mt-4 text-[13px] text-rh-crimson-text">
             {error}
           </p>
         )}

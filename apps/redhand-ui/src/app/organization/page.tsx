@@ -7,15 +7,16 @@
 
 import React, { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { Hand } from "lucide-react";
+
 
 import { ApiError, lifecycleApi, meApi, type DeletionStatus, type Me } from "@/lib/api";
 import { useAuth, useRequiredSession } from "@/lib/auth";
+import { AppShell } from "@/components/shell/AppShell";
 import { ORG_TEXT, exportFilename, pendingText, slugMatches } from "@/lib/lifecycle";
 import { isNoOrganizationMessage } from "@/lib/onboarding";
 
-const button = "rounded-full bg-[#FF0000] px-4 py-2 text-[13px] font-semibold text-[#FFFFFF] disabled:opacity-50";
-const quiet = "rounded-full border border-[#E5E5E5] px-4 py-2 text-[13px] font-semibold disabled:opacity-50";
+const button = "rounded-full bg-rh-crimson px-4 py-2 text-[13px] font-semibold text-rh-canvas disabled:opacity-50";
+const quiet = "rounded-full border border-rh-hairline px-4 py-2 text-[13px] font-semibold disabled:opacity-50";
 
 export default function OrganizationPage() {
   const session = useRequiredSession();
@@ -95,43 +96,36 @@ export default function OrganizationPage() {
   const pendingUntil = status?.requested ? status.purge_after : me?.deletion_purge_after ?? null;
 
   return (
-    <div className="min-h-screen bg-[#F8F8F8]">
-      <header className="flex items-center justify-between border-b border-[#E5E5E5] bg-[#FFFFFF] px-4 py-3">
-        <Link href="/passports" className="flex items-center gap-2">
-          <span className="flex h-7 w-9 items-center justify-center rounded-[8px] bg-[#FF0000]"><Hand className="h-4 w-4 text-[#FFFFFF]" /></span>
-          <span className="text-[18px] font-bold tracking-tight">RedHand</span>
-        </Link>
-        <span className="text-[12px] text-[#606060]">{session.email}{me ? ` · ${me.organization_name} · ${me.role.replace("_", " ")}` : ""}</span>
-      </header>
-      <main className="mx-auto flex max-w-[720px] flex-col gap-4 px-4 py-6">
-        <h1 className="text-[18px] font-semibold">{ORG_TEXT.title}</h1>
+    <AppShell title="Organization" organization={me?.organization_name} role={me?.role}>
+      <div className="mx-auto flex max-w-[720px] flex-col gap-4 px-4 py-6">
+        <h2 className="text-[18px] font-semibold">{ORG_TEXT.title}</h2>
         {pendingUntil && (
-          <p role="status" className="rounded-[8px] bg-[#FDECEC] p-3 text-[13px] text-[#B42318]">{pendingText(pendingUntil)}</p>
+          <p role="status" className="rounded-[8px] bg-rh-crimson-wash p-3 text-[13px] text-rh-crimson-text">{pendingText(pendingUntil)}</p>
         )}
-        {error && <p role="alert" className="rounded-[8px] bg-[#FDECEC] p-3 text-[13px] text-[#B42318]">{error}</p>}
-        {notice && <p role="status" className="rounded-[8px] bg-[#ECFDF3] p-3 text-[13px] text-[#067647]">{notice}</p>}
+        {error && <p role="alert" className="rounded-[8px] bg-rh-crimson-wash p-3 text-[13px] text-rh-crimson-text">{error}</p>}
+        {notice && <p role="status" className="rounded-[8px] bg-rh-teal-wash p-3 text-[13px] text-rh-teal-text">{notice}</p>}
 
-        {me && me.role !== "owner" && <p className="text-[13px] text-[#606060]">{ORG_TEXT.notOwner}</p>}
+        {me && me.role !== "owner" && <p className="text-[13px] text-rh-text-2">{ORG_TEXT.notOwner}</p>}
 
         {me?.role === "owner" && (
           <>
-            <section className="rounded-[12px] border border-[#E5E5E5] bg-[#FFFFFF] p-4" aria-label={ORG_TEXT.exportTitle}>
+            <section className="rounded-[12px] border border-rh-hairline bg-rh-card p-4" aria-label={ORG_TEXT.exportTitle}>
               <h2 className="text-[15px] font-semibold">{ORG_TEXT.exportTitle}</h2>
-              <p className="mb-3 mt-1 text-[12px] text-[#606060]">{ORG_TEXT.exportIntro}</p>
+              <p className="mb-3 mt-1 text-[12px] text-rh-text-2">{ORG_TEXT.exportIntro}</p>
               <button className={quiet} disabled={busy} onClick={() => void download()}>{ORG_TEXT.exportButton}</button>
             </section>
 
-            <section className="rounded-[12px] border border-[#F4C7C7] bg-[#FFFFFF] p-4" aria-label={ORG_TEXT.deleteTitle}>
+            <section className="rounded-[12px] border border-rh-crimson bg-rh-card p-4" aria-label={ORG_TEXT.deleteTitle}>
               <h2 className="text-[15px] font-semibold">{ORG_TEXT.deleteTitle}</h2>
-              <p className="mb-3 mt-1 text-[12px] text-[#606060]">{ORG_TEXT.deleteIntro}</p>
+              <p className="mb-3 mt-1 text-[12px] text-rh-text-2">{ORG_TEXT.deleteIntro}</p>
               {pendingUntil ? (
                 <button className={quiet} disabled={busy} onClick={() => void cancel()}>{ORG_TEXT.cancelButton}</button>
               ) : (
                 <div className="flex flex-col gap-2">
-                  <label className="text-[12px] font-semibold text-[#606060]" htmlFor="confirm-slug">
+                  <label className="text-[12px] font-semibold text-rh-text-2" htmlFor="confirm-slug">
                     {ORG_TEXT.deleteLabel} (<span className="font-mono">{me.organization_slug}</span>)
                   </label>
-                  <input id="confirm-slug" className="rounded-[8px] border border-[#E5E5E5] px-3 py-2 font-mono text-[14px]" value={typed}
+                  <input id="confirm-slug" className="rounded-[8px] border border-rh-hairline px-3 py-2 font-mono text-[14px]" value={typed}
                     onChange={(e) => setTyped(e.target.value)} autoComplete="off" spellCheck={false} />
                   <div>
                     <button className={button} disabled={busy || !slugMatches(typed, me.organization_slug ?? "")} onClick={() => void requestDeletion()}>
@@ -143,8 +137,8 @@ export default function OrganizationPage() {
             </section>
           </>
         )}
-        <Link href="/passports" className="text-[13px] text-[#606060] underline">Back to Passports</Link>
-      </main>
-    </div>
+        <Link href="/passports" className="text-[13px] text-rh-text-2 underline">Back to Passports</Link>
+      </div>
+    </AppShell>
   );
 }

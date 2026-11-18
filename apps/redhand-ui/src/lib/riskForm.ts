@@ -21,10 +21,10 @@ export const LEVEL_LABEL: Readonly<Record<RiskLevelName, string>> = {
 };
 
 export const LEVEL_STYLE: Readonly<Record<RiskLevelName, string>> = {
-  low: "bg-[#F2F2F2] text-[#606060]",
-  elevated: "bg-[#FFF8E1] text-[#8A5A00]",
-  high: "bg-[#FFF4E5] text-[#8A4B00]",
-  critical: "bg-[#FDECEC] text-[#B42318]",
+  low: "bg-rh-elevated text-rh-text-2",
+  elevated: "bg-rh-ochre-wash text-rh-ochre",
+  high: "bg-rh-ochre-wash text-rh-ochre",
+  critical: "bg-rh-crimson-wash text-rh-crimson-text",
 };
 
 export const RUNG_LABEL: Readonly<Record<Rung, string>> = {
