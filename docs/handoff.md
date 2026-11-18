@@ -2,6 +2,9 @@
 
 Both tools work on RedHand and its demo projects. This file is how each learns what the other did. Newest entry first.
 
+## 2026-11-18, Claude Code: Clerk C1 (operator identity migration)
+`20261203000000_operator_identity.sql` (+ rollback that refuses with Clerk-only operators, SQL test). Safe to apply in Supabase mode (backfill + trigger, same ids). Tonight's brief Part 0.2 now applies it after 20261202. Next: C2 core (Clerk token verification behind `OPERATOR_AUTH_PROVIDER`, twin handler).
+
 ## 2026-11-18, Claude Code: dashboard redesign S6 (docs)
 `docs/design/matte-executive-dark.md` and ADR 0031. The redesign (S1 to S5) is complete once #126 merges. Owner to look at it on staging after tonight's deploy.
 
