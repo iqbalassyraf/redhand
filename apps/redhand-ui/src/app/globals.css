@@ -2,6 +2,67 @@
 @tailwind components;
 @tailwind utilities;
 
+/*
+ * Matte Executive Dark (docs/design/matte-executive-dark.md). The one source of colour for the dashboard: Tailwind's `rh-*` colours point at
+ * these variables. No pure black, no glow, no gradient, no blur: hierarchy comes from matte surface steps and 1px hairline borders.
+ * Meanings (claims discipline, CLAUDE.md section 1): teal = allowed / primary, steel = volume, ochre = needs attention (frozen, Safe Mode,
+ * review pending, Watch), crimson = refused / revoked / trip, slate-purple = detective findings (never enforcement).
+ * Contrast (tests/tokens.test.mjs): --rh-text-muted is below 4.5:1 on every surface, so it is only for placeholders, separators and disabled
+ * text; information uses --rh-text-secondary or brighter. Chips put primary text on a wash with a coloured dot, because the accent colours
+ * on their own washes are below 4.5:1.
+ */
+:root {
+  /* Navigation chrome (deep matte pine-slate) */
+  --rh-chrome-bg: #10231E;
+  --rh-chrome-hover: #17332C;
+  --rh-chrome-active: #1E4239;
+  --rh-chrome-border: #1F3D35;
+
+  /* Application surfaces (matte charcoal and graphite) */
+  --rh-canvas-bg: #111417;
+  --rh-surface-card: #181C20;
+  --rh-surface-elevated: #1E2328;
+  --rh-surface-subtle: #14181C;
+  --rh-border-hairline: #262C33;
+  --rh-border-strong: #343C46;
+
+  /* Typography */
+  --rh-text-primary: #F1F5F9;
+  --rh-text-secondary: #94A3B8;
+  --rh-text-muted: #64748B;
+
+  /* Desaturated telemetry palette */
+  --rh-teal: #3B9E7E;
+  --rh-teal-wash: rgba(59, 158, 126, 0.14);
+  --rh-steel: #4E82B4;
+  --rh-steel-wash: rgba(78, 130, 180, 0.14);
+  --rh-ochre: #C9923E;
+  --rh-ochre-wash: rgba(201, 146, 62, 0.14);
+  --rh-crimson: #C85A53;
+  --rh-crimson-wash: rgba(200, 90, 83, 0.15);
+  --rh-slate-purple: #8470B8;
+  --rh-slate-purple-wash: rgba(132, 112, 184, 0.15);
+}
+
+/* Figures (latency, counts, ids, token totals) never shift width as they change. */
+.rh-tabular {
+  font-family: var(--font-rh-mono), ui-monospace, monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Inside the dark shell: native controls and scrollbars follow, and focus is a crisp 1px teal outline (never a glow). */
+.rh-dark {
+  color-scheme: dark;
+  background-color: var(--rh-canvas-bg);
+  color: var(--rh-text-primary);
+  font-family: var(--font-rh-sans), system-ui, -apple-system, sans-serif;
+}
+.rh-dark :focus-visible {
+  outline: 1px solid var(--rh-teal);
+  outline-offset: 2px;
+}
+
+
 :root {
   color-scheme: light;
 }
