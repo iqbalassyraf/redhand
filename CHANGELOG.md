@@ -2,6 +2,8 @@
 
 ## Unreleased: Phase 3 (See things), in progress
 
+- Operator identity, Clerk slice C1 (ADR 0032): migration `20261203000000_operator_identity` adds `operators` (RedHand's own UUID per person) and `operator_identities` (provider and subject to operator), backfills every Supabase user with the same id, keeps new Supabase sign-ups in step with a trigger, and re-points all 11 foreign keys from `auth.users` to `operators`. `operator_resolve()` (service_role only) creates a Clerk operator on first use and never matches an existing account by e-mail. Member lists and the tenant export read e-mails from `operators`. Nothing changes for users while sign-in stays on Supabase. The rollback refuses once any Clerk-only operator exists.
+
 - ADR 0032: operator sign-in, sign-up and Google SSO through Clerk (plan accepted), with our own operator UUIDs, no e-mail linking, a switch back to Supabase, and a dependency request for `@clerk/nextjs` 7.9.24 that awaits the owner's yes.
 
 - Dashboard redesign, docs (slice 6): `docs/design/matte-executive-dark.md` (tokens, meanings, rules, accessibility) and ADR 0031 (design system and the Insights summary).
