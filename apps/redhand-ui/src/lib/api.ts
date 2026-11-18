@@ -818,6 +818,11 @@ export interface RiskDetail {
   behaviour?: AgentBehaviour | null;
 }
 
+export const insightsApi = {
+  summary: (t: string, window: import("@/lib/insights").InsightsWindow) =>
+    apiFetch<import("@/lib/insights").InsightsSummary>(`/v1/insights/summary?window=${window}`, t),
+};
+
 export const riskApi = {
   list: (t: string) => apiFetch<RiskList>("/v1/risk/agents", t),
   detail: (t: string, agentId: string) => apiFetch<RiskDetail>(`/v1/risk/agents/${agentId}`, t),

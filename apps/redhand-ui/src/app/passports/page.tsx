@@ -235,7 +235,7 @@ export default function PassportsPage() {
             <Link href="/organization" className="rounded-full px-3 py-1.5 font-medium text-[#606060] hover:bg-[#F2F2F2]">
               Organization
             </Link>
-            <Link href="/" className="rounded-full px-3 py-1.5 font-medium text-[#606060] hover:bg-[#F2F2F2]">
+            <Link href="/demo" className="rounded-full px-3 py-1.5 font-medium text-[#606060] hover:bg-[#F2F2F2]">
               Command center (demo)
             </Link>
           </nav>
