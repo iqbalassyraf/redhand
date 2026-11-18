@@ -2,6 +2,9 @@
 
 Both tools work on RedHand and its demo projects. This file is how each learns what the other did. Newest entry first.
 
+## 2026-11-18, Claude Code: tonight's brief
+`docs/testing/briefs/2026-11-18-tonight.md` for owner + Antigravity: Part 0 (migration 20261201, core then gateway then dashboard, Supabase Site URL, smoke with the new 404 checks), Parts R and S (copied word for word), Q5, Q9, J2/J2b, T1/T3, clean-up. Guarded by `agentwall/tests/test_tonight_brief.py`. Results on `docs/test-results-2026-11-18-tonight`. Leave Night Test Org pending: purge rehearsal 2026-11-25.
+
 ## 2026-11-18, Claude Code: production deploy target (not run)
 `deploy/cloudrun/deploy.sh` gains `DEPLOY_ENV=production` (names `-prod`, min 1, ENVIRONMENT=production, explicit and confirmed project). Staging default unchanged. Runbook `docs/runbooks/production-deploy.md`. Owner runs it; Claude Code never does.
 
