@@ -2,6 +2,10 @@
 
 Both tools work on RedHand and its demo projects. This file is how each learns what the other did. Newest entry first.
 
+## 2026-11-18, Claude Code: B5d decision papers (docs only)
+Four drafts for the model proxy go/no-go: ADR 0029 (per-tenant provider-key custody), `docs/launch/model-proxy-uptime-and-bypass.md`, `model-proxy-pdpa-position.md` (for legal review, no compliance claims), `model-proxy-cost-model.md` (prices blank). Guard test `services/redhand-core/tests/test_model_proxy_papers.py`.
+Nothing enabled; the proxy's startup refusal stays. Not verified: any of the numbers they ask for (they are the owner's inputs). Next for the owner: read them and say go or no-go.
+
 **Rules for both tools**
 - Read this file at the start of a session. Add an entry at the end of your work: what changed, where, what you verified,
   what you did NOT verify, and what the other tool should do next.

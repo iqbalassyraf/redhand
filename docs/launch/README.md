@@ -11,6 +11,7 @@ What stands between "it works on staging" and "a stranger can pay for it". Writt
 | [`what-redhand-controls.md`](what-redhand-controls.md) | customers (website or docs) | What RedHand does and does not protect, in plain words |
 | [`terms-draft.md`](terms-draft.md), [`privacy-draft.md`](privacy-draft.md) | a lawyer | Drafts for legal review. Not legal advice and not ready to publish |
 | [`support-and-status.md`](support-and-status.md) | the owner | Support contact, status page and incident text to fill in |
+| [`model-proxy-uptime-and-bypass.md`](model-proxy-uptime-and-bypass.md), [`model-proxy-pdpa-position.md`](model-proxy-pdpa-position.md), [`model-proxy-cost-model.md`](model-proxy-cost-model.md), [`../adr/0029-model-proxy-provider-key-custody.md`](../adr/0029-model-proxy-provider-key-custody.md) | the owner, a lawyer | Draft papers for the model proxy go/no-go (B5d): uptime and bypass, content in transit (for legal review), cost model with blank prices, provider-key custody. None is a decision |
 | `scripts/smoke_launch.py` | the owner | A black-box check of a deployed URL: refusals, headers, CORS, body limit, no development shortcuts |
 
 Related: `docs/release-readiness.md` (the pre-release scans and tests), `docs/runbooks/` (operations), `docs/security/threat-model.md`.

@@ -72,6 +72,9 @@ limit below: until per-tenant, envelope-encrypted key custody exists, the proxy 
 | 5 | Data-residency and PDPA position for carrying prompts and completions | **Not done.** Carrying content in transit is not the same as storing it; the position must say so and say what is logged (counts only, today). |
 | 6 | Evidence of customer pull | **Not available to me.** The owner's call. |
 
+## Decision papers (B5d, 2026-11-18, all drafts)
+Criteria 3 to 5 have draft papers for the owner: `docs/launch/model-proxy-uptime-and-bypass.md`, `docs/adr/0029-model-proxy-provider-key-custody.md`, `docs/launch/model-proxy-pdpa-position.md` (for legal review) and `docs/launch/model-proxy-cost-model.md` (prices blank). They decide nothing and the startup refusal stays.
+
 ## Security impact
 - **New trust boundaries:** an outbound call to a model provider carrying customer prompts; a provider credential in the gateway process; a new authenticated inbound route.
 - **Failure behaviour:** every failure before the provider call refuses; a provider failure is a 502 or the provider's own error; a stream failure closes the connection and records the outcome. There is no path that allows because something could not be checked.
