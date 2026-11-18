@@ -2,6 +2,10 @@
 
 Both tools work on RedHand and its demo projects. This file is how each learns what the other did. Newest entry first.
 
+## 2026-11-18, Claude Code: pre-release pass, second run (docs only)
+Results in `docs/release-readiness.md` section 3.2. Bandit 0 new, Semgrep Python+TypeScript 0 new, pip-audit clean, npm audit clean for production (10 high dev-only, `picomatch` via Tailwind 3), licences: no copyleft in Python, LGPL `sharp-libvips` and CC-BY `caniuse-lite` in npm (owner/lawyer note), OpenAPI in sync.
+Not run: full-history secret scan, CodeQL, staging scans. Owner decisions: Tailwind 4 or a `picomatch` override; the licence for our own packages.
+
 ## 2026-11-18, Claude Code: B5d decision papers (docs only)
 Four drafts for the model proxy go/no-go: ADR 0029 (per-tenant provider-key custody), `docs/launch/model-proxy-uptime-and-bypass.md`, `model-proxy-pdpa-position.md` (for legal review, no compliance claims), `model-proxy-cost-model.md` (prices blank). Guard test `services/redhand-core/tests/test_model_proxy_papers.py`.
 Nothing enabled; the proxy's startup refusal stays. Not verified: any of the numbers they ask for (they are the owner's inputs). Next for the owner: read them and say go or no-go.

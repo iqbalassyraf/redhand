@@ -2,6 +2,8 @@
 
 ## Unreleased: Phase 3 (See things), in progress
 
+- Pre-release pass, second run (docs only): Bandit, Semgrep (Python and TypeScript rules), `pip-audit`, `npm audit`, licence and OpenAPI checks recorded in `docs/release-readiness.md`. No new finding; one accepted dev-only advisory (`picomatch` via Tailwind 3) and two licence notes for the owner.
+
 - Phase 4.5 B5d, decision papers for the model proxy (docs only, all drafts, nothing enabled): ADR 0029 (per-tenant provider-key custody), an uptime and bypass paper, a content-in-transit position marked for legal review, and a cost model with blank prices. A test keeps the markers (draft, legal review, not a decision, blank prices) in place.
 
 - Phase 4.5 B5, model proxy PROTOTYPE (ADR 0025, **off by default, draft, not approved**): with `AGENTWALL_MODEL_PROXY_ENABLED=true` the gateway mounts `POST /v1/model/anthropic/v1/messages`. An agent uses its RedHand token as the Anthropic SDK credential; the gateway checks the passport (active, token not stale, a `model` scope covering the model), validates and bounds the request, forwards it with the deployment's own provider key, relays the answer (a stream byte for byte) and records the usage the provider reported, once per call. Measured locally against a fake provider: about 2 to 3 ms added to a non-stream call (p99 under 10 ms), about 7 ms to a stream's first byte, stream gaps unchanged. Not built: per-tenant key custody, reporting usage to core, inspection of prompts, other providers. New settings `AGENTWALL_MODEL_PROXY_*`. `scripts/benchmark_model_proxy.py`, `examples/fake_model_provider.py`.
