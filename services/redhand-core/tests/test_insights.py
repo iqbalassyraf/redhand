@@ -50,15 +50,17 @@ def test_totals_split_by_decision_with_reasons_latency_and_agent_names() -> None
         with_latency(event(agent, ago(minutes=5)), 10, 1000),
         with_latency(event(agent, ago(minutes=4)), 20, 2000),
         with_latency(event(agent, ago(minutes=3)), 30, 3000),
-        event(agent, ago(minutes=2), decision="BLOCK", tool="delete_invoice", reasons=["out_of_scope"]),
-        event(agent, ago(minutes=1), decision="BLOCK", tool="delete_invoice", reasons=["out_of_scope", "safe_mode"]),
-        event(agent, ago(minutes=1), decision="ERROR", tool="list_invoices", reasons=["upstream_down"]),
+        event(agent, ago(minutes=2), decision="BLOCK", tool="delete_invoice", reasons=["Tool 'delete_invoice' on server 'xero' is not in this agent's passport scopes."]),
+        event(agent, ago(minutes=1), decision="BLOCK", tool="delete_invoice", reasons=["Tool 'push' on server 'github' is not in this agent's passport scopes.", "Safe Mode is on: tool 'push' on server 'github' is not declared read-only."]),
+        event(agent, ago(minutes=1), decision="ERROR", tool="list_invoices", reasons=["connection refused by 10.0.0.5"]),
     ])
     body = env.summary("1h").json()
     assert body["totals"] == {"decisions": 6, "allowed": 3, "refused": 2, "errors": 1, "bytes_returned": 6000}
     assert sum(p["allowed"] + p["refused"] + p["errors"] for p in body["series"]) == 6
     assert body["reasons"][0] == {"reason": "out_of_scope", "count": 2}
-    assert {r["reason"] for r in body["reasons"]} == {"out_of_scope", "safe_mode", "upstream_down"}
+    assert {r["reason"] for r in body["reasons"]} == {"out_of_scope", "safe_mode", "upstream_error"}
+    for raw in ("delete_invoice", "10.0.0.5", "passport scopes", "github"):
+        assert raw not in str(body["reasons"]), "a reason carries a raw sentence or a name the customer chose"
     assert body["latency"] == {"samples": 3, "p50_ms": 20.0, "p95_ms": 29.0}
     assert body["agents"][0]["agent_id"] == agent and body["agents"][0]["name"] == "Risky bot" and body["agents"][0]["decisions"] == 6
     assert body["tools"][0]["tool"] == "list_invoices" and body["tools"][0]["calls"] == 4 and body["servers"][0]["server"] == "xero"

@@ -6,6 +6,8 @@
 -- the request. Bounds: the window is at most 8 days, the bucket between 1 minute and 1 day, and at most 60 buckets, so one call is always a
 -- bounded read of one organization's indexed range. Core maps the allowed windows (1h, 24h, 7d) to a bucket; this function validates anyway.
 --
+-- Refusal reasons are returned as fixed categories (agent_not_active, token_stale, honeytoken, safe_mode, out_of_scope, tool_unapproved, daily_limit,
+-- destination, loop, upstream_error, firewall_rule), never as the raw sentence.
 -- "refused" means decision BLOCK, "errors" means ERROR. Latency is the whole call as the gateway saw it (it includes the tool's own time), over
 -- ALLOW events only. No argument value, payload or captured text is read: only decision, server, tool name, reasons, sizes and latency.
 -- =============================================================================
@@ -13,6 +15,29 @@
 BEGIN;
 
 CREATE INDEX IF NOT EXISTS idx_agent_events_org_time ON public.agent_events (organization_id, occurred_at DESC);
+
+-- The gateway writes refusal reasons as plain sentences that carry the tool, server or address involved. Ranking those raw sentences would
+-- scatter one cause over many rows and put customer-chosen names in a chart, so they are mapped to a small fixed set of categories first.
+CREATE OR REPLACE FUNCTION public.insights_reason_category(p_reason text, p_decision text)
+RETURNS text
+LANGUAGE sql
+IMMUTABLE
+SET search_path = public, pg_temp
+AS $$
+    SELECT CASE
+        WHEN p_decision = 'ERROR' THEN 'upstream_error'
+        WHEN p_reason IN ('passport_frozen', 'passport_revoked', 'passport_expired') THEN 'agent_not_active'
+        WHEN p_reason = 'token_stale' THEN 'token_stale'
+        WHEN p_reason IN ('honeytoken', 'honey_tool', 'honeytoken scan failed') THEN 'honeytoken'
+        WHEN p_reason LIKE 'Safe Mode is on%' THEN 'safe_mode'
+        WHEN p_reason LIKE '%is not in this agent''s passport scopes%' THEN 'out_of_scope'
+        WHEN p_reason LIKE '%has not been reviewed%' THEN 'tool_unapproved'
+        WHEN p_reason LIKE 'Daily limit of %' OR p_reason LIKE '%cannot track this agent''s usage%' THEN 'daily_limit'
+        WHEN p_reason LIKE '%allowed list%' THEN 'destination'
+        WHEN p_reason LIKE 'This exact call was repeated%' THEN 'loop'
+        ELSE 'firewall_rule'
+    END
+$$;
 
 CREATE OR REPLACE FUNCTION public.insights_summary(p_org uuid, p_since timestamptz, p_until timestamptz, p_bucket_seconds integer)
 RETURNS jsonb
@@ -82,7 +107,8 @@ BEGIN
             SELECT server, count(*) AS n, count(*) FILTER (WHERE decision = 'ALLOW') AS allowed, count(*) FILTER (WHERE decision = 'BLOCK') AS refused,
                    count(*) FILTER (WHERE decision = 'ERROR') AS errors FROM ev GROUP BY server ORDER BY count(*) DESC, server LIMIT 8) t),
         'reasons', (SELECT COALESCE(jsonb_agg(jsonb_build_object('reason', r, 'count', n) ORDER BY n DESC, r), '[]'::jsonb) FROM (
-            SELECT r, count(*) AS n FROM ev, LATERAL unnest(ev.reasons) AS r WHERE ev.decision <> 'ALLOW' GROUP BY r ORDER BY count(*) DESC, r LIMIT 8) t),
+            SELECT public.insights_reason_category(x, ev.decision) AS r, count(*) AS n FROM ev, LATERAL unnest(ev.reasons) AS x WHERE ev.decision <> 'ALLOW'
+            GROUP BY 1 ORDER BY count(*) DESC, 1 LIMIT 8) t),
         'latency', (SELECT jsonb_build_object(
             'samples', count(latency_ms),
             'p50_ms', round((percentile_cont(0.5) WITHIN GROUP (ORDER BY latency_ms))::numeric, 2),
@@ -97,7 +123,9 @@ BEGIN
 END $$;
 
 -- Only core (service_role) calls it, after it has checked the operator's role and taken the organization from the operator.
+REVOKE EXECUTE ON FUNCTION public.insights_reason_category(text, text) FROM PUBLIC, anon, authenticated;
 REVOKE EXECUTE ON FUNCTION public.insights_summary(uuid, timestamptz, timestamptz, integer) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.insights_reason_category(text, text) TO service_role;
 GRANT EXECUTE ON FUNCTION public.insights_summary(uuid, timestamptz, timestamptz, integer) TO service_role;
 
 COMMIT;

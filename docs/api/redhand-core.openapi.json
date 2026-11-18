@@ -4866,6 +4866,7 @@
       },
       "ReasonRow": {
         "additionalProperties": false,
+        "description": "`reason` is one of a fixed set of categories (agent_not_active, token_stale, honeytoken, safe_mode, out_of_scope, tool_unapproved, daily_limit,\ndestination, loop, upstream_error, firewall_rule), never the gateway's raw sentence, which carries tool, server and address names.",
         "properties": {
           "count": {
             "minimum": 0.0,

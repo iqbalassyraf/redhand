@@ -63,6 +63,9 @@ class ServerRow(_Out):
 
 
 class ReasonRow(_Out):
+    """`reason` is one of a fixed set of categories (agent_not_active, token_stale, honeytoken, safe_mode, out_of_scope, tool_unapproved, daily_limit,
+    destination, loop, upstream_error, firewall_rule), never the gateway's raw sentence, which carries tool, server and address names."""
+
     reason: str
     count: int = Field(ge=0)
 

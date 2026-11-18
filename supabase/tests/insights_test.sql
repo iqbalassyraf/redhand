@@ -29,15 +29,15 @@ $$;
 -- Org A: window ends at a fixed "now" so bucket edges are exact. 12 five-minute buckets.
 SELECT pg_temp.ev('00000000-0000-0000-0000-0000a1500001', '00000000-0000-0000-0000-0000a15000a1', 1, '2026-11-18 10:02:00+00', 'xero', 'list_invoices', 'ALLOW', '{}', 1000, 10);
 SELECT pg_temp.ev('00000000-0000-0000-0000-0000a1500001', '00000000-0000-0000-0000-0000a15000a1', 2, '2026-11-18 10:03:00+00', 'xero', 'list_invoices', 'ALLOW', '{}', 3000, 30);
-SELECT pg_temp.ev('00000000-0000-0000-0000-0000a1500001', '00000000-0000-0000-0000-0000a15000a1', 3, '2026-11-18 10:07:00+00', 'xero', 'delete_invoice', 'BLOCK', '{out_of_scope}', NULL, 1);
-SELECT pg_temp.ev('00000000-0000-0000-0000-0000a1500001', '00000000-0000-0000-0000-0000a15000a2', 4, '2026-11-18 10:08:00+00', 'github', 'push', 'BLOCK', '{out_of_scope,safe_mode}', NULL, 1);
-SELECT pg_temp.ev('00000000-0000-0000-0000-0000a1500001', '00000000-0000-0000-0000-0000a15000a2', 5, '2026-11-18 10:30:00+00', 'github', 'list_repos', 'ERROR', '{upstream_down}', NULL, NULL);
+SELECT pg_temp.ev('00000000-0000-0000-0000-0000a1500001', '00000000-0000-0000-0000-0000a15000a1', 3, '2026-11-18 10:07:00+00', 'xero', 'delete_invoice', 'BLOCK', '{"Tool ''delete_invoice'' on server ''xero'' is not in this agent''s passport scopes."}', NULL, 1);
+SELECT pg_temp.ev('00000000-0000-0000-0000-0000a1500001', '00000000-0000-0000-0000-0000a15000a2', 4, '2026-11-18 10:08:00+00', 'github', 'push', 'BLOCK', '{"Tool ''push'' on server ''github'' is not in this agent''s passport scopes.","Safe Mode is on: tool ''push'' on server ''github'' is not declared read-only."}', NULL, 1);
+SELECT pg_temp.ev('00000000-0000-0000-0000-0000a1500001', '00000000-0000-0000-0000-0000a15000a2', 5, '2026-11-18 10:30:00+00', 'github', 'list_repos', 'ERROR', '{"connection refused by 10.0.0.5"}', NULL, NULL);
 SELECT pg_temp.ev('00000000-0000-0000-0000-0000a1500001', '00000000-0000-0000-0000-0000a15000a2', 6, '2026-11-18 10:31:00+00', 'github', 'list_repos', 'ALLOW', '{}', 500, 20);
 -- Outside the window (before and exactly at the end: the end is exclusive).
 SELECT pg_temp.ev('00000000-0000-0000-0000-0000a1500001', '00000000-0000-0000-0000-0000a15000a1', 7, '2026-11-18 08:59:59+00', 'xero', 'list_invoices', 'ALLOW', '{}', 99999, 99999);
 SELECT pg_temp.ev('00000000-0000-0000-0000-0000a1500001', '00000000-0000-0000-0000-0000a15000a1', 8, '2026-11-18 11:00:00+00', 'xero', 'list_invoices', 'ALLOW', '{}', 99999, 99999);
 -- Org B: must never be counted for A.
-SELECT pg_temp.ev('00000000-0000-0000-0000-0000a1500002', '00000000-0000-0000-0000-0000a15000b1', 1, '2026-11-18 10:05:00+00', 'other', 'secret_tool', 'BLOCK', '{honeytoken}', NULL, 5);
+SELECT pg_temp.ev('00000000-0000-0000-0000-0000a1500002', '00000000-0000-0000-0000-0000a15000b1', 1, '2026-11-18 10:05:00+00', 'other', 'secret_tool', 'BLOCK', '{"Tool ''secret_tool'' is not in this agent''s passport scopes."}', NULL, 5);
 
 CREATE TEMP TABLE r AS SELECT public.insights_summary('00000000-0000-0000-0000-0000a1500001', '2026-11-18 10:00:00+00', '2026-11-18 11:00:00+00', 300) AS j;
 
@@ -51,9 +51,20 @@ SELECT pg_temp.check((SELECT (j -> 'series' -> 1 ->> 'refused')::int = 2 AND (j 
 SELECT pg_temp.check((SELECT (SELECT sum((x ->> 'allowed')::int + (x ->> 'refused')::int + (x ->> 'errors')::int) FROM jsonb_array_elements(j -> 'series') x) = 6 FROM r), 'the series adds up to the total');
 SELECT pg_temp.check((SELECT j -> 'agents' -> 0 ->> 'agent_id' = '00000000-0000-0000-0000-0000a15000a2' OR j -> 'agents' -> 0 ->> 'agent_id' = '00000000-0000-0000-0000-0000a15000a1' FROM r)
                      AND (SELECT jsonb_array_length(j -> 'agents') = 2 FROM r), 'two agents, org A only (B''s agent is absent)');
-SELECT pg_temp.check((SELECT NOT (j::text LIKE '%a15000b1%') AND NOT (j::text LIKE '%secret_tool%') AND NOT (j::text LIKE '%honeytoken%') FROM r), 'nothing of organization B appears anywhere in A''s summary');
-SELECT pg_temp.check((SELECT j -> 'reasons' -> 0 ->> 'reason' = 'out_of_scope' AND (j -> 'reasons' -> 0 ->> 'count')::int = 2 FROM r), 'reasons rank refusals and errors, most common first');
-SELECT pg_temp.check((SELECT (SELECT count(*) FROM jsonb_array_elements(j -> 'reasons') x WHERE x ->> 'reason' = 'upstream_down') = 1 FROM r), 'error reasons are counted too');
+SELECT pg_temp.check((SELECT NOT (j::text LIKE '%a15000b1%') AND NOT (j::text LIKE '%secret_tool%') FROM r), 'nothing of organization B appears anywhere in A''s summary');
+SELECT pg_temp.check((SELECT j -> 'reasons' -> 0 ->> 'reason' = 'out_of_scope' AND (j -> 'reasons' -> 0 ->> 'count')::int = 2 FROM r),
+    'reasons are fixed categories, ranked most common first (two different sentences about two tools are one category)');
+SELECT pg_temp.check((SELECT (SELECT count(*) FROM jsonb_array_elements(j -> 'reasons') x WHERE x ->> 'reason' = 'safe_mode') = 1
+                             AND (SELECT count(*) FROM jsonb_array_elements(j -> 'reasons') x WHERE x ->> 'reason' = 'upstream_error') = 1 FROM r), 'Safe Mode and upstream errors are their own categories');
+SELECT pg_temp.check((SELECT NOT ((j -> 'reasons')::text LIKE '%delete_invoice%') AND NOT ((j -> 'reasons')::text LIKE '%10.0.0.5%') AND NOT ((j -> 'reasons')::text LIKE '%passport scopes%') FROM r),
+    'no raw reason sentence, tool name or address appears in the reasons');
+SELECT pg_temp.check(public.insights_reason_category('passport_frozen', 'BLOCK') = 'agent_not_active' AND public.insights_reason_category('token_stale', 'BLOCK') = 'token_stale'
+                     AND public.insights_reason_category('honeytoken', 'BLOCK') = 'honeytoken' AND public.insights_reason_category('Daily limit of 5 tool calls reached (5 used); resets at 00:00.', 'BLOCK') = 'daily_limit'
+                     AND public.insights_reason_category('An address in this call is not on this agent''s allowed list: evil.com.', 'BLOCK') = 'destination'
+                     AND public.insights_reason_category('This exact call was repeated 9 times within 60 seconds (limit 8); further repeats are paused for now.', 'BLOCK') = 'loop'
+                     AND public.insights_reason_category('Tool ''x'' on server ''y'' is not approved: its current version has not been reviewed.', 'BLOCK') = 'tool_unapproved'
+                     AND public.insights_reason_category('SELECT * FROM users is not allowed', 'BLOCK') = 'firewall_rule'
+                     AND public.insights_reason_category('anything', 'ERROR') = 'upstream_error', 'every gateway reason maps to its category');
 SELECT pg_temp.check((SELECT (j -> 'latency' ->> 'samples')::int = 3 AND (j -> 'latency' ->> 'p50_ms')::numeric = 20.00 FROM r), 'latency percentiles use allowed calls with a latency (10, 20, 30: p50 = 20)');
 SELECT pg_temp.check((SELECT j -> 'tools' -> 0 ->> 'tool' = 'list_invoices' AND (j -> 'tools' -> 0 ->> 'calls')::int = 2 FROM r), 'tools are ranked by calls');
 SELECT pg_temp.check((SELECT (SELECT count(*) FROM jsonb_array_elements(j -> 'flow')) >= 3 FROM r), 'the flow lists agent, server and outcome rows for the top agents');

@@ -1609,6 +1609,31 @@ _PIN_REFUSAL = "is not approved: its current version has not been reviewed."
 
 
 
+def _insights_reason_category(reason: str, decision: str) -> str:
+    """Mirrors insights_reason_category(): raw gateway sentences (which carry tool, server or address names) become a small fixed set."""
+    if decision == "ERROR":
+        return "upstream_error"
+    if reason in ("passport_frozen", "passport_revoked", "passport_expired"):
+        return "agent_not_active"
+    if reason == "token_stale":
+        return "token_stale"
+    if reason in ("honeytoken", "honey_tool", "honeytoken scan failed"):
+        return "honeytoken"
+    if reason.startswith("Safe Mode is on"):
+        return "safe_mode"
+    if "is not in this agent's passport scopes" in reason:
+        return "out_of_scope"
+    if "has not been reviewed" in reason:
+        return "tool_unapproved"
+    if reason.startswith("Daily limit of ") or "cannot track this agent's usage" in reason:
+        return "daily_limit"
+    if "allowed list" in reason:
+        return "destination"
+    if reason.startswith("This exact call was repeated"):
+        return "loop"
+    return "firewall_rule"
+
+
 def _insights_summary(store: LocalSupabaseAdapter, p: dict[str, Any]) -> dict[str, Any]:
     """Mirrors insights_summary() (20261202000000_insights.sql): organization-scoped, start inclusive and end exclusive, bounded."""
     org, bucket = p.get("p_org"), p.get("p_bucket_seconds")
@@ -1660,7 +1685,8 @@ def _insights_summary(store: LocalSupabaseAdapter, p: dict[str, Any]) -> dict[st
     for e in ev:
         if e["decision"] != "ALLOW":
             for reason in e.get("reasons") or []:
-                reason_counts[reason] = reason_counts.get(reason, 0) + 1
+                category = _insights_reason_category(reason, e["decision"])
+                reason_counts[category] = reason_counts.get(category, 0) + 1
     reasons = [{"reason": k, "count": v} for k, v in sorted(reason_counts.items(), key=lambda kv: (-kv[1], kv[0]))[:8]]
     samples = sorted(float(e["latency_ms"]) for e in ev if e["decision"] == "ALLOW" and e.get("latency_ms") is not None)
 
