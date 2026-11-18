@@ -38,7 +38,8 @@ SELECT pg_temp.check(NOT EXISTS (
     SELECT 1 FROM pg_tables p WHERE p.schemaname = 'public'
       AND p.tablename NOT IN (SELECT e ->> 'table' FROM jsonb_array_elements(public.tenant_data_manifest()) e)
       -- model_usage_batches holds batch ids only (idempotency for the gateway's usage reports): no tenant data.
-      AND p.tablename NOT IN ('radar_count_reports', 'telegram_updates', 'signup_codes', 'tenant_deletions', 'model_usage_batches')),
+      -- operators and operator_identities are people, not tenant rows (ADR 0032); a member's e-mail is exported through organization_members.
+      AND p.tablename NOT IN ('radar_count_reports', 'telegram_updates', 'signup_codes', 'tenant_deletions', 'model_usage_batches', 'operators', 'operator_identities')),
     'a table in neither the manifest nor the short list of platform tables fails this test, so a new table must be classified');
 SELECT pg_temp.check(NOT EXISTS (
     SELECT 1 FROM jsonb_array_elements(public.tenant_data_manifest()) e
