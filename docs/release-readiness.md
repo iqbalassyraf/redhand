@@ -23,6 +23,12 @@ Nothing here is done unless it says so and names the evidence.
 ### 3.1 Secrets
 - Full git history scan with a maintained scanner (gitleaks or trufflehog; adding either is a **dependency decision for the owner**, run locally, never `curl | sh`).
   Expected: no real credentials. Every finding is rotated, not just deleted.
+  **Run 2026-11-18** (owner approved a one-off run; nothing added to the project): gitleaks 8.28.0, the official Linux release, its SHA-256 checked against the release's `checksums.txt` (same origin, so this proves an intact download, not an independent signature),
+  `gitleaks git --redact` over all 383 commits of every fetched branch. 63 findings in 19 files, values never printed (only rule, file, line, commit; lines shown with values cut to four characters). Triage:
+  - **The known look-alike Stripe key** in `battleground/database/db.py` (commits f82af25, c83151d, 29777ae, 388e278; gone from current files). It is the item the owner must revoke or confirm "not ours" (section 2). Its value matches none of the test fixtures (compared by hash).
+  - **Test fixtures built to look like secrets** (they test the scanners, redaction and honeytokens): `agentwall/tests/test_capture.py` (Stripe-, GCP-, JWT- and PEM-shaped), `test_ast_guardrails.py`, `test_firewall_engine.py`, `test_gateway_honeytokens.py`, `test_staging_agent_repeat.py`, `services/redhand-core/tests/test_timeline.py`, `core_helpers.py`, `test_operator_auth.py`, `tests/e2e/test_phase4_loops.py`; the AWS documentation example key in `agentwall/src/bench/corpus.py`; the dashboard's demo mock data (`apps/redhand-ui/src/lib/mock-telemetry.ts`, `src/app/page.tsx`).
+  - **Placeholders and false positives:** `.env.example` line 3 (`SUPABASE_ANON_KEY` holds a 39-character placeholder; a real key is far longer), `docs/security/coverage-matrix.md` (rule names), `services/redhand-core/src/redhand_core/spend/service.py` (code, not a value).
+  - **Result:** no new real-looking credential. The OpenAI look-alike in the same battleground file was not matched by gitleaks' rules; it is in the owner's revoke list anyway. The report stays in Claude Code's scratchpad and is not committed.
 - `redhand scan .` (the repo's own scanner) and a manual look at `.env*`, deploy scripts and `deploy/` for secrets; `.env.example` has placeholders only.
 - Check the staging and production configuration (Cloud Run, Vercel, Supabase) holds secrets in a secrets manager, not in plain environment variables.
 

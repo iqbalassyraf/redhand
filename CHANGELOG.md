@@ -2,6 +2,8 @@
 
 ## Unreleased: Phase 3 (See things), in progress
 
+- Full-history secret scan (release-readiness 3.1): one-off gitleaks 8.28.0 over 383 commits, 63 findings triaged: the known battleground Stripe look-alike (owner revokes), test fixtures, demo data and placeholders. No new real-looking credential. Values never printed or committed.
+
 - One audit trail (ADR 0030): the gateway's own in-memory, cross-tenant ledger is removed along with `GET /v1/audit/logs`, `GET /v1/audit/verify` (now 404) and the `AGENTWALL_AUDIT_LOG_FILE` setting (ignored if still set). The Black Box in core (per organization, append-only, hash-chained, verifiable in the dashboard) is the only audit trail; the gateway builds its event with the argument names and digest as before. **Behaviour change:** with core unreachable for longer than the recorder's bounded buffer, decisions are dropped and counted instead of kept locally (enforcement is unchanged). `deploy/cloudrun/smoke.sh` and `scripts/smoke_launch.py` now expect 404 at the old path; the night brief's J2 uses the dashboard's "Verify chain".
 
 - Test hygiene: the honeytoken end-to-end tests no longer depend on which alert reaches the phone last (a background tool-pinning alert can arrive in either order; seen failing on CI once).
