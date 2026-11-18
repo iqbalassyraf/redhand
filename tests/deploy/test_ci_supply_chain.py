@@ -28,9 +28,14 @@ def test_the_python_job_audits_locked_dependencies_with_a_pinned_tool_and_cannot
 
 
 def test_the_dashboard_job_fails_on_high_and_critical_advisories() -> None:
+    # Production dependencies gate the build. Dev dependencies are audited too but informational only, while the picomatch advisory
+    # (GHSA-fc5q-39xc-vjpf, no patched release, build tooling via tailwindcss 3) is accepted: see docs/release-readiness.md 3.2.
     audit = [s for s in steps("dashboard") if "npm audit" in str(s.get("run", ""))]
-    assert len(audit) == 1
-    assert "--audit-level=high" in audit[0]["run"] and not audit[0].get("continue-on-error")
+    gating = [s for s in audit if not s.get("continue-on-error")]
+    assert len(gating) == 1, "exactly one npm audit step may fail the build"
+    assert "--omit=dev" in gating[0]["run"] and "--audit-level=high" in gating[0]["run"]
+    informational = [s for s in audit if s.get("continue-on-error")]
+    assert all("--omit=dev" not in s["run"] for s in informational), "the informational step is the one that covers dev dependencies"
 
 
 def test_dependabot_covers_python_the_dashboard_and_the_workflows_weekly_and_grouped() -> None:
