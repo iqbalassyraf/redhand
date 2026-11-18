@@ -1,7 +1,12 @@
 import type { Metadata } from "next";
+import { Inter, JetBrains_Mono } from "next/font/google";
 import { connection } from "next/server";
 import "./globals.css";
 import { AuthProvider } from "@/lib/auth";
+
+// Downloaded at build time and served from this site, so the CSP keeps font-src 'self' (no request to Google from the browser).
+const sans = Inter({ subsets: ["latin"], variable: "--font-rh-sans", display: "swap" });
+const mono = JetBrains_Mono({ subsets: ["latin"], variable: "--font-rh-mono", display: "swap" });
 
 export const metadata: Metadata = {
   title: "RedHand | Agent Passports & Control",
@@ -17,7 +22,7 @@ export default async function RootLayout({
   // Every page is rendered per request so Next.js can stamp the Content-Security-Policy nonce (src/middleware.ts) on its scripts.
   await connection();
   return (
-    <html lang="en">
+    <html lang="en" className={`${sans.variable} ${mono.variable}`}>
       <body className="bg-[#FFFFFF] text-[#0F0F0F] font-sans antialiased">
         <AuthProvider>{children}</AuthProvider>
       </body>

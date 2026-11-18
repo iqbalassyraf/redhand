@@ -2,6 +2,8 @@
 
 ## Unreleased: Phase 3 (See things), in progress
 
+- Dashboard redesign, slice 1 (design system "Matte Executive Dark"): colour tokens as CSS variables mapped to Tailwind `rh-*` colours, Inter and JetBrains Mono through Next.js's built-in font loader (served from our own origin, CSP unchanged, no new dependency), a new `AppShell` (pine-slate rail, header band, phone menu) and small UI primitives (card, KPI tile, chip, button, empty and error states). Nothing uses them yet: pages migrate in later slices. A contrast test fails if a text pair drops below WCAG AA or a shadow, glow, gradient or pure black appears in the tokens.
+
 - Full-history secret scan (release-readiness 3.1): one-off gitleaks 8.28.0 over 383 commits, 63 findings triaged: the known battleground Stripe look-alike (owner revokes), test fixtures, demo data and placeholders. No new real-looking credential. Values never printed or committed.
 
 - Production deploy target (ADR 0028): `DEPLOY_ENV=production deploy/cloudrun/deploy.sh` deploys `redhand-core-prod` and `redhand-gateway-prod` with their own secret and identity names, at least one warm instance and `ENVIRONMENT=production`; it refuses without an explicit `PROJECT_ID` and `CONFIRM_PROJECT` equal to it. Staging is unchanged (default). Runbook `docs/runbooks/production-deploy.md`. Tested with a recording gcloud stub; nothing was deployed.
