@@ -2,6 +2,9 @@
 
 Both tools work on RedHand and its demo projects. This file is how each learns what the other did. Newest entry first.
 
+## 2026-11-18, Claude Code: production deploy target (not run)
+`deploy/cloudrun/deploy.sh` gains `DEPLOY_ENV=production` (names `-prod`, min 1, ENVIRONMENT=production, explicit and confirmed project). Staging default unchanged. Runbook `docs/runbooks/production-deploy.md`. Owner runs it; Claude Code never does.
+
 ## 2026-11-18, Claude Code: launch decisions recorded
 ADR 0028 Accepted (option A, prices blank for the owner); ADR 0025 no-go for launch; CLAUDE.md phase line + Black Box wording applied (owner "apply"); briefing rows 4.5 and Hosting; owner checklist (newest migration, CodeQL, purge rehearsal). Next: production deploy target, tonight's brief, gitleaks run.
 
