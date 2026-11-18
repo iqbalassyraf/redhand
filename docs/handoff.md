@@ -2,6 +2,9 @@
 
 Both tools work on RedHand and its demo projects. This file is how each learns what the other did. Newest entry first.
 
+## 2026-11-18, Claude Code: Clerk plan, ADR 0032 (C0)
+Next: C1 migration (operators, identities, foreign keys), C2 core, C3 dashboard (blocked on the owner's yes for `@clerk/nextjs`), C4 docs and brief. Owner setup needed: Clerk development instance, Google enabled, JWT template `redhand` (aud `redhand-core`, email, email_verified).
+
 ## 2026-11-18, Claude Code: dashboard redesign S6 (docs)
 `docs/design/matte-executive-dark.md` and ADR 0031. The redesign (S1 to S5) is complete once #126 merges. Owner to look at it on staging after tonight's deploy.
 
