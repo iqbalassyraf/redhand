@@ -6,8 +6,7 @@
  */
 
 import React, { useCallback, useEffect, useState } from "react";
-import Link from "next/link";
-import { Download, Hand, LogOut, RefreshCw, ShieldCheck } from "lucide-react";
+import { Download, RefreshCw, ShieldCheck } from "lucide-react";
 
 import { EventDrawer } from "@/components/blackbox/EventDrawer";
 import { SettingsPanel } from "@/components/blackbox/SettingsPanel";
@@ -20,11 +19,12 @@ import {
   downloadBlackBoxExport,
 } from "@/lib/api";
 import { useAuth, useRequiredSession } from "@/lib/auth";
+import { AppShell } from "@/components/shell/AppShell";
 
 const DECISION_STYLE: Record<BlackBoxDecision, string> = {
-  ALLOW: "bg-[#E6F4EA] text-[#1E7B34]",
-  BLOCK: "bg-[#FDECEC] text-[#B42318]",
-  ERROR: "bg-[#FFF4E5] text-[#8A5A00]",
+  ALLOW: "bg-rh-teal-wash text-rh-teal-text",
+  BLOCK: "bg-rh-crimson-wash text-rh-crimson-text",
+  ERROR: "bg-rh-ochre-wash text-rh-ochre",
 };
 
 function formatTime(iso: string): string {
@@ -164,58 +164,13 @@ export default function BlackBoxPage() {
   if (!session || !token) return null;
 
   return (
-    <div className="min-h-screen bg-[#F8F8F8] text-[#0F0F0F]">
-      <header className="flex h-[56px] items-center justify-between border-b border-[#E5E5E5] bg-[#FFFFFF] px-4">
-        <div className="flex min-w-0 items-center gap-4">
-          <div className="flex items-center gap-2">
-            <div className="flex h-7 w-9 items-center justify-center rounded-[8px] bg-[#FF0000]">
-              <Hand className="h-4 w-4 text-[#FFFFFF]" />
-            </div>
-            <span className="text-[20px] font-bold tracking-tight">RedHand</span>
-          </div>
-          <nav className="flex gap-1 overflow-x-auto whitespace-nowrap text-[13px]">
-            <Link href="/passports" className="rounded-full px-3 py-1.5 font-medium text-[#606060] hover:bg-[#F2F2F2]">
-              Passports
-            </Link>
-            <Link href="/blackbox" className="rounded-full bg-[#0F0F0F] px-3 py-1.5 font-semibold text-[#FFFFFF]">
-              Black Box
-            </Link>
-            <Link href="/honeytokens" className="rounded-full px-3 py-1.5 font-medium text-[#606060] hover:bg-[#F2F2F2]">
-              Honeytokens
-            </Link>
-            <Link href="/scanner" className="rounded-full px-3 py-1.5 font-medium text-[#606060] hover:bg-[#F2F2F2]">
-              MCP Scanner
-            </Link>
-            <Link href="/radar" className="rounded-full px-3 py-1.5 font-medium text-[#606060] hover:bg-[#F2F2F2]">
-              Radar
-            </Link>
-            <Link href="/coverage" className="rounded-full px-3 py-1.5 font-medium text-[#606060] hover:bg-[#F2F2F2]">
-              Coverage
-            </Link>
-          </nav>
-        </div>
-        <div className="flex items-center gap-3 text-[12px]">
-          <span className="hidden text-[#606060] sm:inline">
-            {session.email}
-            {session.role ? ` · ${session.role.replace("_", " ")}` : ""}
-          </span>
-          <button
-            onClick={() => {
-              signOut();
-              window.location.href = "/login";
-            }}
-            className="flex items-center gap-1 rounded-full px-3 py-1.5 hover:bg-[#F2F2F2]"
-          >
-            <LogOut className="h-3.5 w-3.5" /> Sign out
-          </button>
-        </div>
-      </header>
+    <AppShell title="Black Box" role={session.role}>
 
-      <main className="mx-auto max-w-5xl px-4 py-6">
+      <div className="mx-auto max-w-5xl px-4 py-6">
         <div className="mb-4 flex items-center justify-between">
           <div>
             <h1 className="text-[18px] font-bold">Black Box Recorder</h1>
-            <p className="text-[12px] text-[#606060]">
+            <p className="text-[12px] text-rh-text-2">
               Every tool call the gateway allowed, refused or failed to forward, through RedHand only.{" "}
               {settings?.payload_capture_enabled
                 ? "Payload capture is ON: redacted excerpts of arguments and results are stored."
@@ -226,13 +181,13 @@ export default function BlackBoxPage() {
             <button
               onClick={onVerify}
               disabled={verifying || events.length === 0}
-              className="flex items-center gap-1.5 rounded-full border border-[#E5E5E5] bg-[#FFFFFF] px-3 py-1.5 text-[12px] font-semibold hover:bg-[#F2F2F2] disabled:opacity-50"
+              className="flex items-center gap-1.5 rounded-full border border-rh-hairline bg-rh-card px-3 py-1.5 text-[12px] font-semibold hover:bg-rh-elevated disabled:opacity-50"
             >
               <ShieldCheck className="h-3.5 w-3.5" /> {verifying ? "Verifying…" : "Verify chain"}
             </button>
             <button
               onClick={() => load({ reset: true })}
-              className="flex items-center gap-1.5 rounded-full border border-[#E5E5E5] bg-[#FFFFFF] px-3 py-1.5 text-[12px] font-semibold hover:bg-[#F2F2F2]"
+              className="flex items-center gap-1.5 rounded-full border border-rh-hairline bg-rh-card px-3 py-1.5 text-[12px] font-semibold hover:bg-rh-elevated"
             >
               <RefreshCw className="h-3.5 w-3.5" /> Refresh
             </button>
@@ -240,7 +195,7 @@ export default function BlackBoxPage() {
         </div>
 
         {settings?.payload_capture_enabled ? (
-          <div className="mb-3 rounded-[8px] border border-[#FFE0B2] bg-[#FFF8EC] px-3 py-2 text-[12px] text-[#8A5A00]">
+          <div className="mb-3 rounded-[8px] border border-rh-ochre bg-rh-ochre-wash px-3 py-2 text-[12px] text-rh-ochre">
             Payload capture is on. Redacted excerpts may still contain names or free text. Only admins can read them, and every read is audited.
           </div>
         ) : null}
@@ -263,10 +218,10 @@ export default function BlackBoxPage() {
         ) : null}
 
         {error ? (
-          <div className="mb-3 rounded-[8px] border border-[#FDECEC] bg-[#FFF5F5] px-3 py-2 text-[12px] text-[#B42318]">{error}</div>
+          <div className="mb-3 rounded-[8px] border border-rh-crimson bg-rh-crimson-wash px-3 py-2 text-[12px] text-rh-crimson-text">{error}</div>
         ) : null}
         {notice ? (
-          <div className="mb-3 rounded-[8px] border border-[#E6F4EA] bg-[#F3FBF5] px-3 py-2 text-[12px] text-[#1E7B34]">{notice}</div>
+          <div className="mb-3 rounded-[8px] border border-rh-teal bg-rh-teal-wash px-3 py-2 text-[12px] text-rh-teal-text">{notice}</div>
         ) : null}
 
         <div className="mb-3 flex flex-wrap items-center gap-1 text-[12px]">
@@ -275,8 +230,8 @@ export default function BlackBoxPage() {
               key={d || "all"}
               onClick={() => setDecisionFilter(d)}
               className={`rounded-full px-3 py-1 font-medium ${
-                decisionFilter === d ? "bg-[#0F0F0F] text-[#FFFFFF]" : "bg-[#FFFFFF] text-[#606060] hover:bg-[#F2F2F2]"
-              } border border-[#E5E5E5]`}
+                decisionFilter === d ? "bg-rh-teal text-rh-canvas" : "bg-rh-card text-rh-text-2 hover:bg-rh-elevated"
+              } border border-rh-hairline`}
             >
               {d || "All"}
             </button>
@@ -285,20 +240,20 @@ export default function BlackBoxPage() {
             <div className="ml-auto flex items-center gap-2">
               <select
                 value={exportFormat} onChange={(e) => setExportFormat(e.target.value as "jsonl" | "csv")}
-                className="rounded-[8px] border border-[#E5E5E5] bg-[#FFFFFF] px-2 py-1" aria-label="Export format"
+                className="rounded-[8px] border border-rh-hairline bg-rh-card px-2 py-1" aria-label="Export format"
               >
                 <option value="jsonl">JSON Lines</option>
                 <option value="csv">CSV</option>
               </select>
               {settings.capabilities.can_export_payloads ? (
-                <label className="flex items-center gap-1 text-[#606060]">
+                <label className="flex items-center gap-1 text-rh-text-2">
                   <input type="checkbox" checked={exportPayloads} onChange={(e) => setExportPayloads(e.target.checked)} />
                   with payloads
                 </label>
               ) : null}
               <button
                 onClick={onExport} disabled={exporting}
-                className="flex items-center gap-1.5 rounded-full border border-[#E5E5E5] bg-[#FFFFFF] px-3 py-1.5 font-semibold hover:bg-[#F2F2F2] disabled:opacity-50"
+                className="flex items-center gap-1.5 rounded-full border border-rh-hairline bg-rh-card px-3 py-1.5 font-semibold hover:bg-rh-elevated disabled:opacity-50"
               >
                 <Download className="h-3.5 w-3.5" /> {exporting ? "Exporting…" : "Export"}
               </button>
@@ -306,10 +261,10 @@ export default function BlackBoxPage() {
           ) : null}
         </div>
 
-        <div className="overflow-hidden rounded-[10px] border border-[#E5E5E5] bg-[#FFFFFF]">
+        <div className="overflow-hidden rounded-[10px] border border-rh-hairline bg-rh-card">
           <table className="w-full text-[12px]">
             <thead>
-              <tr className="border-b border-[#E5E5E5] text-left text-[#606060]">
+              <tr className="border-b border-rh-hairline text-left text-rh-text-2">
                 <th className="px-3 py-2">Time</th>
                 <th className="px-3 py-2">Decision</th>
                 <th className="px-3 py-2">Server</th>
@@ -323,9 +278,9 @@ export default function BlackBoxPage() {
                 <tr
                   key={e.seq}
                   onClick={() => setSelected(e)}
-                  className="cursor-pointer border-b border-[#F2F2F2] last:border-0 hover:bg-[#FAFAFA]"
+                  className="cursor-pointer border-b border-rh-hairline last:border-0 hover:bg-rh-subtle"
                 >
-                  <td className="px-3 py-2 text-[#606060]">{formatTime(e.occurred_at)}</td>
+                  <td className="px-3 py-2 text-rh-text-2">{formatTime(e.occurred_at)}</td>
                   <td className="px-3 py-2">
                     <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${DECISION_STYLE[e.decision]}`}>
                       {e.decision}
@@ -333,13 +288,13 @@ export default function BlackBoxPage() {
                   </td>
                   <td className="px-3 py-2">{e.server || "—"}</td>
                   <td className="px-3 py-2 font-mono">{e.tool_name || e.method}</td>
-                  <td className="px-3 py-2 text-[#606060]">{e.reasons.join("; ") || "—"}</td>
-                  <td className="px-3 py-2 text-[#606060]">{e.latency_ms != null ? `${e.latency_ms.toFixed(1)} ms` : "—"}</td>
+                  <td className="px-3 py-2 text-rh-text-2">{e.reasons.join("; ") || "—"}</td>
+                  <td className="px-3 py-2 text-rh-text-2">{e.latency_ms != null ? `${e.latency_ms.toFixed(1)} ms` : "—"}</td>
                 </tr>
               ))}
               {events.length === 0 && !loading ? (
                 <tr>
-                  <td colSpan={6} className="px-3 py-6 text-center text-[#606060]">
+                  <td colSpan={6} className="px-3 py-6 text-center text-rh-text-2">
                     No events recorded yet.
                   </td>
                 </tr>
@@ -353,13 +308,13 @@ export default function BlackBoxPage() {
             <button
               onClick={() => load({ beforeSeq: nextBeforeSeq })}
               disabled={loading}
-              className="rounded-full border border-[#E5E5E5] bg-[#FFFFFF] px-4 py-1.5 text-[12px] font-semibold hover:bg-[#F2F2F2] disabled:opacity-50"
+              className="rounded-full border border-rh-hairline bg-rh-card px-4 py-1.5 text-[12px] font-semibold hover:bg-rh-elevated disabled:opacity-50"
             >
               {loading ? "Loading…" : "Load older events"}
             </button>
           </div>
         ) : null}
-      </main>
+      </div>
       {selected ? (
         <EventDrawer
           event={selected}
@@ -372,6 +327,6 @@ export default function BlackBoxPage() {
           }}
         />
       ) : null}
-    </div>
+    </AppShell>
   );
 }

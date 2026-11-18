@@ -5,6 +5,9 @@ Both tools work on RedHand and its demo projects. This file is how each learns w
 ## 2026-11-18, Claude Code: dashboard redesign S6 (docs)
 `docs/design/matte-executive-dark.md` and ADR 0031. The redesign (S1 to S5) is complete once #126 merges. Owner to look at it on staging after tonight's deploy.
 
+## 2026-11-18, Claude Code: dashboard redesign S4+S5 (all pages on tokens and the shell)
+Mechanical hex to token migration (script not kept; the `no-raw-colours` test is the guard), `AppShell` on every page except login/welcome/join/reset-password and /demo, text-safe accent tokens, `grid-cols-1` fixes. Open question for the owner: login still lands on /passports; Insights could be the landing page. Not run on staging.
+
 ## 2026-11-18, Claude Code: dashboard redesign S3 (Insights home)
 `apps/redhand-ui/src/app/page.tsx` (new Insights), `src/app/demo/page.tsx` (old sample canvas), `src/lib/insights.ts`, `src/lib/chartGeometry.ts`, `src/components/charts/charts.tsx`, `insightsApi` in `api.ts`. Needs core with S2 (`/v1/insights/summary`) and migration `20261202000000_insights`; an older core shows "This core does not serve Insights yet". Login still lands on /passports (S4 decides). Not run on staging.
 

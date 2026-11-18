@@ -21,38 +21,38 @@ export function InputVectorNode({ data }: NodeProps) {
   const isPoisoned = Boolean(data.isPoisoned);
   return (
     <div
-      className={`w-64 rounded-[12px] bg-[#FFFFFF] p-3 border shadow-sm ${
-        isPoisoned ? "border-[#FF0000]" : "border-[#E5E5E5]"
+      className={`w-64 rounded-[12px] bg-rh-card p-3 border ${
+        isPoisoned ? "border-rh-crimson" : "border-rh-hairline"
       }`}
     >
       <div className="flex items-center justify-between mb-2">
-        <span className="inline-flex items-center gap-1.5 rounded-[4px] bg-[#F2F2F2] px-2 py-0.5 text-[12px] font-medium text-[#0F0F0F]">
-          <FileText className="h-3.5 w-3.5 text-[#606060]" />
+        <span className="inline-flex items-center gap-1.5 rounded-[4px] bg-rh-elevated px-2 py-0.5 text-[12px] font-medium text-rh-text">
+          <FileText className="h-3.5 w-3.5 text-rh-text-2" />
           {String(data.vectorType || "RAG INGESTION")}
         </span>
         {isPoisoned ? (
-          <span className="rounded-[2px] bg-[#FF0000] px-1.5 py-0.5 text-[11px] font-bold text-[#FFFFFF]">
+          <span className="rounded-[2px] bg-rh-crimson px-1.5 py-0.5 text-[11px] font-bold text-rh-canvas">
             CONTAINED
           </span>
         ) : (
-          <span className="rounded-[2px] bg-[#F2F2F2] px-1.5 py-0.5 text-[11px] font-medium text-[#606060]">
+          <span className="rounded-[2px] bg-rh-elevated px-1.5 py-0.5 text-[11px] font-medium text-rh-text-2">
             EXTERNAL
           </span>
         )}
       </div>
 
-      <div className="text-[14px] leading-[20px] font-medium text-[#0F0F0F] line-clamp-2 mb-1">
+      <div className="text-[14px] leading-[20px] font-medium text-rh-text line-clamp-2 mb-1">
         {String(data.label)}
       </div>
 
-      <div className="text-[12px] leading-[16px] font-mono text-[#606060] line-clamp-2 bg-[#F2F2F2] p-2 rounded-[8px]">
+      <div className="text-[12px] leading-[16px] font-mono text-rh-text-2 line-clamp-2 bg-rh-elevated p-2 rounded-[8px]">
         {String(data.preview)}
       </div>
 
       <Handle
         type="source"
         position={Position.Right}
-        className="!h-2.5 !w-2.5 !border-2 !border-[#FFFFFF] !bg-[#606060]"
+        className="!h-2.5 !w-2.5 !border-2 !border-rh-card !bg-rh-text-2"
       />
     </div>
   );
@@ -71,28 +71,28 @@ export function AgentRingNode({ data }: NodeProps) {
     (Math.min(100, Math.max(0, riskScore)) / 100) * circumference;
 
   const ringColor =
-    riskScore >= 75 ? "#FF0000" : isPaused || riskScore >= 40 ? "#FB8C00" : "#2BA640";
+    riskScore >= 75 ? "var(--rh-crimson)" : isPaused || riskScore >= 40 ? "var(--rh-ochre)" : "var(--rh-teal)";
 
   return (
     <div
-      className={`w-72 rounded-[12px] bg-[#FFFFFF] p-3.5 border shadow-sm ${
-        isPaused ? "border-[#FB8C00]" : "border-[#E5E5E5]"
+      className={`w-72 rounded-[12px] bg-rh-card p-3.5 border ${
+        isPaused ? "border-rh-ochre" : "border-rh-hairline"
       }`}
     >
       <Handle
         type="target"
         position={Position.Left}
-        className="!h-2.5 !w-2.5 !border-2 !border-[#FFFFFF] !bg-[#606060]"
+        className="!h-2.5 !w-2.5 !border-2 !border-rh-card !bg-rh-text-2"
       />
 
       <div className="flex items-start gap-3">
-        <div className="relative flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-[#F2F2F2]">
+        <div className="relative flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-rh-elevated">
           <svg className="h-12 w-12 -rotate-90 transform" viewBox="0 0 48 48">
             <circle
               cx="24"
               cy="24"
               r={radius}
-              stroke="#E5E5E5"
+              stroke="var(--rh-border-hairline)"
               strokeWidth="3.5"
               fill="transparent"
             />
@@ -109,39 +109,39 @@ export function AgentRingNode({ data }: NodeProps) {
             />
           </svg>
           <div className="absolute inset-0 flex flex-col items-center justify-center">
-            <span className="text-[11px] font-mono font-bold text-[#0F0F0F]">
+            <span className="text-[11px] font-mono font-bold text-rh-text">
               {riskScore}
             </span>
           </div>
         </div>
 
         <div className="min-w-0 flex-1">
-          <div className="text-[14px] leading-[20px] font-medium text-[#0F0F0F] line-clamp-2">
+          <div className="text-[14px] leading-[20px] font-medium text-rh-text line-clamp-2">
             {String(data.label)}
           </div>
-          <div className="text-[12px] leading-[16px] text-[#606060] mt-0.5 truncate">
+          <div className="text-[12px] leading-[16px] text-rh-text-2 mt-0.5 truncate">
             {String(data.framework)} • {String(data.environment)}
           </div>
-          <div className="text-[12px] leading-[16px] text-[#606060] mt-0.5">
+          <div className="text-[12px] leading-[16px] text-rh-text-2 mt-0.5">
             {String(data.p99FirewallMs)}ms p99 • {String(data.blockedAttacksCount)} contained
           </div>
         </div>
       </div>
 
       {isPaused && (
-        <div className="mt-3 flex items-center justify-between rounded-[4px] bg-[#FFF8E1] border border-[#FB8C00]/40 px-2.5 py-1 text-[12px] font-medium text-[#0F0F0F]">
+        <div className="mt-3 flex items-center justify-between rounded-[4px] bg-rh-ochre-wash border border-rh-ochre/40 px-2.5 py-1 text-[12px] font-medium text-rh-text">
           <span className="flex items-center gap-1.5">
-            <Hand className="h-3.5 w-3.5 text-[#FB8C00]" />
+            <Hand className="h-3.5 w-3.5 text-rh-ochre" />
             Four-Eyes HITL Circuit Breaker
           </span>
-          <span className="text-[11px] font-mono text-[#606060]">PAUSED</span>
+          <span className="text-[11px] font-mono text-rh-text-2">PAUSED</span>
         </div>
       )}
 
       <Handle
         type="source"
         position={Position.Right}
-        className="!h-2.5 !w-2.5 !border-2 !border-[#FFFFFF] !bg-[#0F0F0F]"
+        className="!h-2.5 !w-2.5 !border-2 !border-rh-card !bg-rh-teal"
       />
     </div>
   );
@@ -155,57 +155,57 @@ export function GuardGateNode({ data }: NodeProps) {
 
   return (
     <div
-      className={`w-72 rounded-[12px] bg-[#FFFFFF] p-3.5 border shadow-sm ${
+      className={`w-72 rounded-[12px] bg-rh-card p-3.5 border ${
         verdict === "blocked"
-          ? "border-[#FF0000]"
+          ? "border-rh-crimson"
           : verdict === "hitl_paused"
-            ? "border-[#FB8C00]"
-            : "border-[#2BA640]"
+            ? "border-rh-ochre"
+            : "border-rh-teal"
       }`}
     >
       <Handle
         type="target"
         position={Position.Left}
-        className="!h-2.5 !w-2.5 !border-2 !border-[#FFFFFF] !bg-[#606060]"
+        className="!h-2.5 !w-2.5 !border-2 !border-rh-card !bg-rh-text-2"
       />
 
       <div className="flex items-center justify-between mb-2">
-        <span className="inline-flex items-center gap-1.5 text-[12px] font-bold text-[#0F0F0F]">
+        <span className="inline-flex items-center gap-1.5 text-[12px] font-bold text-rh-text">
           {verdict === "blocked" ? (
-            <ShieldAlert className="h-4 w-4 text-[#FF0000]" />
+            <ShieldAlert className="h-4 w-4 text-rh-crimson-text" />
           ) : verdict === "hitl_paused" ? (
-            <Hand className="h-4 w-4 text-[#FB8C00]" />
+            <Hand className="h-4 w-4 text-rh-ochre" />
           ) : (
-            <ShieldCheck className="h-4 w-4 text-[#2BA640]" />
+            <ShieldCheck className="h-4 w-4 text-rh-teal-text" />
           )}
           AgentWall AST Gate
         </span>
 
-        <span className="rounded-[4px] bg-[#0F0F0F] px-2 py-0.5 text-[11px] font-mono font-medium text-[#FFFFFF]">
+        <span className="rounded-[4px] bg-rh-teal px-2 py-0.5 text-[11px] font-mono font-medium text-rh-canvas">
           {String(data.latencyMs || 0.16)}ms
         </span>
       </div>
 
-      <div className="text-[13px] leading-[18px] font-mono font-semibold text-[#0F0F0F] truncate mb-1">
+      <div className="text-[13px] leading-[18px] font-mono font-semibold text-rh-text truncate mb-1">
         {String(data.toolName)}()
       </div>
 
-      <div className="text-[11px] leading-[16px] text-[#606060]">
+      <div className="text-[11px] leading-[16px] text-rh-text-2">
         AST Allowlists • Delegated RBAC • Row Cap 50
       </div>
 
-      <div className="mt-2.5 pt-2 border-t border-[#E5E5E5] flex items-center justify-between text-[11px]">
-        <span className="text-[#606060]">Firewall Decision</span>
+      <div className="mt-2.5 pt-2 border-t border-rh-hairline flex items-center justify-between text-[11px]">
+        <span className="text-rh-text-2">Firewall Decision</span>
         {verdict === "blocked" ? (
-          <span className="rounded-[3px] bg-[#FF0000] px-1.5 py-0.5 text-[10px] font-bold text-[#FFFFFF] tracking-wider uppercase">
+          <span className="rounded-[3px] bg-rh-crimson px-1.5 py-0.5 text-[10px] font-bold text-rh-canvas tracking-wider uppercase">
             BLOCKED
           </span>
         ) : verdict === "hitl_paused" ? (
-          <span className="rounded-[3px] bg-[#FB8C00] px-1.5 py-0.5 text-[10px] font-bold text-[#FFFFFF] tracking-wider uppercase">
+          <span className="rounded-[3px] bg-rh-ochre px-1.5 py-0.5 text-[10px] font-bold text-rh-canvas tracking-wider uppercase">
             REVIEW PENDING
           </span>
         ) : (
-          <span className="rounded-[3px] bg-[#2BA640] px-1.5 py-0.5 text-[10px] font-bold text-[#FFFFFF] tracking-wider uppercase">
+          <span className="rounded-[3px] bg-rh-teal px-1.5 py-0.5 text-[10px] font-bold text-rh-canvas tracking-wider uppercase">
             CONTAINED &amp; ALLOWED
           </span>
         )}
@@ -214,7 +214,7 @@ export function GuardGateNode({ data }: NodeProps) {
       <Handle
         type="source"
         position={Position.Right}
-        className="!h-2.5 !w-2.5 !border-2 !border-[#FFFFFF] !bg-[#0F0F0F]"
+        className="!h-2.5 !w-2.5 !border-2 !border-rh-card !bg-rh-teal"
       />
     </div>
   );
@@ -229,19 +229,19 @@ export function CloudResourceNode({ data }: NodeProps) {
 
   const providerBadge =
     cloudProvider === "aws"
-      ? { label: "AWS STS", bg: "bg-[#FF9900]/10 text-[#FF9900] border-[#FF9900]/30" }
+      ? { label: "AWS STS", bg: "bg-rh-ochre/10 text-rh-ochre border-rh-ochre/30" }
       : cloudProvider === "azure"
-        ? { label: "AZURE ENTRA ID", bg: "bg-[#0078D4]/10 text-[#0078D4] border-[#0078D4]/30" }
+        ? { label: "AZURE ENTRA ID", bg: "bg-rh-steel/10 text-rh-steel-text border-rh-steel/30" }
         : cloudProvider === "saas"
-          ? { label: "SAAS TOKEN", bg: "bg-[#24292E]/10 text-[#24292E] border-[#24292E]/30" }
-          : { label: "GCP STS CAB", bg: "bg-[#4285F4]/10 text-[#4285F4] border-[#4285F4]/30" };
+          ? { label: "SAAS TOKEN", bg: "bg-rh-elevated/10 text-rh-text border-rh-strong/30" }
+          : { label: "GCP STS CAB", bg: "bg-rh-steel/10 text-rh-steel-text border-rh-steel/30" };
 
   return (
-    <div className="w-72 rounded-[12px] border border-[#E5E5E5] bg-[#FFFFFF] p-3.5 shadow-sm">
+    <div className="w-72 rounded-[12px] border border-rh-hairline bg-rh-card p-3.5">
       <Handle
         type="target"
         position={Position.Left}
-        className="!h-2.5 !w-2.5 !border-2 !border-[#FFFFFF] !bg-[#606060]"
+        className="!h-2.5 !w-2.5 !border-2 !border-rh-card !bg-rh-text-2"
       />
 
       <div className="flex items-center justify-between mb-2">
@@ -250,29 +250,29 @@ export function CloudResourceNode({ data }: NodeProps) {
           {String(data.serviceType || providerBadge.label)}
         </span>
         {tokenJti ? (
-          <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-[#2BA640]">
+          <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-rh-teal-text">
             <KeyRound className="h-3 w-3" />
             JIT Active (30s)
           </span>
         ) : (
-          <span className="inline-flex items-center gap-1 text-[11px] text-[#606060]">
+          <span className="inline-flex items-center gap-1 text-[11px] text-rh-text-2">
             <Lock className="h-3 w-3" />
             0 Standing IAM
           </span>
         )}
       </div>
 
-      <div className="text-[13px] leading-[18px] font-semibold text-[#0F0F0F] mb-1">
+      <div className="text-[13px] leading-[18px] font-semibold text-rh-text mb-1">
         {String(data.label)}
       </div>
 
-      <div className="text-[11px] leading-[15px] font-mono text-[#065FD4] break-all bg-[#F2F2F2] p-2 rounded-[8px] mb-2">
+      <div className="text-[11px] leading-[15px] font-mono text-rh-steel-text break-all bg-rh-elevated p-2 rounded-[8px] mb-2">
         {String(data.resourceUri)}
       </div>
 
-      <div className="text-[11px] leading-[15px] text-[#606060] flex items-center justify-between">
+      <div className="text-[11px] leading-[15px] text-rh-text-2 flex items-center justify-between">
         <span>Bound Scope:</span>
-        <span className="text-[#0F0F0F] font-mono font-medium truncate max-w-[150px]">{String(data.cabRole)}</span>
+        <span className="text-rh-text font-mono font-medium truncate max-w-[150px]">{String(data.cabRole)}</span>
       </div>
     </div>
   );

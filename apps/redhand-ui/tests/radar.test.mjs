@@ -90,9 +90,9 @@ test("no language is shown as reviewed, Chinese is not covered, and Indonesian a
 
 test("statuses are shaded cautiously and an unknown status is shown as it is", () => {
   assert.equal(statusStyle("covered").label, "covered");
-  assert.match(statusStyle("weak").classes, /B42318/);
+  assert.match(statusStyle("weak").classes, /rh-crimson/);
   assert.equal(statusStyle("something new").label, "something new");
-  assert.match(statusStyle("something new").classes, /606060/);
+  assert.match(statusStyle("something new").classes, /rh-text-2/);
 });
 
 test("the coverage file lists the known gaps and the three frozen blind rounds", () => {

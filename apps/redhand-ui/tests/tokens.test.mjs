@@ -63,9 +63,7 @@ test("the keyboard focus ring is a 1px outline, not a glow", () => {
 });
 
 test("no shadows, glows, gradients, blur or pure black in the tokens or primitives", () => {
-  // The React Flow overrides below the token section belong to the old light theme (sample canvas); S5 migrates them and removes this cut.
-  const tokenSection = css.split("/* React Flow")[0];
-  for (const [name, src] of [["globals.css tokens", tokenSection], ["primitives", primitives]]) {
+  for (const [name, src] of [["globals.css", css], ["primitives", primitives]]) {
     assert.ok(!/(box-shadow|text-shadow|drop-shadow|backdrop|blur\(|gradient|#000000\b|#000\b)/i.test(src.replace(/\/\*[\s\S]*?\*\//g, "")), `${name} has a banned style`);
   }
 });
@@ -74,4 +72,12 @@ test("every colour token is mapped in the tailwind config", () => {
   for (const [, name] of css.matchAll(/--(rh-[a-z-]+):/g)) {
     assert.ok(tailwind.includes(`var(--${name})`), `--${name} is not mapped in tailwind.config.ts`);
   }
+});
+
+test("the text-safe accent siblings meet AA on cards, elevated surfaces and their own washes", () => {
+  for (const [text, wash, alpha] of [["rh-teal-text", "rh-teal", 0.14], ["rh-crimson-text", "rh-crimson", 0.15], ["rh-steel-text", "rh-steel", 0.14], ["rh-purple-text", "rh-slate-purple", 0.15]]) {
+    for (const surface of ["rh-surface-card", "rh-surface-elevated", "rh-canvas-bg"]) assert.ok(ratio(token(text), token(surface)) >= 4.5, `${text} on ${surface}`);
+    assert.ok(ratio(token(text), blend(token(wash), token("rh-surface-card"), alpha)) >= 4.5, `${text} on its wash`);
+  }
+  assert.ok(ratio(token("rh-ochre"), blend(token("rh-ochre"), token("rh-surface-card"), 0.14)) >= 4.5, "ochre text on its wash");
 });

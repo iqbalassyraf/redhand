@@ -326,21 +326,21 @@ export function InterventionRail({
   };
 
   return (
-    <aside className="flex h-full w-[440px] shrink-0 flex-col border-l border-[#E5E5E5] bg-[#FFFFFF]">
+    <aside className="flex h-full w-[440px] shrink-0 flex-col border-l border-rh-hairline bg-rh-card">
       {/* Red Broadcast 9999px Pill Tabs */}
-      <div className="flex items-center gap-1.5 border-b border-[#E5E5E5] px-3 py-2.5 overflow-x-auto">
+      <div className="flex items-center gap-1.5 border-b border-rh-hairline px-3 py-2.5 overflow-x-auto">
         <button
           onClick={() => setActiveTab("hitl")}
           className={`relative inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[13px] leading-[18px] font-medium transition-colors whitespace-nowrap ${
             activeTab === "hitl"
-              ? "bg-[#0F0F0F] text-[#FFFFFF]"
-              : "bg-[#F2F2F2] text-[#0F0F0F] hover:bg-[#E5E5E5]"
+              ? "bg-rh-teal text-rh-canvas"
+              : "bg-rh-elevated text-rh-text hover:bg-rh-strong"
           }`}
         >
           <Hand className="h-3.5 w-3.5" />
           Review Queue
           {reviewQueue.length > 0 && (
-            <span className="rounded-[2px] bg-[#FF0000] px-1.5 py-0.2 text-[11px] font-medium text-[#FFFFFF]">
+            <span className="rounded-[2px] bg-rh-crimson px-1.5 py-0.2 text-[11px] font-medium text-rh-canvas">
               {reviewQueue.length}
             </span>
           )}
@@ -353,11 +353,11 @@ export function InterventionRail({
           }}
           className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[13px] leading-[18px] font-medium transition-colors whitespace-nowrap ${
             activeTab === "mcp_vet"
-              ? "bg-[#0F0F0F] text-[#FFFFFF]"
-              : "bg-[#F2F2F2] text-[#0F0F0F] hover:bg-[#E5E5E5]"
+              ? "bg-rh-teal text-rh-canvas"
+              : "bg-rh-elevated text-rh-text hover:bg-rh-strong"
           }`}
         >
-          <Sparkles className="h-3.5 w-3.5 text-[#065FD4]" />
+          <Sparkles className="h-3.5 w-3.5 text-rh-steel-text" />
           MCP Vetting
         </button>
 
@@ -365,8 +365,8 @@ export function InterventionRail({
           onClick={() => setActiveTab("xray")}
           className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[13px] leading-[18px] font-medium transition-colors whitespace-nowrap ${
             activeTab === "xray"
-              ? "bg-[#0F0F0F] text-[#FFFFFF]"
-              : "bg-[#F2F2F2] text-[#0F0F0F] hover:bg-[#E5E5E5]"
+              ? "bg-rh-teal text-rh-canvas"
+              : "bg-rh-elevated text-rh-text hover:bg-rh-strong"
           }`}
         >
           <Terminal className="h-3.5 w-3.5" />
@@ -377,8 +377,8 @@ export function InterventionRail({
           onClick={() => setActiveTab("posture")}
           className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[13px] leading-[18px] font-medium transition-colors whitespace-nowrap ${
             activeTab === "posture"
-              ? "bg-[#0F0F0F] text-[#FFFFFF]"
-              : "bg-[#F2F2F2] text-[#0F0F0F] hover:bg-[#E5E5E5]"
+              ? "bg-rh-teal text-rh-canvas"
+              : "bg-rh-elevated text-rh-text hover:bg-rh-strong"
           }`}
         >
           <Sliders className="h-3.5 w-3.5" />
@@ -389,8 +389,8 @@ export function InterventionRail({
           onClick={() => setActiveTab("worm")}
           className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[13px] leading-[18px] font-medium transition-colors whitespace-nowrap ${
             activeTab === "worm"
-              ? "bg-[#0F0F0F] text-[#FFFFFF]"
-              : "bg-[#F2F2F2] text-[#0F0F0F] hover:bg-[#E5E5E5]"
+              ? "bg-rh-teal text-rh-canvas"
+              : "bg-rh-elevated text-rh-text hover:bg-rh-strong"
           }`}
         >
           <Lock className="h-3.5 w-3.5" />
@@ -402,27 +402,27 @@ export function InterventionRail({
       {activeTab === "hitl" && (
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
           {!activeIntervention ? (
-            <div className="rounded-[12px] bg-[#F2F2F2] p-6 text-center">
-              <ShieldCheck className="mx-auto h-7 w-7 text-[#2BA640] mb-2" />
-              <div className="text-[14px] font-medium text-[#0F0F0F]">
+            <div className="rounded-[12px] bg-rh-elevated p-6 text-center">
+              <ShieldCheck className="mx-auto h-7 w-7 text-rh-teal-text mb-2" />
+              <div className="text-[14px] font-medium text-rh-text">
                 No Pending Interventions
               </div>
-              <p className="text-[12px] text-[#606060] mt-1">
+              <p className="text-[12px] text-rh-text-2 mt-1">
                 All state-changing agent actions are currently resolved.
               </p>
             </div>
           ) : (
             <div className="space-y-4">
               <div className="flex items-center justify-between">
-                <span className="rounded-[2px] bg-[#FB8C00] px-2 py-0.5 text-[12px] font-medium text-[#FFFFFF] uppercase">
+                <span className="rounded-[2px] bg-rh-ochre px-2 py-0.5 text-[12px] font-medium text-rh-canvas uppercase">
                   {activeIntervention.risk_tier} •{" "}
                   {activeIntervention.status === "partially_approved"
                     ? "1 OF 2 SIGNED"
                     : "REVIEW PENDING"}
                 </span>
-                <span className="text-[12px] text-[#606060] uppercase font-mono">
+                <span className="text-[12px] text-rh-text-2 uppercase font-mono">
                   Quorum:{" "}
-                  <strong className="text-[#0F0F0F]">
+                  <strong className="text-rh-text">
                     {activeIntervention.approvals?.length || 0}/
                     {activeIntervention.required_approvals || 1}
                   </strong>
@@ -430,25 +430,25 @@ export function InterventionRail({
               </div>
 
               {activeIntervention.status === "partially_approved" && (
-                <div className="rounded-[8px] border border-[#FB8C00] bg-[#FFF8E1] p-3 text-[12px] text-[#0F0F0F]">
+                <div className="rounded-[8px] border border-rh-ochre bg-rh-ochre-wash p-3 text-[12px] text-rh-text">
                   <strong className="font-semibold block mb-0.5">⚠️ Four-Eyes Quorum Required</strong>
                   1st signature recorded. A second independent security operator must review and sign before the ephemeral STS credential is dispatched.
                 </div>
               )}
 
               {activeIntervention.approvals && activeIntervention.approvals.length > 0 && (
-                <div className="rounded-[8px] bg-[#F2F2F2] p-3 space-y-1.5">
-                  <div className="text-[11px] font-medium uppercase text-[#606060]">
+                <div className="rounded-[8px] bg-rh-elevated p-3 space-y-1.5">
+                  <div className="text-[11px] font-medium uppercase text-rh-text-2">
                     Recorded Signatures
                   </div>
                   {activeIntervention.approvals.map((appr, idx) => {
                     const prof = REVIEWER_PROFILES.find((p) => p.id === appr.reviewer_user_id);
                     return (
                       <div key={idx} className="flex items-center justify-between text-[12px]">
-                        <span className="font-medium text-[#0F0F0F]">
+                        <span className="font-medium text-rh-text">
                           ✓ {prof ? `${prof.name} (${prof.role})` : appr.reviewer_user_id.slice(0, 8)}
                         </span>
-                        <span className="text-[11px] text-[#606060] font-mono">
+                        <span className="text-[11px] text-rh-text-2 font-mono">
                           {appr.approved_at.slice(11, 19)} UTC
                         </span>
                       </div>
@@ -458,45 +458,45 @@ export function InterventionRail({
               )}
 
               <div>
-                <h2 className="text-[20px] leading-[28px] font-bold text-[#0F0F0F]">
+                <h2 className="text-[20px] leading-[28px] font-bold text-rh-text">
                   {activeIntervention.proposed_tool_name}()
                 </h2>
-                <p className="text-[12px] leading-[16px] text-[#606060] mt-0.5">
+                <p className="text-[12px] leading-[16px] text-rh-text-2 mt-0.5">
                   {activeIntervention.agent_name} • {activeIntervention.framework} •{" "}
                   {activeIntervention.created_at.slice(11, 19)} UTC
                 </p>
               </div>
 
-              <div className="rounded-[12px] bg-[#F2F2F2] p-3">
-                <div className="text-[12px] font-medium text-[#0F0F0F] mb-1">
+              <div className="rounded-[12px] bg-rh-elevated p-3">
+                <div className="text-[12px] font-medium text-rh-text mb-1">
                   Agent Reasoning (Thought)
                 </div>
-                <p className="text-[14px] leading-[20px] text-[#0F0F0F]">
+                <p className="text-[14px] leading-[20px] text-rh-text">
                   &ldquo;{activeIntervention.agent_justification}&rdquo;
                 </p>
               </div>
 
               <div>
-                <div className="text-[12px] font-medium text-[#606060] mb-1">
+                <div className="text-[12px] font-medium text-rh-text-2 mb-1">
                   Target Cloud Resource
                 </div>
-                <div className="rounded-[8px] bg-[#F2F2F2] p-2.5 text-[12px] font-mono text-[#065FD4] break-all">
+                <div className="rounded-[8px] bg-rh-elevated p-2.5 text-[12px] font-mono text-rh-steel-text break-all">
                   {activeIntervention.target_cloud_resource}
                 </div>
               </div>
 
-              <div className="flex items-center justify-between rounded-[8px] border border-[#E5E5E5] px-3 py-2">
-                <span className="inline-flex items-center gap-1.5 text-[12px] font-medium text-[#2BA640]">
+              <div className="flex items-center justify-between rounded-[8px] border border-rh-hairline px-3 py-2">
+                <span className="inline-flex items-center gap-1.5 text-[12px] font-medium text-rh-teal-text">
                   <Lock className="h-3.5 w-3.5" />
                   SHA-256 State Verified
                 </span>
-                <span className="text-[12px] font-mono text-[#606060]">
+                <span className="text-[12px] font-mono text-rh-text-2">
                   {activeIntervention.state_checksum.slice(0, 14)}...
                 </span>
               </div>
 
               <div>
-                <label className="block text-[12px] font-medium text-[#0F0F0F] mb-1">
+                <label className="block text-[12px] font-medium text-rh-text mb-1">
                   Proposed Tool Arguments (JSON)
                 </label>
                 <textarea
@@ -507,24 +507,24 @@ export function InterventionRail({
                     activeIntervention.status !== "partially_approved"
                   }
                   rows={4}
-                  className="w-full rounded-[8px] border border-[#E5E5E5] bg-[#F2F2F2] p-3 font-mono text-[13px] leading-[18px] text-[#0F0F0F] focus:border-[#0F0F0F] focus:bg-[#FFFFFF] focus:outline-none disabled:opacity-60"
+                  className="w-full rounded-[8px] border border-rh-hairline bg-rh-elevated p-3 font-mono text-[13px] leading-[18px] text-rh-text focus:border-rh-strong focus:bg-rh-card focus:outline-none disabled:opacity-60"
                 />
                 {jsonError && (
-                  <p className="mt-1 text-[12px] text-[#FF0000]">{jsonError}</p>
+                  <p className="mt-1 text-[12px] text-rh-crimson-text">{jsonError}</p>
                 )}
               </div>
 
               {/* Four-eyes: the signer is always the signed-in operator (enforced by redhand-core). */}
               {(activeIntervention.status === "pending" ||
                 activeIntervention.status === "partially_approved") && (
-                <p className="text-[12px] text-[#606060]">
+                <p className="text-[12px] text-rh-text-2">
                   You sign as the operator you are logged in as. A second approval must come from a
                   different operator&apos;s own login.
                 </p>
               )}
 
               <div>
-                <label className="block text-[12px] font-medium text-[#606060] mb-1">
+                <label className="block text-[12px] font-medium text-rh-text-2 mb-1">
                   Reviewer Audit Note
                 </label>
                 <input
@@ -535,7 +535,7 @@ export function InterventionRail({
                     activeIntervention.status !== "pending" &&
                     activeIntervention.status !== "partially_approved"
                   }
-                  className="h-[40px] w-full border-b border-[#E5E5E5] bg-transparent px-1 text-[14px] text-[#0F0F0F] focus:border-[#0F0F0F] focus:outline-none disabled:opacity-60"
+                  className="h-[40px] w-full border-b border-rh-hairline bg-transparent px-1 text-[14px] text-rh-text focus:border-rh-strong focus:outline-none disabled:opacity-60"
                 />
               </div>
 
@@ -546,7 +546,7 @@ export function InterventionRail({
                     <button
                       onClick={() => handleDecision("approve")}
                       disabled={isSubmitting}
-                      className="flex h-[36px] flex-1 items-center justify-center gap-1.5 rounded-full bg-[#0F0F0F] hover:bg-[#272727] px-4 text-[14px] font-medium text-[#FFFFFF] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                      className="flex h-[36px] flex-1 items-center justify-center gap-1.5 rounded-full bg-rh-teal hover:bg-rh-teal px-4 text-[14px] font-medium text-rh-canvas transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                     >
                       <CheckCircle2 className="h-4 w-4" />
                       {activeIntervention.status === "partially_approved"
@@ -556,16 +556,16 @@ export function InterventionRail({
                     <button
                       onClick={() => handleDecision("deny")}
                       disabled={isSubmitting}
-                      className="flex h-[36px] flex-1 items-center justify-center gap-1.5 rounded-full border border-[#E5E5E5] bg-[#FFFFFF] hover:bg-[#F2F2F2] px-4 text-[14px] font-medium text-[#0F0F0F] transition-colors disabled:opacity-50"
+                      className="flex h-[36px] flex-1 items-center justify-center gap-1.5 rounded-full border border-rh-hairline bg-rh-card hover:bg-rh-elevated px-4 text-[14px] font-medium text-rh-text transition-colors disabled:opacity-50"
                     >
-                      <XCircle className="h-4 w-4 text-[#FF0000]" />
+                      <XCircle className="h-4 w-4 text-rh-crimson-text" />
                       Deny
                     </button>
                   </div>
                 </div>
               ) : (
-                <div className="rounded-[8px] bg-[#F2F2F2] p-3 text-center text-[12px] text-[#606060]">
-                  Resolved: <span className="font-semibold text-[#0F0F0F] uppercase">{activeIntervention.status}</span>
+                <div className="rounded-[8px] bg-rh-elevated p-3 text-center text-[12px] text-rh-text-2">
+                  Resolved: <span className="font-semibold text-rh-text uppercase">{activeIntervention.status}</span>
                 </div>
               )}
             </div>
@@ -578,21 +578,21 @@ export function InterventionRail({
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
           <div>
             <div className="flex items-center justify-between">
-              <span className="text-[14px] font-bold text-[#0F0F0F]">
+              <span className="text-[14px] font-bold text-rh-text">
                 MCP Server Manifest Auditor
               </span>
-              <span className="rounded-[2px] bg-[#0F0F0F] px-1.5 py-0.5 text-[10px] font-bold text-[#FFFFFF]">
+              <span className="rounded-[2px] bg-rh-teal px-1.5 py-0.5 text-[10px] font-bold text-rh-canvas">
                 STATIC AST AUDIT
               </span>
             </div>
-            <p className="text-[12px] text-[#606060] mt-0.5">
+            <p className="text-[12px] text-rh-text-2 mt-0.5">
               Inspect third-party MCP servers prior to installation. Flags shell wrappers, env secrets, and loose schemas.
             </p>
           </div>
 
           {/* Sample Preset Selector */}
           <div>
-            <label className="block text-[11px] font-medium text-[#606060] uppercase mb-1">
+            <label className="block text-[11px] font-medium text-rh-text-2 uppercase mb-1">
               Test Presets
             </label>
             <div className="space-y-1.5">
@@ -607,8 +607,8 @@ export function InterventionRail({
                   }}
                   className={`w-full rounded-[8px] border p-2 text-left text-[12px] transition-colors ${
                     selectedMcpPreset === k
-                      ? "border-[#0F0F0F] bg-[#FFFFFF] font-semibold text-[#0F0F0F] shadow-sm"
-                      : "border-[#E5E5E5] bg-[#F2F2F2] text-[#606060] hover:bg-[#E5E5E5]"
+                      ? "border-rh-strong bg-rh-card font-semibold text-rh-text"
+                      : "border-rh-hairline bg-rh-elevated text-rh-text-2 hover:bg-rh-strong"
                   }`}
                 >
                   {item.label}
@@ -620,13 +620,13 @@ export function InterventionRail({
           {/* Manifest Textarea */}
           <div>
             <div className="flex items-center justify-between mb-1">
-              <label className="text-[11px] font-medium text-[#606060] uppercase">
+              <label className="text-[11px] font-medium text-rh-text-2 uppercase">
                 MCP Server Manifest JSON
               </label>
               <button
                 onClick={() => handleAuditMcp()}
                 disabled={isAuditingMcp}
-                className="inline-flex items-center gap-1 rounded-full bg-[#0F0F0F] px-3 py-1 text-[11px] font-medium text-[#FFFFFF] hover:bg-[#272727] disabled:opacity-50"
+                className="inline-flex items-center gap-1 rounded-full bg-rh-teal px-3 py-1 text-[11px] font-medium text-rh-canvas hover:bg-rh-teal disabled:opacity-50"
               >
                 {isAuditingMcp ? "Auditing..." : "Re-audit Manifest"}
               </button>
@@ -635,30 +635,30 @@ export function InterventionRail({
               value={mcpManifestText}
               onChange={(e) => setMcpManifestText(e.target.value)}
               rows={6}
-              className="w-full rounded-[8px] border border-[#E5E5E5] bg-[#F2F2F2] p-2.5 font-mono text-[11px] text-[#0F0F0F] focus:border-[#0F0F0F] focus:bg-[#FFFFFF] focus:outline-none"
+              className="w-full rounded-[8px] border border-rh-hairline bg-rh-elevated p-2.5 font-mono text-[11px] text-rh-text focus:border-rh-strong focus:bg-rh-card focus:outline-none"
             />
           </div>
 
           {/* Audit Report Results */}
           {mcpReport && (
-            <div className="space-y-3 pt-1 border-t border-[#E5E5E5]">
+            <div className="space-y-3 pt-1 border-t border-rh-hairline">
               <div className="flex items-center justify-between">
                 <div>
-                  <div className="text-[13px] font-bold text-[#0F0F0F]">
+                  <div className="text-[13px] font-bold text-rh-text">
                     {mcpReport.server_name}
                   </div>
-                  <div className="text-[11px] text-[#606060]">
+                  <div className="text-[11px] text-rh-text-2">
                     {mcpReport.total_tools_scanned} tools scanned • Risk Score: {mcpReport.risk_score}/100
                   </div>
                 </div>
 
                 <span
-                  className={`rounded-[3px] px-2.5 py-1 text-[12px] font-bold text-[#FFFFFF] ${
+                  className={`rounded-[3px] px-2.5 py-1 text-[12px] font-bold text-rh-canvas ${
                     mcpReport.verdict === "FAIL"
-                      ? "bg-[#FF0000]"
+                      ? "bg-rh-crimson"
                       : mcpReport.verdict === "WARN"
-                        ? "bg-[#FB8C00]"
-                        : "bg-[#2BA640]"
+                        ? "bg-rh-ochre"
+                        : "bg-rh-teal"
                   }`}
                 >
                   {mcpReport.verdict === "FAIL"
@@ -671,39 +671,39 @@ export function InterventionRail({
 
               {/* Findings List */}
               <div className="space-y-2">
-                <div className="text-[11px] font-bold uppercase text-[#606060]">
+                <div className="text-[11px] font-bold uppercase text-rh-text-2">
                   Security Findings ({mcpReport.findings.length})
                 </div>
                 {mcpReport.findings.length === 0 ? (
-                  <div className="rounded-[8px] bg-[#F2F2F2] p-3 text-[12px] text-[#2BA640] font-medium">
+                  <div className="rounded-[8px] bg-rh-elevated p-3 text-[12px] text-rh-teal-text font-medium">
                     ✓ Clean manifest. No dangerous primitives or exposed secrets detected.
                   </div>
                 ) : (
                   mcpReport.findings.map((f, i) => (
                     <div
                       key={i}
-                      className="rounded-[8px] border border-[#E5E5E5] bg-[#FFFFFF] p-2.5 text-[12px] space-y-1"
+                      className="rounded-[8px] border border-rh-hairline bg-rh-card p-2.5 text-[12px] space-y-1"
                     >
                       <div className="flex items-center justify-between">
-                        <span className="font-semibold text-[#0F0F0F]">
+                        <span className="font-semibold text-rh-text">
                           {f.title}
                         </span>
                         <span
-                          className={`rounded px-1.5 py-0.2 text-[10px] font-bold text-[#FFFFFF] ${
+                          className={`rounded px-1.5 py-0.2 text-[10px] font-bold text-rh-canvas ${
                             f.severity === "CRITICAL"
-                              ? "bg-[#FF0000]"
+                              ? "bg-rh-crimson"
                               : f.severity === "HIGH"
-                                ? "bg-[#FB8C00]"
-                                : "bg-[#065FD4]"
+                                ? "bg-rh-ochre"
+                                : "bg-rh-steel"
                           }`}
                         >
                           {f.severity}
                         </span>
                       </div>
-                      <p className="text-[11px] text-[#606060] leading-snug">
+                      <p className="text-[11px] text-rh-text-2 leading-snug">
                         {f.description}
                       </p>
-                      <div className="text-[11px] text-[#065FD4] bg-[#F2F2F2] p-1.5 rounded font-mono">
+                      <div className="text-[11px] text-rh-steel-text bg-rh-elevated p-1.5 rounded font-mono">
                         Remediation: {f.remediation}
                       </div>
                     </div>
@@ -712,20 +712,20 @@ export function InterventionRail({
               </div>
 
               {/* Generated AgentWall Policy */}
-              <div className="rounded-[8px] bg-[#F2F2F2] p-3 space-y-1.5">
+              <div className="rounded-[8px] bg-rh-elevated p-3 space-y-1.5">
                 <div className="flex items-center justify-between">
-                  <span className="text-[11px] font-bold text-[#0F0F0F]">
+                  <span className="text-[11px] font-bold text-rh-text">
                     Auto-Generated Sandboxed Policy
                   </span>
                   <button
                     onClick={handleCopyMcpPolicy}
-                    className="inline-flex items-center gap-1 rounded bg-[#FFFFFF] px-2 py-0.5 text-[10px] font-medium text-[#0F0F0F] border border-[#E5E5E5]"
+                    className="inline-flex items-center gap-1 rounded bg-rh-card px-2 py-0.5 text-[10px] font-medium text-rh-text border border-rh-hairline"
                   >
-                    {copiedMcpPolicy ? <Check className="h-3 w-3 text-[#2BA640]" /> : <Copy className="h-3 w-3" />}
+                    {copiedMcpPolicy ? <Check className="h-3 w-3 text-rh-teal-text" /> : <Copy className="h-3 w-3" />}
                     {copiedMcpPolicy ? "Copied" : "Copy YAML"}
                   </button>
                 </div>
-                <pre className="overflow-x-auto text-[10px] font-mono text-[#0F0F0F] max-h-36">
+                <pre className="overflow-x-auto text-[10px] font-mono text-rh-text max-h-36">
                   {JSON.stringify(mcpReport.recommended_policy, null, 2)}
                 </pre>
               </div>
@@ -740,67 +740,67 @@ export function InterventionRail({
           {selectedTrace ? (
             <>
               <div className="space-y-3">
-                <div className="flex items-center justify-between text-[12px] text-[#606060]">
+                <div className="flex items-center justify-between text-[12px] text-rh-text-2">
                   <span className="font-mono">
                     Trace: {selectedTrace.trace_id.slice(0, 14)}...
                   </span>
-                  <span className="rounded-[4px] bg-[#F2F2F2] px-2 py-0.5 font-mono text-[#0F0F0F]">
+                  <span className="rounded-[4px] bg-rh-elevated px-2 py-0.5 font-mono text-rh-text">
                     {selectedTrace.firewall_latency_ms}ms
                   </span>
                 </div>
 
                 {/* Delegated Identity & RBAC Info */}
-                <div className="rounded-[8px] border border-[#E5E5E5] bg-[#FFFFFF] p-2.5 text-[12px] space-y-1">
+                <div className="rounded-[8px] border border-rh-hairline bg-rh-card p-2.5 text-[12px] space-y-1">
                   <div className="flex items-center justify-between">
-                    <span className="font-medium text-[#0F0F0F]">
+                    <span className="font-medium text-rh-text">
                       Delegated Caller Identity
                     </span>
-                    <span className="font-mono text-[#065FD4]">
+                    <span className="font-mono text-rh-steel-text">
                       {selectedTrace.delegated_user || "alice.chen@enterprise.com"}
                     </span>
                   </div>
-                  <div className="flex items-center justify-between text-[11px] text-[#606060]">
+                  <div className="flex items-center justify-between text-[11px] text-rh-text-2">
                     <span>Delegated RBAC Roles:</span>
-                    <span className="font-mono text-[#0F0F0F]">
+                    <span className="font-mono text-rh-text">
                       {selectedTrace.delegated_roles?.join(", ") || "finance_viewer, admin"}
                     </span>
                   </div>
-                  <div className="flex items-center justify-between text-[11px] text-[#606060]">
+                  <div className="flex items-center justify-between text-[11px] text-rh-text-2">
                     <span>Effective Permission Boundary:</span>
-                    <span className="text-[#2BA640] font-medium">Agent ∩ Caller RBAC</span>
+                    <span className="text-rh-teal-text font-medium">Agent ∩ Caller RBAC</span>
                   </div>
                 </div>
 
-                <div className="rounded-[12px] bg-[#F2F2F2] p-3">
-                  <div className="text-[12px] font-medium text-[#606060] mb-1">
+                <div className="rounded-[12px] bg-rh-elevated p-3">
+                  <div className="text-[12px] font-medium text-rh-text-2 mb-1">
                     1. Tool Invocation &amp; Arguments
                   </div>
-                  <p className="text-[13px] font-mono text-[#0F0F0F]">
+                  <p className="text-[13px] font-mono text-rh-text">
                     {selectedTrace.tool_name}({JSON.stringify(selectedTrace.tool_arguments)})
                   </p>
                 </div>
 
-                <div className="rounded-[12px] bg-[#F2F2F2] p-3">
-                  <div className="text-[12px] font-medium text-[#606060] mb-1">
+                <div className="rounded-[12px] bg-rh-elevated p-3">
+                  <div className="text-[12px] font-medium text-rh-text-2 mb-1">
                     2. Agent Reasoning Intent
                   </div>
-                  <p className="text-[13px] text-[#0F0F0F]">
+                  <p className="text-[13px] text-rh-text">
                     &ldquo;{selectedTrace.thought_content}&rdquo;
                   </p>
                 </div>
 
-                <div className="rounded-[12px] bg-[#F2F2F2] p-3">
-                  <div className="text-[12px] font-medium text-[#606060] mb-1">
+                <div className="rounded-[12px] bg-rh-elevated p-3">
+                  <div className="text-[12px] font-medium text-rh-text-2 mb-1">
                     3. Cloud / SaaS STS Credential Lease
                   </div>
-                  <div className="text-[12px] font-mono text-[#065FD4]">
+                  <div className="text-[12px] font-mono text-rh-steel-text">
                     {selectedTrace.ephemeral_token_jti ? (
-                      <span className="inline-flex items-center gap-1.5 text-[#2BA640] font-medium">
+                      <span className="inline-flex items-center gap-1.5 text-rh-teal-text font-medium">
                         <KeyRound className="h-3.5 w-3.5" />
                         JIT Token: {selectedTrace.ephemeral_token_jti}
                       </span>
                     ) : (
-                      <span className="text-[#FF0000] font-medium">
+                      <span className="text-rh-crimson-text font-medium">
                         ✕ Zero Token Minted (Execution Blocked)
                       </span>
                     )}
@@ -808,41 +808,41 @@ export function InterventionRail({
                 </div>
 
                 {/* Granular SQL / AST Guardrail Metrics */}
-                <div className="rounded-[8px] bg-[#F2F2F2] p-3 text-[12px] space-y-1">
-                  <div className="text-[11px] font-bold uppercase text-[#606060]">
+                <div className="rounded-[8px] bg-rh-elevated p-3 text-[12px] space-y-1">
+                  <div className="text-[11px] font-bold uppercase text-rh-text-2">
                     Enforced Governance Bounds
                   </div>
                   <div className="flex justify-between text-[11px]">
-                    <span className="text-[#606060]">Max Row Extraction:</span>
-                    <strong className="text-[#0F0F0F]">50 Rows (Hard Cap)</strong>
+                    <span className="text-rh-text-2">Max Row Extraction:</span>
+                    <strong className="text-rh-text">50 Rows (Hard Cap)</strong>
                   </div>
                   <div className="flex justify-between text-[11px]">
-                    <span className="text-[#606060]">Forbidden Columns:</span>
-                    <strong className="text-[#0F0F0F]">password_hash, ssn, secret_key</strong>
+                    <span className="text-rh-text-2">Forbidden Columns:</span>
+                    <strong className="text-rh-text">password_hash, ssn, secret_key</strong>
                   </div>
                   <div className="flex justify-between text-[11px]">
-                    <span className="text-[#606060]">Shell Binary Policy:</span>
-                    <strong className="text-[#0F0F0F]">Strict Positive Allowlist (Deny-Default)</strong>
+                    <span className="text-rh-text-2">Shell Binary Policy:</span>
+                    <strong className="text-rh-text">Strict Positive Allowlist (Deny-Default)</strong>
                   </div>
                 </div>
 
                 {/* OCSF Payload */}
                 <div className="flex items-center justify-between pt-2">
-                  <span className="text-[13px] font-medium text-[#0F0F0F]">
+                  <span className="text-[13px] font-medium text-rh-text">
                     OCSF v1.1.0 Telemetry Finding
                   </span>
                   <button
                     onClick={handleCopyOcsf}
-                    className="inline-flex items-center gap-1 rounded-full bg-[#F2F2F2] hover:bg-[#E5E5E5] px-2.5 py-1 text-[11px] font-medium text-[#0F0F0F]"
+                    className="inline-flex items-center gap-1 rounded-full bg-rh-elevated hover:bg-rh-strong px-2.5 py-1 text-[11px] font-medium text-rh-text"
                   >
-                    {copiedOcsf ? <Check className="h-3 w-3 text-[#2BA640]" /> : <Copy className="h-3 w-3 text-[#606060]" />}
+                    {copiedOcsf ? <Check className="h-3 w-3 text-rh-teal-text" /> : <Copy className="h-3 w-3 text-rh-text-2" />}
                     {copiedOcsf ? "Copied" : "Copy JSON"}
                   </button>
                 </div>
               </div>
             </>
           ) : (
-            <div className="text-center text-[14px] text-[#606060] py-8">
+            <div className="text-center text-[14px] text-rh-text-2 py-8">
               Select a telemetry row below to inspect its trace.
             </div>
           )}
@@ -852,7 +852,7 @@ export function InterventionRail({
       {/* TAB 4: LIVE AGENT POSTURE & QUARANTINE */}
       {activeTab === "posture" && (
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
-          <div className="text-[12px] text-[#606060]">
+          <div className="text-[12px] text-rh-text-2">
             Freezing an agent makes the RedHand gateway reject its tool calls (HTTP 403) within seconds.
           </div>
 
@@ -861,27 +861,27 @@ export function InterventionRail({
             return (
               <div
                 key={ag.id}
-                className="rounded-[12px] border border-[#E5E5E5] bg-[#FFFFFF] p-3.5 space-y-3"
+                className="rounded-[12px] border border-rh-hairline bg-rh-card p-3.5 space-y-3"
               >
                 <div className="flex items-start justify-between">
                   <div>
-                    <div className="text-[14px] font-medium text-[#0F0F0F]">
+                    <div className="text-[14px] font-medium text-rh-text">
                       {ag.name}
                     </div>
-                    <div className="text-[12px] text-[#606060]">
+                    <div className="text-[12px] text-rh-text-2">
                       {ag.framework} • {ag.environment} • Risk {ag.riskScore}/100
                     </div>
                   </div>
                   <span
-                    className={`rounded-[2px] px-2 py-0.5 text-[11px] font-medium uppercase text-[#FFFFFF] ${
-                      isQuarantined ? "bg-[#FF0000]" : "bg-[#2BA640]"
+                    className={`rounded-[2px] px-2 py-0.5 text-[11px] font-medium uppercase text-rh-canvas ${
+                      isQuarantined ? "bg-rh-crimson" : "bg-rh-teal"
                     }`}
                   >
                     {ag.status}
                   </span>
                 </div>
 
-                <div className="text-[12px] font-mono text-[#606060] bg-[#F2F2F2] p-2 rounded-[8px]">
+                <div className="text-[12px] font-mono text-rh-text-2 bg-rh-elevated p-2 rounded-[8px]">
                   Allowlist: {ag.allowedTools.join(", ")}
                 </div>
 
@@ -894,8 +894,8 @@ export function InterventionRail({
                   }
                   className={`flex h-[36px] w-full items-center justify-center gap-1.5 rounded-full px-4 text-[14px] font-medium transition-colors ${
                     isQuarantined
-                      ? "bg-[#0F0F0F] text-[#FFFFFF] hover:bg-[#272727]"
-                      : "bg-[#FF0000] text-[#FFFFFF] hover:bg-[#CC0000]"
+                      ? "bg-rh-teal text-rh-canvas hover:bg-rh-teal"
+                      : "bg-rh-crimson text-rh-canvas hover:bg-rh-crimson"
                   }`}
                 >
                   <ShieldOff className="h-4 w-4" />
@@ -913,36 +913,36 @@ export function InterventionRail({
       {activeTab === "worm" && (
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
           <div className="flex items-center justify-between">
-            <span className="rounded-[2px] bg-[#2BA640] px-2 py-0.5 text-[12px] font-medium text-[#FFFFFF] uppercase">
+            <span className="rounded-[2px] bg-rh-teal px-2 py-0.5 text-[12px] font-medium text-rh-canvas uppercase">
               WORM COMPLIANCE ACTIVE
             </span>
-            <span className="text-[12px] text-[#606060] uppercase font-mono">
+            <span className="text-[12px] text-rh-text-2 uppercase font-mono">
               ISO 42001 Verified
             </span>
           </div>
 
-          <div className="rounded-[12px] border border-[#E5E5E5] bg-[#FFFFFF] p-3.5 space-y-3">
-            <div className="flex items-center gap-2 text-[14px] font-medium text-[#0F0F0F]">
-              <Lock className="h-4 w-4 text-[#2BA640]" />
+          <div className="rounded-[12px] border border-rh-hairline bg-rh-card p-3.5 space-y-3">
+            <div className="flex items-center gap-2 text-[14px] font-medium text-rh-text">
+              <Lock className="h-4 w-4 text-rh-teal-text" />
               Cryptographic Hash Chain (Tamper-Proof)
             </div>
-            <div className="text-[12px] text-[#606060] leading-[18px]">
+            <div className="text-[12px] text-rh-text-2 leading-[18px]">
               Every tool call, AST verdict, and human sign-off is committed to a backward-linked SHA-256 block ledger.
             </div>
 
-            <div className="rounded-[8px] bg-[#F2F2F2] p-2.5 space-y-1 font-mono text-[11px]">
-              <div className="text-[#606060]">Current Block Height: #00000142</div>
-              <div className="text-[#0F0F0F] break-all">
+            <div className="rounded-[8px] bg-rh-elevated p-2.5 space-y-1 font-mono text-[11px]">
+              <div className="text-rh-text-2">Current Block Height: 00000142</div>
+              <div className="text-rh-text break-all">
                 Merkle Root: 6b86b273ff34fce19d6b804eff5a3f5747ada4eaa22f1d49c01e52ddb7875b4b
               </div>
-              <div className="text-[#606060] break-all">
+              <div className="text-rh-text-2 break-all">
                 Prev Block:  4bf92f3577b34da6a3ce929d0e0e4736f82109ba221980ca8127391ab9128032
               </div>
             </div>
           </div>
 
-          <div className="rounded-[8px] bg-[#F2F2F2] p-3 text-[12px] text-[#0F0F0F] flex items-center gap-2">
-            <ShieldCheck className="h-4 w-4 text-[#2BA640] shrink-0" />
+          <div className="rounded-[8px] bg-rh-elevated p-3 text-[12px] text-rh-text flex items-center gap-2">
+            <ShieldCheck className="h-4 w-4 text-rh-teal-text shrink-0" />
             <span>142/142 blocks cryptographically verified with 0 Merkle discrepancies.</span>
           </div>
         </div>

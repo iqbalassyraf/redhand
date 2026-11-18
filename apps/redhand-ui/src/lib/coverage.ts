@@ -109,15 +109,15 @@ export function isCoverageData(value: unknown): value is CoverageData {
 export function statusStyle(status: string): { label: string; classes: string } {
   switch (status) {
     case "covered":
-      return { label: "covered", classes: "bg-[#E6F4EA] text-[#1E7B34]" };
+      return { label: "covered", classes: "bg-rh-teal-wash text-rh-teal-text" };
     case "partial":
-      return { label: "partial", classes: "bg-[#FFF8EC] text-[#8A5A00]" };
+      return { label: "partial", classes: "bg-rh-ochre-wash text-rh-ochre" };
     case "weak":
-      return { label: "weak", classes: "bg-[#FDECEC] text-[#B42318]" };
+      return { label: "weak", classes: "bg-rh-crimson-wash text-rh-crimson-text" };
     case "not covered":
-      return { label: "not covered", classes: "bg-[#FDECEC] text-[#B42318]" };
+      return { label: "not covered", classes: "bg-rh-crimson-wash text-rh-crimson-text" };
     default:
-      return { label: status, classes: "bg-[#F2F2F2] text-[#606060]" };
+      return { label: status, classes: "bg-rh-elevated text-rh-text-2" };
   }
 }
 

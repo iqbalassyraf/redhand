@@ -12,8 +12,8 @@ import React, { useState } from "react";
 import { type RiskLadder, riskApi } from "@/lib/api";
 import { LADDER_CONFIRM_TEXT, RUNG_LABEL, type Rung, ladderNeedsConfirmation, parseThreshold, validateLadder } from "@/lib/riskForm";
 
-const field = "w-20 rounded-[8px] border border-[#E5E5E5] px-2 py-1 text-[12px]";
-const button = "rounded-full border border-[#E5E5E5] bg-[#FFFFFF] px-3 py-1 text-[12px] font-semibold hover:bg-[#F2F2F2] disabled:opacity-50";
+const field = "w-20 rounded-[8px] border border-rh-hairline px-2 py-1 text-[12px]";
+const button = "rounded-full border border-rh-hairline bg-rh-card px-3 py-1 text-[12px] font-semibold hover:bg-rh-elevated disabled:opacity-50";
 const RUNGS: { key: Rung; field: "alert_at" | "safe_mode_at" | "freeze_at" }[] = [
   { key: "alert", field: "alert_at" },
   { key: "safe_mode", field: "safe_mode_at" },
@@ -51,18 +51,18 @@ export function RiskLadderCard(props: { token: string; ladder: RiskLadder; onSav
   };
 
   return (
-    <section className="rounded-[12px] border border-[#E5E5E5] bg-[#FFFFFF] p-4 text-[12px]" aria-label="Risk response">
+    <section className="rounded-[12px] border border-rh-hairline bg-rh-card p-4 text-[12px]" aria-label="Risk response">
       <h2 className="text-[14px] font-semibold">Risk response</h2>
-      <p className="mt-1 text-[#606060]">
+      <p className="mt-1 text-rh-text-2">
         What RedHand does by itself when an agent&apos;s risk score reaches a number. Leave a box empty to turn that step off. Safe Mode and freeze
         are off unless you turn them on; a person can always undo them.
       </p>
       <div className="mt-3 grid gap-2 sm:grid-cols-3">
         {RUNGS.map(({ key, field: name }) => (
-          <label key={key} className="flex flex-col gap-1 rounded-[8px] bg-[#F7F7F7] p-2">
+          <label key={key} className="flex flex-col gap-1 rounded-[8px] bg-rh-subtle p-2">
             <span className="font-semibold">{RUNG_LABEL[key]}</span>
             <span className="flex items-center gap-2">
-              <span className="text-[#606060]">at score</span>
+              <span className="text-rh-text-2">at score</span>
               <input
                 inputMode="numeric"
                 value={draft[name]}
@@ -73,13 +73,13 @@ export function RiskLadderCard(props: { token: string; ladder: RiskLadder; onSav
                 aria-label={`${RUNG_LABEL[key]} threshold`}
               />
             </span>
-            <span className="text-[#606060]">
+            <span className="text-rh-text-2">
               {ladder.reaching[key] === 0 ? "No agent reaches it now." : `${ladder.reaching[key]} now: ${ladder.reaching_agents[key].join(", ")}${ladder.reaching[key] > ladder.reaching_agents[key].length ? ", …" : ""}`}
             </span>
           </label>
         ))}
       </div>
-      {problem && can && <p role="alert" className="mt-2 text-[#B42318]">{problem}</p>}
+      {problem && can && <p role="alert" className="mt-2 text-rh-crimson-text">{problem}</p>}
       {needsConfirm && can && !problem && (
         <label className="mt-2 flex items-center gap-2">
           <input type="checkbox" checked={confirm} onChange={(e) => setConfirm(e.target.checked)} />
@@ -90,10 +90,10 @@ export function RiskLadderCard(props: { token: string; ladder: RiskLadder; onSav
         {can ? (
           <>
             <button className={button} disabled={busy || !changed || problem !== null || (needsConfirm && !confirm)} onClick={save}>Save</button>
-            {changed && <span className="font-semibold text-[#8A5A00]">Not saved yet: press Save to apply this change.</span>}
+            {changed && <span className="font-semibold text-rh-ochre">Not saved yet: press Save to apply this change.</span>}
           </>
         ) : (
-          <span className="text-[#606060]">Only an admin can change these.</span>
+          <span className="text-rh-text-2">Only an admin can change these.</span>
         )}
       </div>
     </section>

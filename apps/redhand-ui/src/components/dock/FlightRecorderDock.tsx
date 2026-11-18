@@ -44,16 +44,16 @@ export function FlightRecorderDock({
   );
 
   return (
-    <section className="flex h-72 shrink-0 flex-col border-t border-[#E5E5E5] bg-[#FFFFFF]">
+    <section className="flex h-72 shrink-0 flex-col border-t border-rh-hairline bg-rh-card">
       {/* Chip Bar + Simulation Controls */}
-      <div className="flex items-center justify-between border-b border-[#E5E5E5] px-4 py-2.5 overflow-x-auto gap-3">
+      <div className="flex items-center justify-between border-b border-rh-hairline px-4 py-2.5 overflow-x-auto gap-3">
         <div className="flex items-center gap-1.5 shrink-0">
           <button
             onClick={() => setActiveTab("traces")}
             className={`rounded-full px-3 py-1.5 text-[13px] leading-[18px] font-medium transition-colors ${
               activeTab === "traces"
-                ? "bg-[#0F0F0F] text-[#FFFFFF]"
-                : "bg-[#F2F2F2] text-[#0F0F0F] hover:bg-[#E5E5E5]"
+                ? "bg-rh-teal text-rh-canvas"
+                : "bg-rh-elevated text-rh-text hover:bg-rh-strong"
             }`}
           >
             All Traces ({traces.length})
@@ -62,8 +62,8 @@ export function FlightRecorderDock({
             onClick={() => setActiveTab("tokens")}
             className={`rounded-full px-3 py-1.5 text-[13px] leading-[18px] font-medium transition-colors ${
               activeTab === "tokens"
-                ? "bg-[#0F0F0F] text-[#FFFFFF]"
-                : "bg-[#F2F2F2] text-[#0F0F0F] hover:bg-[#E5E5E5]"
+                ? "bg-rh-teal text-rh-canvas"
+                : "bg-rh-elevated text-rh-text hover:bg-rh-strong"
             }`}
           >
             Multi-Cloud STS Leases
@@ -72,8 +72,8 @@ export function FlightRecorderDock({
             onClick={() => setActiveTab("agents")}
             className={`rounded-full px-3 py-1.5 text-[13px] leading-[18px] font-medium transition-colors ${
               activeTab === "agents"
-                ? "bg-[#0F0F0F] text-[#FFFFFF]"
-                : "bg-[#F2F2F2] text-[#0F0F0F] hover:bg-[#E5E5E5]"
+                ? "bg-rh-teal text-rh-canvas"
+                : "bg-rh-elevated text-rh-text hover:bg-rh-strong"
             }`}
           >
             Agents Inventory ({agents.length})
@@ -82,13 +82,13 @@ export function FlightRecorderDock({
 
         {/* 6 Pitch Simulation Controls */}
         <div className="flex items-center gap-1.5 shrink-0">
-          <span className="text-[11px] font-semibold text-[#606060] uppercase mr-1 hidden xl:inline">
+          <span className="text-[11px] font-semibold text-rh-text-2 uppercase mr-1 hidden xl:inline">
             Simulations:
           </span>
 
           <button
             onClick={() => onSimulateAttack("benign_read")}
-            className="h-[32px] rounded-full border border-[#E5E5E5] bg-[#FFFFFF] hover:bg-[#F2F2F2] px-3 text-[12px] font-medium text-[#0F0F0F] transition-colors whitespace-nowrap"
+            className="h-[32px] rounded-full border border-rh-hairline bg-rh-card hover:bg-rh-elevated px-3 text-[12px] font-medium text-rh-text transition-colors whitespace-nowrap"
             title="Valid SQL with explicit LIMIT under finance_viewer role"
           >
             1. Benign SQL (LIMIT 10)
@@ -96,7 +96,7 @@ export function FlightRecorderDock({
 
           <button
             onClick={() => onSimulateAttack("sql_exfiltration")}
-            className="h-[32px] rounded-full bg-[#FFF0F0] hover:bg-[#FFE5E5] border border-[#FF0000]/20 px-3 text-[12px] font-medium text-[#FF0000] transition-colors whitespace-nowrap"
+            className="h-[32px] rounded-full bg-rh-crimson-wash hover:bg-rh-crimson-wash border border-rh-crimson/20 px-3 text-[12px] font-medium text-rh-crimson-text transition-colors whitespace-nowrap"
             title="Full table dump and sensitive column extraction (password_hash, ssn) blocked by AST"
           >
             2. SQL Exfil Blocked
@@ -104,7 +104,7 @@ export function FlightRecorderDock({
 
           <button
             onClick={() => onSimulateAttack("shell_evasion")}
-            className="h-[32px] rounded-full bg-[#FFF0F0] hover:bg-[#FFE5E5] border border-[#FF0000]/20 px-3 text-[12px] font-medium text-[#FF0000] transition-colors whitespace-nowrap"
+            className="h-[32px] rounded-full bg-rh-crimson-wash hover:bg-rh-crimson-wash border border-rh-crimson/20 px-3 text-[12px] font-medium text-rh-crimson-text transition-colors whitespace-nowrap"
             title="Hex/Base64 obfuscated execution blocked by POSIX positive allowlist"
           >
             3. Shell Evasion Blocked
@@ -112,7 +112,7 @@ export function FlightRecorderDock({
 
           <button
             onClick={() => onSimulateAttack("rbac_denied")}
-            className="h-[32px] rounded-full bg-[#FFF8E1] hover:bg-[#FFECB3] border border-[#FB8C00]/30 px-3 text-[12px] font-medium text-[#FB8C00] transition-colors whitespace-nowrap"
+            className="h-[32px] rounded-full bg-rh-ochre-wash hover:bg-rh-ochre-wash border border-rh-ochre/30 px-3 text-[12px] font-medium text-rh-ochre transition-colors whitespace-nowrap"
             title="Caller lacks required user role; agent intercepted"
           >
             4. RBAC Denied
@@ -120,7 +120,7 @@ export function FlightRecorderDock({
 
           <button
             onClick={() => onSimulateAttack("multicloud_sts")}
-            className="h-[32px] rounded-full bg-[#F2F2F2] hover:bg-[#E5E5E5] px-3 text-[12px] font-medium text-[#0F0F0F] transition-colors whitespace-nowrap"
+            className="h-[32px] rounded-full bg-rh-elevated hover:bg-rh-strong px-3 text-[12px] font-medium text-rh-text transition-colors whitespace-nowrap"
             title="Mints ephemeral tokens for AWS, Azure, GCP, and GitHub SaaS"
           >
             5. Multi-Cloud STS
@@ -128,7 +128,7 @@ export function FlightRecorderDock({
 
           <button
             onClick={() => onSimulateAttack("destructive_hitl")}
-            className="h-[32px] rounded-full bg-[#FF0000] hover:bg-[#CC0000] px-3.5 text-[12px] font-medium text-[#FFFFFF] transition-colors whitespace-nowrap shadow-sm"
+            className="h-[32px] rounded-full bg-rh-crimson hover:bg-rh-crimson px-3.5 text-[12px] font-medium text-rh-canvas transition-colors whitespace-nowrap"
             title="Destructive database termination halted for Four-Eyes Quorum"
           >
             6. Four-Eyes Quorum
@@ -141,7 +141,7 @@ export function FlightRecorderDock({
         {activeTab === "traces" && (
           <table className="w-full text-left border-collapse">
             <thead>
-              <tr className="border-b border-[#E5E5E5] bg-[#F2F2F2]/60 text-[11px] font-semibold text-[#606060] uppercase">
+              <tr className="border-b border-rh-hairline bg-rh-elevated/60 text-[11px] font-semibold text-rh-text-2 uppercase">
                 <th className="py-2 px-3">Time</th>
                 <th className="py-2 px-3">Agent</th>
                 <th className="py-2 px-3">Delegated Caller (RBAC)</th>
@@ -152,7 +152,7 @@ export function FlightRecorderDock({
                 <th className="py-2 px-4">Target Resource</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-[#E5E5E5] text-[12px]">
+            <tbody className="divide-y divide-rh-hairline text-[12px]">
               {traces.map((tr) => {
                 const isSelected = tr.id === selectedTraceId;
                 return (
@@ -160,57 +160,57 @@ export function FlightRecorderDock({
                     key={tr.id}
                     onClick={() => onSelectTrace(tr)}
                     className={`cursor-pointer transition-colors ${
-                      isSelected ? "bg-[#F2F2F2]" : "hover:bg-[#F2F2F2]/60"
+                      isSelected ? "bg-rh-elevated" : "hover:bg-rh-elevated/60"
                     }`}
                   >
-                    <td className="py-2.5 px-3 font-mono text-[11px] text-[#606060]">
+                    <td className="py-2.5 px-3 font-mono text-[11px] text-rh-text-2">
                       {tr.occurred_at}
                     </td>
-                    <td className="py-2.5 px-3 font-medium text-[#0F0F0F]">
+                    <td className="py-2.5 px-3 font-medium text-rh-text">
                       {tr.agent_name}
                     </td>
-                    <td className="py-2.5 px-3 font-mono text-[11px] text-[#0F0F0F]">
-                      <span className="text-[#065FD4] font-medium block">
+                    <td className="py-2.5 px-3 font-mono text-[11px] text-rh-text">
+                      <span className="text-rh-steel-text font-medium block">
                         {tr.delegated_user || "alice.chen@enterprise.com"}
                       </span>
-                      <span className="text-[10px] text-[#606060]">
+                      <span className="text-[10px] text-rh-text-2">
                         [{tr.delegated_roles?.join(", ") || "finance_viewer"}]
                       </span>
                     </td>
-                    <td className="py-2.5 px-3 font-mono text-[12px] text-[#0F0F0F]">
+                    <td className="py-2.5 px-3 font-mono text-[12px] text-rh-text">
                       {tr.tool_name}()
                     </td>
                     <td className="py-2.5 px-3">
                       {tr.verdict === "blocked" ? (
-                        <span className="inline-flex items-center gap-1 rounded bg-[#FF0000] px-1.5 py-0.5 text-[10px] font-bold text-[#FFFFFF] uppercase">
+                        <span className="inline-flex items-center gap-1 rounded bg-rh-crimson px-1.5 py-0.5 text-[10px] font-bold text-rh-canvas uppercase">
                           <ShieldAlert className="h-3 w-3" />
                           BLOCKED
                         </span>
                       ) : tr.verdict === "hitl_paused" ? (
-                        <span className="inline-flex items-center gap-1 rounded bg-[#FB8C00] px-1.5 py-0.5 text-[10px] font-bold text-[#FFFFFF] uppercase">
+                        <span className="inline-flex items-center gap-1 rounded bg-rh-ochre px-1.5 py-0.5 text-[10px] font-bold text-rh-canvas uppercase">
                           <Hand className="h-3 w-3" />
                           REVIEW PENDING
                         </span>
                       ) : (
-                        <span className="inline-flex items-center gap-1 rounded bg-[#2BA640] px-1.5 py-0.5 text-[10px] font-bold text-[#FFFFFF] uppercase">
+                        <span className="inline-flex items-center gap-1 rounded bg-rh-teal px-1.5 py-0.5 text-[10px] font-bold text-rh-canvas uppercase">
                           <ShieldCheck className="h-3 w-3" />
                           ALLOWED
                         </span>
                       )}
                     </td>
-                    <td className="py-2.5 px-3 font-mono text-[11px] text-[#0F0F0F]">
+                    <td className="py-2.5 px-3 font-mono text-[11px] text-rh-text">
                       {tr.firewall_latency_ms}ms
                     </td>
                     <td className="py-2.5 px-3 font-mono text-[11px]">
                       {tr.ephemeral_token_jti ? (
-                        <span className="text-[#2BA640] font-medium block">
+                        <span className="text-rh-teal-text font-medium block">
                           {tr.cloud_provider?.toUpperCase() || "JIT"} • {tr.ephemeral_token_jti.slice(0, 16)}...
                         </span>
                       ) : (
-                        <span className="text-[#606060]">—</span>
+                        <span className="text-rh-text-2">—</span>
                       )}
                     </td>
-                    <td className="py-2.5 px-4 font-mono text-[11px] text-[#065FD4] truncate max-w-xs">
+                    <td className="py-2.5 px-4 font-mono text-[11px] text-rh-steel-text truncate max-w-xs">
                       {tr.target_resource}
                     </td>
                   </tr>
@@ -224,89 +224,89 @@ export function FlightRecorderDock({
         {activeTab === "tokens" && (
           <div className="p-4 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
             {/* AWS STS */}
-            <div className="rounded-[10px] border border-[#FF9900]/30 bg-[#FF9900]/5 p-3 text-[12px] space-y-1.5">
-              <div className="flex items-center justify-between font-bold text-[#FF9900]">
+            <div className="rounded-[10px] border border-rh-ochre/30 bg-rh-ochre/5 p-3 text-[12px] space-y-1.5">
+              <div className="flex items-center justify-between font-bold text-rh-ochre">
                 <span className="inline-flex items-center gap-1.5">
                   <Cloud className="h-3.5 w-3.5" />
                   AWS STS AssumeRole
                 </span>
-                <span className="rounded bg-[#FF9900] px-1.5 py-0.2 text-[9px] font-bold text-[#FFFFFF]">
+                <span className="rounded bg-rh-ochre px-1.5 py-0.2 text-[9px] font-bold text-rh-canvas">
                   TTL 30s
                 </span>
               </div>
-              <div className="font-mono text-[11px] text-[#0F0F0F] truncate">
+              <div className="font-mono text-[11px] text-rh-text truncate">
                 ASIAQ4910AB78SESSION_44bc99
               </div>
-              <div className="text-[10px] text-[#606060]">
+              <div className="text-[10px] text-rh-text-2">
                 Scope: arn:aws:iam::123456789012:role/AgentWallRestricted
               </div>
-              <div className="text-[10px] text-[#2BA640] font-medium">
+              <div className="text-[10px] text-rh-teal-text font-medium">
                 ✓ Inline Session Policy (Single S3 Bucket)
               </div>
             </div>
 
             {/* Azure Entra ID */}
-            <div className="rounded-[10px] border border-[#0078D4]/30 bg-[#0078D4]/5 p-3 text-[12px] space-y-1.5">
-              <div className="flex items-center justify-between font-bold text-[#0078D4]">
+            <div className="rounded-[10px] border border-rh-steel/30 bg-rh-steel/5 p-3 text-[12px] space-y-1.5">
+              <div className="flex items-center justify-between font-bold text-rh-steel-text">
                 <span className="inline-flex items-center gap-1.5">
                   <Cloud className="h-3.5 w-3.5" />
                   Azure Entra ID (OBO)
                 </span>
-                <span className="rounded bg-[#0078D4] px-1.5 py-0.2 text-[9px] font-bold text-[#FFFFFF]">
+                <span className="rounded bg-rh-steel px-1.5 py-0.2 text-[9px] font-bold text-rh-canvas">
                   TTL 30s
                 </span>
               </div>
-              <div className="font-mono text-[11px] text-[#0F0F0F] truncate">
+              <div className="font-mono text-[11px] text-rh-text truncate">
                 agentwall_az_7f9910e42a19...
               </div>
-              <div className="text-[10px] text-[#606060]">
+              <div className="text-[10px] text-rh-text-2">
                 User: alice.chen@enterprise.com (cloud_operator)
               </div>
-              <div className="text-[10px] text-[#2BA640] font-medium">
+              <div className="text-[10px] text-rh-teal-text font-medium">
                 ✓ Downscoped to /subscriptions/prod/storage
               </div>
             </div>
 
             {/* Google Cloud STS */}
-            <div className="rounded-[10px] border border-[#4285F4]/30 bg-[#4285F4]/5 p-3 text-[12px] space-y-1.5">
-              <div className="flex items-center justify-between font-bold text-[#4285F4]">
+            <div className="rounded-[10px] border border-rh-steel/30 bg-rh-steel/5 p-3 text-[12px] space-y-1.5">
+              <div className="flex items-center justify-between font-bold text-rh-steel-text">
                 <span className="inline-flex items-center gap-1.5">
                   <Cloud className="h-3.5 w-3.5" />
                   GCP STS (CAB)
                 </span>
-                <span className="rounded bg-[#4285F4] px-1.5 py-0.2 text-[9px] font-bold text-[#FFFFFF]">
+                <span className="rounded bg-rh-steel px-1.5 py-0.2 text-[9px] font-bold text-rh-canvas">
                   TTL 45s
                 </span>
               </div>
-              <div className="font-mono text-[11px] text-[#0F0F0F] truncate">
+              <div className="font-mono text-[11px] text-rh-text truncate">
                 ya29.c.agentwall_cab_8819a...
               </div>
-              <div className="text-[10px] text-[#606060]">
+              <div className="text-[10px] text-rh-text-2">
                 Resource: //bigquery.googleapis.com/.../finops
               </div>
-              <div className="text-[10px] text-[#2BA640] font-medium">
+              <div className="text-[10px] text-rh-teal-text font-medium">
                 ✓ CEL Rule: inRole:roles/bigquery.dataViewer
               </div>
             </div>
 
             {/* SaaS Token (GitHub / Slack) */}
-            <div className="rounded-[10px] border border-[#24292E]/30 bg-[#24292E]/5 p-3 text-[12px] space-y-1.5">
-              <div className="flex items-center justify-between font-bold text-[#24292E]">
+            <div className="rounded-[10px] border border-rh-strong/30 bg-rh-elevated/5 p-3 text-[12px] space-y-1.5">
+              <div className="flex items-center justify-between font-bold text-rh-text">
                 <span className="inline-flex items-center gap-1.5">
                   <KeyRound className="h-3.5 w-3.5" />
                   SaaS Ephemeral Token
                 </span>
-                <span className="rounded bg-[#24292E] px-1.5 py-0.2 text-[9px] font-bold text-[#FFFFFF]">
+                <span className="rounded bg-rh-elevated px-1.5 py-0.2 text-[9px] font-bold text-rh-canvas">
                   TTL 30s
                 </span>
               </div>
-              <div className="font-mono text-[11px] text-[#0F0F0F] truncate">
+              <div className="font-mono text-[11px] text-rh-text truncate">
                 ghs_4819a0bc771239aa8123...
               </div>
-              <div className="text-[10px] text-[#606060]">
+              <div className="text-[10px] text-rh-text-2">
                 Target: https://api.github.com/repos/acme/repo
               </div>
-              <div className="text-[10px] text-[#2BA640] font-medium">
+              <div className="text-[10px] text-rh-teal-text font-medium">
                 ✓ Scopes: repo:read, issues:write (Fine-grained)
               </div>
             </div>
@@ -317,7 +317,7 @@ export function FlightRecorderDock({
         {activeTab === "agents" && (
           <table className="w-full text-left border-collapse">
             <thead>
-              <tr className="border-b border-[#E5E5E5] bg-[#F2F2F2]/60 text-[11px] font-semibold text-[#606060] uppercase">
+              <tr className="border-b border-rh-hairline bg-rh-elevated/60 text-[11px] font-semibold text-rh-text-2 uppercase">
                 <th className="py-2 px-4">Agent Name</th>
                 <th className="py-2 px-3">Metadata (Framework • Latency • Contained)</th>
                 <th className="py-2 px-3">Risk Score</th>
@@ -325,23 +325,23 @@ export function FlightRecorderDock({
                 <th className="py-2 px-4">Allowed Tools</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-[#E5E5E5] text-[12px]">
+            <tbody className="divide-y divide-rh-hairline text-[12px]">
               {agents.map((ag) => (
-                <tr key={ag.id} className="hover:bg-[#F2F2F2]/60">
-                  <td className="py-2.5 px-4 font-medium text-[#0F0F0F]">
+                <tr key={ag.id} className="hover:bg-rh-elevated/60">
+                  <td className="py-2.5 px-4 font-medium text-rh-text">
                     {ag.name}
                   </td>
-                  <td className="py-2.5 px-3 text-[12px] text-[#606060]">
+                  <td className="py-2.5 px-3 text-[12px] text-rh-text-2">
                     {ag.framework} • {ag.p99FirewallMs}ms p99 •{" "}
                     {ag.blockedAttacksCount} contained
                   </td>
-                  <td className="py-2.5 px-3 font-mono text-[12px] font-medium text-[#0F0F0F]">
+                  <td className="py-2.5 px-3 font-mono text-[12px] font-medium text-rh-text">
                     {ag.riskScore}/100
                   </td>
-                  <td className="py-2.5 px-3 font-mono text-[11px] text-[#065FD4]">
+                  <td className="py-2.5 px-3 font-mono text-[11px] text-rh-steel-text">
                     {ag.serviceAccount}
                   </td>
-                  <td className="py-2.5 px-4 font-mono text-[11px] text-[#606060]">
+                  <td className="py-2.5 px-4 font-mono text-[11px] text-rh-text-2">
                     {ag.allowedTools.join(", ")}
                   </td>
                 </tr>
