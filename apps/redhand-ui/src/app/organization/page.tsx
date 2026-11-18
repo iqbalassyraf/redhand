@@ -31,8 +31,7 @@ export default function OrganizationPage() {
 
   const fail = useCallback((err: unknown) => {
     if (err instanceof ApiError && err.status === 401) {
-      signOut();
-      window.location.href = "/login";
+      signOut("/login");
       return;
     }
     if (err instanceof ApiError && err.status === 403 && isNoOrganizationMessage(err.message)) {

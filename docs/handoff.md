@@ -2,6 +2,9 @@
 
 Both tools work on RedHand and its demo projects. This file is how each learns what the other did. Newest entry first.
 
+## 2026-11-18, Claude Code: Clerk C3 (dashboard) + runbook
+New: `src/lib/authContext.ts`, `src/components/clerk/*`, `src/lib/clerkToken.ts`, CSP Clerk origins, `signOut(redirectTo)` across pages, login/reset pages in Clerk mode, tests `clerkToken`, `auth-mode`, csp. Verified: Supabase mode regression (4 roles x 2 widths x 9 pages, sign-out), Clerk-mode build compiles, CSP header correct, login tabs render. NOT verified: any real Clerk flow (Google, e-mail, template claims): owner creates the Clerk dev instance, then Antigravity runs `docs/testing/briefs/2026-11-19-clerk.md`.
+
 ## 2026-11-18, Claude Code: Clerk C2 (core verification)
 `auth/operator.py` (`_clerk_verifier`, `operator_identity`), `auth/operator_jwks.py` (audience and algorithm parameters), settings `OPERATOR_AUTH_PROVIDER`, `CLERK_ISSUER`, `CLERK_JWKS_URL`, `CLERK_AUDIENCE`, twin `_operator_resolve`, tests `test_clerk_operator_auth.py` (23). Needs C1 (#129) applied first. Next: C3 dashboard, blocked on the owner's yes for `@clerk/nextjs` 7.9.24.
 

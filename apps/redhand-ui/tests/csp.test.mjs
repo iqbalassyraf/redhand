@@ -73,3 +73,27 @@ test("the fixed headers cover sniffing, referrers, powerful features and transpo
   assert.match(h["Permissions-Policy"], /geolocation=\(\)/);
   assert.equal(h["X-Frame-Options"], "DENY");
 });
+
+import { clerkFrontendOrigin, CLERK_CHALLENGE_ORIGIN, CLERK_IMAGE_ORIGIN } from "../src/lib/csp.ts";
+
+const clerkKey = (host) => `pk_test_${Buffer.from(`${host}$`).toString("base64")}`;
+
+test("Clerk: the instance origin is read from the publishable key, and anything that is not a key adds nothing", () => {
+  assert.equal(clerkFrontendOrigin(clerkKey("clean-heron-12.clerk.accounts.dev")), "https://clean-heron-12.clerk.accounts.dev");
+  assert.equal(clerkFrontendOrigin(`pk_live_${Buffer.from("clerk.example.com$").toString("base64")}`), "https://clerk.example.com");
+  for (const bad of [undefined, "", "sk_test_abc", "pk_test_", "pk_test_!!!", clerkKey("evil.com/path"), clerkKey("a b.com"), clerkKey("localhost"), "pk_test_" + Buffer.from("x.com").toString("base64")]) {
+    assert.equal(clerkFrontendOrigin(bad), null, String(bad));
+  }
+});
+
+test("Clerk mode adds only the instance, Clerk's images and the bot challenge; Supabase mode adds nothing of Clerk", () => {
+  const withClerk = directives(buildCsp({ ...env, nonce: "N", development: false, clerkPublishableKey: clerkKey("clean-heron-12.clerk.accounts.dev") }));
+  assert.ok(withClerk["connect-src"].includes("https://clean-heron-12.clerk.accounts.dev"));
+  assert.ok(withClerk["img-src"].includes(CLERK_IMAGE_ORIGIN));
+  assert.deepEqual(withClerk["frame-src"], ["'self'", CLERK_CHALLENGE_ORIGIN]);
+  assert.ok(!withClerk["script-src"].includes("'unsafe-inline'") && !withClerk["script-src"].includes("'unsafe-eval'"));
+  assert.ok(!JSON.stringify(withClerk).includes("*"), "no wildcard origin");
+  assert.deepEqual(withClerk["frame-ancestors"], ["'none'"]);
+  const without = buildCsp({ ...env, nonce: "N", development: false });
+  assert.ok(!/clerk|cloudflare/.test(without));
+});

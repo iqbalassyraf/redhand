@@ -79,8 +79,7 @@ export default function HoneytokensPage() {
   const handleError = useCallback(
     (err: unknown) => {
       if (err instanceof ApiError && err.status === 401) {
-        signOut();
-        window.location.href = "/login";
+        signOut("/login");
         return;
       }
       setError(err instanceof Error ? err.message : "Something went wrong.");

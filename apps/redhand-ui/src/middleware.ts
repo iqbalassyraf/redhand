@@ -12,6 +12,7 @@ export function middleware(request: NextRequest): NextResponse {
     coreUrl: process.env.NEXT_PUBLIC_REDHAND_CORE_URL || "http://localhost:8000",
     gatewayUrl: process.env.NEXT_PUBLIC_REDHAND_GATEWAY_URL || "http://localhost:8080",
     supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL,
+    clerkPublishableKey: process.env.NEXT_PUBLIC_AUTH_PROVIDER === "clerk" ? process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY : undefined,
     nonce,
     development: process.env.NODE_ENV !== "production",
   });

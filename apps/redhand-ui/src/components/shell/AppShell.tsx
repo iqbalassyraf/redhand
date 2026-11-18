@@ -68,8 +68,7 @@ export function AppShell({ title, organization, role, actions, children }: AppSh
   const who = [session?.email, organization, roleLabel(role ?? session?.role)].filter(Boolean).join(" · ");
 
   const doSignOut = () => {
-    signOut();
-    window.location.href = "/login";
+    signOut("/login");
   };
 
   return (

@@ -57,8 +57,7 @@ export default function BlackBoxPage() {
   const handleError = useCallback(
     (err: unknown) => {
       if (err instanceof ApiError && err.status === 401) {
-        signOut();
-        window.location.href = "/login";
+        signOut("/login");
         return;
       }
       setError(err instanceof Error ? err.message : "Something went wrong.");
@@ -322,8 +321,7 @@ export default function BlackBoxPage() {
           canViewPayload={!!settings?.capabilities?.can_view_payloads}
           onClose={() => setSelected(null)}
           onUnauthorized={() => {
-            signOut();
-            window.location.href = "/login";
+            signOut("/login");
           }}
         />
       ) : null}

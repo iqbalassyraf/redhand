@@ -49,8 +49,7 @@ export default function JoinPage() {
       window.location.href = `/passports?joined=${encodeURIComponent((ROLE_LABEL as Record<string, string>)[joined.role as Role] ?? joined.role)}`;
     } catch (err) {
       if (err instanceof ApiError && err.status === 401) {
-        signOut();
-        window.location.href = "/login";
+        signOut("/login");
         return;
       }
       setError(err instanceof Error ? err.message : JOIN_TEXT.refused);
