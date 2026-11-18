@@ -2,6 +2,9 @@
 
 Both tools work on RedHand and its demo projects. This file is how each learns what the other did. Newest entry first.
 
+## 2026-11-18, Claude Code: full-history secret scan (gitleaks, one-off)
+No new real-looking credential; the battleground Stripe and OpenAI look-alikes remain the owner's to revoke. Details in `docs/release-readiness.md` 3.1.
+
 ## 2026-11-18, Claude Code: tonight's brief
 `docs/testing/briefs/2026-11-18-tonight.md` for owner + Antigravity: Part 0 (migration 20261201, core then gateway then dashboard, Supabase Site URL, smoke with the new 404 checks), Parts R and S (copied word for word), Q5, Q9, J2/J2b, T1/T3, clean-up. Guarded by `agentwall/tests/test_tonight_brief.py`. Results on `docs/test-results-2026-11-18-tonight`. Leave Night Test Org pending: purge rehearsal 2026-11-25.
 

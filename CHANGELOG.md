@@ -2,6 +2,8 @@
 
 ## Unreleased: Phase 3 (See things), in progress
 
+- Full-history secret scan (release-readiness 3.1): one-off gitleaks 8.28.0 over 383 commits, 63 findings triaged: the known battleground Stripe look-alike (owner revokes), test fixtures, demo data and placeholders. No new real-looking credential. Values never printed or committed.
+
 - Production deploy target (ADR 0028): `DEPLOY_ENV=production deploy/cloudrun/deploy.sh` deploys `redhand-core-prod` and `redhand-gateway-prod` with their own secret and identity names, at least one warm instance and `ENVIRONMENT=production`; it refuses without an explicit `PROJECT_ID` and `CONFIRM_PROJECT` equal to it. Staging is unchanged (default). Runbook `docs/runbooks/production-deploy.md`. Tested with a recording gcloud stub; nothing was deployed.
 
 - Launch decisions recorded (owner, 2026-11-18): production hosting accepted (ADR 0028, option A; prices left for the owner), model proxy no-go for launch (ADR 0025; stays off and refused in production), CLAUDE.md phase line and audit-trail wording updated (owner said "apply"), briefing and owner checklist refreshed. Two guard tests keep the checklist's newest migration and the ADR's blank prices honest.
