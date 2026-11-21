@@ -9,6 +9,7 @@
 import React, { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { AnimatePresence, motion } from "framer-motion";
 import {
   Archive,
   Building2,
@@ -23,13 +24,13 @@ import {
   Radar,
   Radio,
   ScanSearch,
-  ShieldAlert,
   ShieldCheck,
   X,
 } from "lucide-react";
 
 import { useAuth } from "@/lib/auth";
 import { activeNavHref, NAV_ITEMS, roleLabel, type NavItem } from "@/lib/nav";
+import { EASE_OUT_EXPO, SPRING_SHARED_ELEMENT, usePrefersReducedMotion } from "@/lib/tokens";
 
 const ICONS: Record<NavItem["icon"], React.ComponentType<{ className?: string }>> = {
   insights: LayoutDashboard,
@@ -108,6 +109,7 @@ export function AppShell({ title, organization, role, actions, children }: AppSh
   const { session, signOut } = useAuth();
   const [open, setOpen] = useState(false);
   const [hoveredId, setHoveredId] = useState<string | null>(null);
+  const reducedMotion = usePrefersReducedMotion();
   const active = activeNavHref(pathname);
   const who = [session?.email, organization, roleLabel(role ?? session?.role)].filter(Boolean).join(" · ");
 
@@ -134,11 +136,20 @@ export function AppShell({ title, organization, role, actions, children }: AppSh
             >
               <Hand className="h-5 w-5" />
             </Link>
-            {hoveredId === "brand" && (
-              <div role="tooltip" className={TOOLTIP_CLASS}>
-                RedHand Control Room
-              </div>
-            )}
+            <AnimatePresence>
+              {hoveredId === "brand" && (
+                <motion.div
+                  role="tooltip"
+                  initial={reducedMotion ? false : { opacity: 0, x: -6, scale: 0.96 }}
+                  animate={{ opacity: 1, x: 0, scale: 1 }}
+                  exit={reducedMotion ? { opacity: 0 } : { opacity: 0, x: -4, scale: 0.96 }}
+                  transition={{ duration: 0.14, ease: EASE_OUT_EXPO }}
+                  className={TOOLTIP_CLASS}
+                >
+                  RedHand Control Room
+                </motion.div>
+              )}
+            </AnimatePresence>
           </div>
 
           <nav aria-label="Main" className="flex w-full flex-col items-center gap-1.5 px-2">
@@ -159,29 +170,43 @@ export function AppShell({ title, organization, role, actions, children }: AppSh
                       onFocus={() => setHoveredId(item.href)}
                       onBlur={() => setHoveredId((prev) => (prev === item.href ? null : prev))}
                       className={`relative flex h-10 w-10 items-center justify-center rounded-xl transition-colors duration-rh-fast ${
-                        isActive
-                          ? "border border-control-crimsonBorder bg-control-crimsonSoft text-rh-text shadow-rh-crimson"
-                          : "text-rh-text-2 hover:bg-control-glassHover hover:text-rh-text"
+                        isActive ? "text-rh-text" : "text-rh-text-2 hover:bg-control-glassHover hover:text-rh-text"
                       }`}
                     >
-                      <Icon className="h-[18px] w-[18px]" />
+                      {isActive && (
+                        <motion.span
+                          layoutId="rh-appshell-active-indicator"
+                          transition={reducedMotion ? { duration: 0.01 } : SPRING_SHARED_ELEMENT}
+                          className="absolute inset-0 rounded-xl border border-control-crimsonBorder bg-control-crimsonSoft shadow-rh-crimson"
+                        />
+                      )}
+                      <Icon className="relative z-10 h-[18px] w-[18px]" />
                       {item.badge && (
                         <span
                           aria-hidden
-                          className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-rh-ochre"
+                          className="absolute right-1.5 top-1.5 z-10 h-1.5 w-1.5 rounded-full bg-rh-ochre"
                         />
                       )}
                     </Link>
-                    {hoveredId === item.href && (
-                      <div role="tooltip" className={TOOLTIP_CLASS}>
-                        <span>{item.label}</span>
-                        {item.badge && (
-                          <span className="rounded-full border border-rh-ochre-border bg-rh-ochre-wash px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-rh-ochre">
-                            {item.badge}
-                          </span>
-                        )}
-                      </div>
-                    )}
+                    <AnimatePresence>
+                      {hoveredId === item.href && (
+                        <motion.div
+                          role="tooltip"
+                          initial={reducedMotion ? false : { opacity: 0, x: -6, scale: 0.96 }}
+                          animate={{ opacity: 1, x: 0, scale: 1 }}
+                          exit={reducedMotion ? { opacity: 0 } : { opacity: 0, x: -4, scale: 0.96 }}
+                          transition={{ duration: 0.14, ease: EASE_OUT_EXPO }}
+                          className={TOOLTIP_CLASS}
+                        >
+                          <span>{item.label}</span>
+                          {item.badge && (
+                            <span className="rounded-full border border-rh-ochre-border bg-rh-ochre-wash px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-rh-ochre">
+                              {item.badge}
+                            </span>
+                          )}
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
                   </div>
                 </React.Fragment>
               );
@@ -203,11 +228,20 @@ export function AppShell({ title, organization, role, actions, children }: AppSh
             <LogOut className="h-4 w-4" />
             <span className="sr-only">Sign out</span>
           </button>
-          {hoveredId === "signout" && (
-            <div role="tooltip" className={TOOLTIP_CLASS}>
-              Sign out
-            </div>
-          )}
+          <AnimatePresence>
+            {hoveredId === "signout" && (
+              <motion.div
+                role="tooltip"
+                initial={reducedMotion ? false : { opacity: 0, x: -6, scale: 0.96 }}
+                animate={{ opacity: 1, x: 0, scale: 1 }}
+                exit={reducedMotion ? { opacity: 0 } : { opacity: 0, x: -4, scale: 0.96 }}
+                transition={{ duration: 0.14, ease: EASE_OUT_EXPO }}
+                className={TOOLTIP_CLASS}
+              >
+                Sign out
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
       </aside>
 

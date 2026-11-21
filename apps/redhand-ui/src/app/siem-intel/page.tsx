@@ -1,11 +1,13 @@
 "use client";
 
 import React from "react";
+import { motion } from "framer-motion";
 import { Database, Globe, Radio, ShieldCheck } from "lucide-react";
 
 import { EnterprisePreviewGate } from "@/components/control-room/EnterprisePreviewGate";
 import { AppShell } from "@/components/shell/AppShell";
 import { useRequiredSession } from "@/lib/auth";
+import { EASE_OUT_EXPO, MOTION_TIMING, usePrefersReducedMotion } from "@/lib/tokens";
 
 const GHOST_SIEM_CONNECTORS = [
   {
@@ -45,6 +47,7 @@ const GHOST_THREAT_FEEDS = [
 
 export default function SiemIntelPage() {
   useRequiredSession();
+  const reducedMotion = usePrefersReducedMotion();
 
   return (
     <AppShell title="SIEM & Threat Intel">
@@ -85,17 +88,28 @@ export default function SiemIntelPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-control-border">
-                  {GHOST_SIEM_CONNECTORS.map((item) => (
-                    <tr key={item.name} className="text-rh-text-2">
+                  {GHOST_SIEM_CONNECTORS.map((item, idx) => (
+                    <motion.tr
+                      key={item.name}
+                      initial={reducedMotion ? false : { opacity: 0, y: 4 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{
+                        duration: MOTION_TIMING.normal,
+                        delay: reducedMotion ? 0 : idx * MOTION_TIMING.staggerStep,
+                        ease: EASE_OUT_EXPO,
+                      }}
+                      className="text-rh-text-2"
+                    >
                       <td className="px-4 py-3 font-semibold text-rh-text">{item.name}</td>
                       <td className="px-4 py-3 font-mono text-[11px]">{item.protocol}</td>
                       <td className="px-4 py-3">{item.events}</td>
                       <td className="px-4 py-3">
-                        <span className="rounded-full border border-rh-teal-border bg-rh-teal-wash px-2 py-0.5 font-mono text-[10px] font-semibold text-rh-teal-text">
+                        <span className="inline-flex items-center gap-1.5 rounded-full border border-rh-teal-border bg-rh-teal-wash px-2 py-0.5 font-mono text-[10px] font-semibold text-rh-teal-text">
+                          <span className="h-1.5 w-1.5 rounded-full bg-rh-teal-text" />
                           {item.status}
                         </span>
                       </td>
-                    </tr>
+                    </motion.tr>
                   ))}
                 </tbody>
               </table>
@@ -127,8 +141,18 @@ export default function SiemIntelPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-control-border">
-                  {GHOST_THREAT_FEEDS.map((feed) => (
-                    <tr key={feed.feed} className="text-rh-text-2">
+                  {GHOST_THREAT_FEEDS.map((feed, idx) => (
+                    <motion.tr
+                      key={feed.feed}
+                      initial={reducedMotion ? false : { opacity: 0, y: 4 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{
+                        duration: MOTION_TIMING.normal,
+                        delay: reducedMotion ? 0 : (idx + 3) * MOTION_TIMING.staggerStep,
+                        ease: EASE_OUT_EXPO,
+                      }}
+                      className="text-rh-text-2"
+                    >
                       <td className="px-4 py-3 font-semibold text-rh-text">
                         <span className="inline-flex items-center gap-1.5">
                           <Globe className="h-3.5 w-3.5 text-rh-text-muted" />
@@ -136,9 +160,9 @@ export default function SiemIntelPage() {
                         </span>
                       </td>
                       <td className="px-4 py-3 font-mono text-[11px]">{feed.protocol}</td>
-                      <td className="px-4 py-3">{feed.indicators}</td>
+                      <td className="rh-tabular px-4 py-3">{feed.indicators}</td>
                       <td className="px-4 py-3 font-mono text-rh-ochre">{feed.cadence}</td>
-                    </tr>
+                    </motion.tr>
                   ))}
                 </tbody>
               </table>

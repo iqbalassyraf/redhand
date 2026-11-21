@@ -1,11 +1,13 @@
 "use client";
 
 import React from "react";
+import { motion } from "framer-motion";
 import { Cloud, KeyRound, ShieldCheck, Timer } from "lucide-react";
 
 import { EnterprisePreviewGate } from "@/components/control-room/EnterprisePreviewGate";
 import { AppShell } from "@/components/shell/AppShell";
 import { useRequiredSession } from "@/lib/auth";
+import { EASE_OUT_EXPO, MOTION_TIMING, usePrefersReducedMotion } from "@/lib/tokens";
 
 const GHOST_IAM_POLICIES = [
   {
@@ -13,6 +15,7 @@ const GHOST_IAM_POLICIES = [
     provider: "AWS STS",
     role: "arn:aws:iam::482910394812:role/redhand-turn-support-ro",
     ttl: "60s single-turn",
+    ttlPercent: 72,
     scope: "s3:GetObject (kb-bucket/*)",
     status: "AUTO-ROTATE",
   },
@@ -21,6 +24,7 @@ const GHOST_IAM_POLICIES = [
     provider: "GCP IAM",
     role: "sa-finops-downscoped@prod-ledger.iam.gserviceaccount.com",
     ttl: "45s single-turn",
+    ttlPercent: 48,
     scope: "bigquery.jobs.create (read-only dataset)",
     status: "ACTIVE BROKER",
   },
@@ -29,6 +33,7 @@ const GHOST_IAM_POLICIES = [
     provider: "Microsoft Entra ID",
     role: "obo-graph-user-read-basic",
     ttl: "60s single-turn",
+    ttlPercent: 86,
     scope: "User.ReadBasic.All (Zero-Standing)",
     status: "ACTIVE BROKER",
   },
@@ -36,6 +41,7 @@ const GHOST_IAM_POLICIES = [
 
 export default function EphemeralIamPage() {
   useRequiredSession();
+  const reducedMotion = usePrefersReducedMotion();
 
   return (
     <AppShell title="Ephemeral IAM Broker">
@@ -59,24 +65,43 @@ export default function EphemeralIamPage() {
                 <span>Max Credential TTL</span>
                 <Timer className="h-4 w-4 text-rh-ochre" />
               </div>
-              <div className="mt-2 font-mono text-2xl font-bold text-rh-text">60s</div>
-              <div className="mt-1 text-[11px] text-rh-text-muted">Single-turn cryptographic expiration</div>
+              <div className="rh-tabular mt-2 font-mono text-2xl font-bold text-rh-text">60s</div>
+              <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-rh-subtle">
+                <motion.div
+                  initial={reducedMotion ? false : { scaleX: 0 }}
+                  animate={{ scaleX: 1 }}
+                  transition={{ duration: MOTION_TIMING.chart, ease: EASE_OUT_EXPO }}
+                  className="h-full w-3/4 origin-left rounded-full bg-rh-ochre"
+                />
+              </div>
+              <div className="mt-1.5 text-[11px] text-rh-text-muted">Single-turn cryptographic expiration</div>
             </div>
             <div className="rh-glass rounded-rh-lg border border-control-border p-4">
               <div className="flex items-center justify-between text-xs text-rh-text-2">
                 <span>Standing Cloud Secrets</span>
                 <KeyRound className="h-4 w-4 text-rh-teal-text" />
               </div>
-              <div className="mt-2 font-mono text-2xl font-bold text-rh-teal-text">0</div>
-              <div className="mt-1 text-[11px] text-rh-text-muted">100% brokered via RedHand STS</div>
+              <div className="rh-tabular mt-2 font-mono text-2xl font-bold text-rh-teal-text">0</div>
+              <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-rh-subtle">
+                <div className="h-full w-full rounded-full bg-rh-teal-wash" />
+              </div>
+              <div className="mt-1.5 text-[11px] text-rh-text-muted">100% brokered via RedHand STS</div>
             </div>
             <div className="rh-glass rounded-rh-lg border border-control-border p-4">
               <div className="flex items-center justify-between text-xs text-rh-text-2">
                 <span>Connected Cloud Providers</span>
                 <Cloud className="h-4 w-4 text-rh-steel-text" />
               </div>
-              <div className="mt-2 font-mono text-2xl font-bold text-rh-text">3</div>
-              <div className="mt-1 text-[11px] text-rh-text-muted">AWS STS · GCP IAM · Entra ID</div>
+              <div className="rh-tabular mt-2 font-mono text-2xl font-bold text-rh-text">3</div>
+              <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-rh-subtle">
+                <motion.div
+                  initial={reducedMotion ? false : { scaleX: 0 }}
+                  animate={{ scaleX: 1 }}
+                  transition={{ duration: MOTION_TIMING.chart, ease: EASE_OUT_EXPO }}
+                  className="h-full w-full origin-left rounded-full bg-rh-steel-text"
+                />
+              </div>
+              <div className="mt-1.5 text-[11px] text-rh-text-muted">AWS STS · GCP IAM · Entra ID</div>
             </div>
           </div>
 
@@ -100,25 +125,45 @@ export default function EphemeralIamPage() {
                     <th className="px-4 py-2.5">Agent Passport</th>
                     <th className="px-4 py-2.5">Cloud Provider</th>
                     <th className="px-4 py-2.5">Target Role / Principal</th>
-                    <th className="px-4 py-2.5">Turn TTL</th>
+                    <th className="px-4 py-2.5">Turn TTL Window</th>
                     <th className="px-4 py-2.5">Downscoped Boundary</th>
                     <th className="px-4 py-2.5">Broker State</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-control-border">
-                  {GHOST_IAM_POLICIES.map((row) => (
-                    <tr key={row.agent} className="text-rh-text-2">
+                  {GHOST_IAM_POLICIES.map((row, idx) => (
+                    <motion.tr
+                      key={row.agent}
+                      initial={reducedMotion ? false : { opacity: 0, y: 4 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{
+                        duration: MOTION_TIMING.normal,
+                        delay: reducedMotion ? 0 : idx * MOTION_TIMING.staggerStep,
+                        ease: EASE_OUT_EXPO,
+                      }}
+                      className="text-rh-text-2"
+                    >
                       <td className="px-4 py-3 font-mono font-semibold text-rh-text">{row.agent}</td>
                       <td className="px-4 py-3">{row.provider}</td>
                       <td className="px-4 py-3 font-mono text-[11px]">{row.role}</td>
-                      <td className="px-4 py-3 font-mono text-rh-ochre">{row.ttl}</td>
+                      <td className="px-4 py-3">
+                        <div className="flex flex-col gap-1">
+                          <span className="rh-tabular font-mono text-[11px] text-rh-ochre">{row.ttl}</span>
+                          <div className="h-1 w-24 overflow-hidden rounded-full bg-rh-subtle">
+                            <div
+                              className="h-full rounded-full bg-rh-ochre"
+                              style={{ width: `${row.ttlPercent}%` }}
+                            />
+                          </div>
+                        </div>
+                      </td>
                       <td className="px-4 py-3 font-mono text-[11px]">{row.scope}</td>
                       <td className="px-4 py-3">
                         <span className="rounded-full border border-rh-teal-border bg-rh-teal-wash px-2 py-0.5 font-mono text-[10px] font-semibold text-rh-teal-text">
                           {row.status}
                         </span>
                       </td>
-                    </tr>
+                    </motion.tr>
                   ))}
                 </tbody>
               </table>

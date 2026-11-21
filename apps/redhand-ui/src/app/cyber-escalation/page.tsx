@@ -1,11 +1,13 @@
 "use client";
 
 import React from "react";
-import { Cpu, GitBranch, ShieldAlert, Zap } from "lucide-react";
+import { motion } from "framer-motion";
+import { ArrowRight, Cpu, GitBranch, ShieldAlert, Zap } from "lucide-react";
 
 import { EnterprisePreviewGate } from "@/components/control-room/EnterprisePreviewGate";
 import { AppShell } from "@/components/shell/AppShell";
 import { useRequiredSession } from "@/lib/auth";
+import { EASE_OUT_EXPO, MOTION_TIMING, usePrefersReducedMotion } from "@/lib/tokens";
 
 const GHOST_ESCALATION_RULES = [
   {
@@ -33,6 +35,7 @@ const GHOST_ESCALATION_RULES = [
 
 export default function CyberEscalationPage() {
   useRequiredSession();
+  const reducedMotion = usePrefersReducedMotion();
 
   return (
     <AppShell title="Cyber-Model Escalation">
@@ -50,16 +53,20 @@ export default function CyberEscalationPage() {
       >
         <div className="flex flex-col gap-4">
           {/* Ghost 3-Stage Escalation Pipeline */}
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+          <div className="grid grid-cols-1 items-stretch gap-3 md:grid-cols-[1fr_auto_1fr_auto_1fr]">
             <div className="rh-glass rounded-rh-lg border border-rh-teal-border p-4">
               <div className="flex items-center justify-between text-xs text-rh-teal-text">
                 <span className="font-semibold">Stage 1 · Inline Core</span>
                 <Zap className="h-4 w-4" />
               </div>
-              <div className="mt-1.5 font-mono text-lg font-bold text-rh-text">&lt;2ms Pre-Flight</div>
+              <div className="rh-tabular mt-1.5 font-mono text-lg font-bold text-rh-text">&lt;2ms Pre-Flight</div>
               <p className="mt-1 text-[11px] text-rh-text-2">
                 Regex, JSON Schema, AST &amp; EN/SEA/Malay heuristics
               </p>
+            </div>
+
+            <div className="hidden items-center justify-center text-rh-text-muted md:flex">
+              <ArrowRight className="h-4 w-4" />
             </div>
 
             <div className="rh-glass rounded-rh-lg border border-rh-steel-border p-4">
@@ -67,13 +74,17 @@ export default function CyberEscalationPage() {
                 <span className="font-semibold">Stage 2 · Local Semantic</span>
                 <Cpu className="h-4 w-4" />
               </div>
-              <div className="mt-1.5 font-mono text-lg font-bold text-rh-text">&lt;15ms ONNX / DeBERTa</div>
+              <div className="rh-tabular mt-1.5 font-mono text-lg font-bold text-rh-text">&lt;15ms ONNX / DeBERTa</div>
               <p className="mt-1 text-[11px] text-rh-text-2">
                 Quantized local classifier · 0 external API calls
               </p>
             </div>
 
-            <div className="rh-glass rounded-rh-lg border border-rh-ochre-border bg-rh-ochre-wash/30 p-4">
+            <div className="hidden items-center justify-center text-rh-ochre md:flex">
+              <ArrowRight className="h-4 w-4" />
+            </div>
+
+            <div className="rh-glass rounded-rh-lg border border-rh-ochre-border bg-rh-ochre-wash/25 p-4">
               <div className="flex items-center justify-between text-xs text-rh-ochre">
                 <span className="font-semibold">Stage 3 · 10x Enterprise</span>
                 <ShieldAlert className="h-4 w-4" />
@@ -110,14 +121,24 @@ export default function CyberEscalationPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-control-border">
-                  {GHOST_ESCALATION_RULES.map((rule) => (
-                    <tr key={rule.name} className="text-rh-text-2">
+                  {GHOST_ESCALATION_RULES.map((rule, idx) => (
+                    <motion.tr
+                      key={rule.name}
+                      initial={reducedMotion ? false : { opacity: 0, y: 4 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{
+                        duration: MOTION_TIMING.normal,
+                        delay: reducedMotion ? 0 : idx * MOTION_TIMING.staggerStep,
+                        ease: EASE_OUT_EXPO,
+                      }}
+                      className="text-rh-text-2"
+                    >
                       <td className="px-4 py-3 font-semibold text-rh-text">{rule.name}</td>
                       <td className="px-4 py-3 font-mono text-[11px]">{rule.trigger}</td>
                       <td className="px-4 py-3">{rule.model}</td>
                       <td className="px-4 py-3 text-rh-crimson-text">{rule.action}</td>
-                      <td className="px-4 py-3 font-mono text-rh-teal-text">{rule.latency}</td>
-                    </tr>
+                      <td className="rh-tabular px-4 py-3 font-mono text-rh-teal-text">{rule.latency}</td>
+                    </motion.tr>
                   ))}
                 </tbody>
               </table>

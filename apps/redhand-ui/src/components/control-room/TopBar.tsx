@@ -5,7 +5,6 @@ import { motion } from "framer-motion";
 import {
   Bell,
   ChevronRight,
-  Layers,
   Plus,
   Search,
   Zap,
@@ -33,7 +32,6 @@ export interface TopBarProps {
   userInitials: string;
   dataSource?: "live" | "preview";
   onToggleDataSource?: () => void;
-  onOpenEditions?: () => void;
 }
 
 const VIEW_LABELS: Record<ControlRoomView, string> = {
@@ -62,7 +60,6 @@ export function TopBar({
   userInitials,
   dataSource = "live",
   onToggleDataSource,
-  onOpenEditions,
 }: TopBarProps) {
   const reducedMotion = usePrefersReducedMotion();
 
@@ -164,18 +161,6 @@ export function TopBar({
             );
           })}
         </div>
-
-        {onOpenEditions && (
-          <button
-            type="button"
-            onClick={onOpenEditions}
-            title="View Open-Source Core vs. 10x Enterprise Architecture"
-            className="inline-flex h-8 items-center gap-1.5 rounded-full border border-amber-500/35 bg-amber-500/10 px-3 text-xs font-medium text-amber-200 transition-colors hover:bg-amber-500/20 hover:border-amber-400/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400/70"
-          >
-            <Layers className="h-3.5 w-3.5 text-amber-300" />
-            <span className="hidden xl:inline">Editions</span>
-          </button>
-        )}
 
         {/* Threat simulation demo trigger */}
         <button
