@@ -9,6 +9,7 @@ import { CommandSearchModal } from "@/components/control-room/CommandSearchModal
 import { GlassCard } from "@/components/control-room/GlassCard";
 import { IconRail } from "@/components/control-room/IconRail";
 import { NodeDetailView } from "@/components/control-room/NodeDetailView";
+import { PublicLandingView } from "@/components/control-room/PublicLandingView";
 import { RadialMap } from "@/components/control-room/RadialMap";
 import { RightStatsPanel } from "@/components/control-room/RightStatsPanel";
 import {
@@ -27,7 +28,7 @@ import {
   type Me,
   type Passport,
 } from "@/lib/api";
-import { useRequiredSession } from "@/lib/auth";
+import { useAuth } from "@/lib/auth";
 import {
   ALL_NODES,
   MOCK_APPROVALS,
@@ -59,10 +60,11 @@ const TIME_RANGE_MULTIPLIER: Record<TimeRangeKey, number> = {
 };
 
 export default function AgentControlRoomPage() {
-  const session = useRequiredSession();
+  const { session, ready } = useAuth();
   const token = session?.token ?? null;
   const reducedMotion = usePrefersReducedMotion();
 
+  const [showArchitecture, setShowArchitecture] = useState(false);
   const [activeView, setActiveView] = useState<ControlRoomView>("overview");
   const [overviewTab, setOverviewTab] = useState<OverviewSubTab>("operational");
   const [timeRange, setTimeRange] = useState<TimeRangeKey>("24h");
@@ -335,6 +337,15 @@ export default function AgentControlRoomPage() {
 
   const isDetailOverlay = activeView === "node-detail" && selectedNode !== null;
 
+  if ((ready && !session) || showArchitecture) {
+    return (
+      <PublicLandingView
+        isAuthenticated={Boolean(session)}
+        onReturnToConsole={() => setShowArchitecture(false)}
+      />
+    );
+  }
+
   return (
     <MotionConfig reducedMotion="user">
       <LayoutGroup>
@@ -424,6 +435,7 @@ export default function AgentControlRoomPage() {
             userInitials={userInitials}
             dataSource={dataSource}
             onToggleDataSource={() => setDataSource((prev) => (prev === "live" ? "preview" : "live"))}
+            onOpenEditions={() => setShowArchitecture(true)}
           />
 
           {/* Main Stage Container */}

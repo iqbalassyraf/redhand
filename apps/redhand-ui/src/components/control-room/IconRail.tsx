@@ -5,11 +5,14 @@ import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Activity,
+  Cpu,
   FileClock,
   GitFork,
   Hand,
   KeyRound,
+  Lock,
   Radar,
+  Radio,
   ScanSearch,
   ShieldCheck,
   TerminalSquare,
@@ -42,6 +45,12 @@ const EXTERNAL_SHORTCUTS = [
   { href: "/radar", label: "Threat Radar", icon: Radar },
   { href: "/scanner", label: "MCP Scanner", icon: ScanSearch },
   { href: "/blackbox", label: "Black Box", icon: TerminalSquare },
+] as const;
+
+const ENTERPRISE_SHORTCUTS = [
+  { href: "/ephemeral-iam", label: "Ephemeral IAM", badge: "ENTERPRISE", icon: Lock },
+  { href: "/cyber-escalation", label: "Cyber-Model Escalation", badge: "PREVIEW", icon: Cpu },
+  { href: "/siem-intel", label: "SIEM & Threat Intel", badge: "ENTERPRISE", icon: Radio },
 ] as const;
 
 /**
@@ -79,7 +88,7 @@ export function IconRail({
     { id: "audit-log", label: "Audit Log", shortcut: "5", icon: FileClock },
   ];
 
-  const renderTooltip = (id: string, text: string, shortcut?: string) => (
+  const renderTooltip = (id: string, text: string, shortcut?: string, enterpriseBadge?: string) => (
     <AnimatePresence>
       {hoveredId === id && (
         <motion.div
@@ -91,6 +100,11 @@ export function IconRail({
           className="pointer-events-none absolute left-[calc(100%+12px)] top-1/2 z-50 -translate-y-1/2 flex items-center gap-2 whitespace-nowrap rounded-lg bg-slate-100 px-3 py-1.5 text-xs font-semibold text-slate-950 shadow-xl"
         >
           <span>{text}</span>
+          {enterpriseBadge && (
+            <span className="rounded-full bg-amber-500/20 px-1.5 py-0.5 font-mono text-[9px] font-bold uppercase tracking-wider text-amber-800">
+              {enterpriseBadge}
+            </span>
+          )}
           {shortcut && (
             <kbd className="rounded bg-slate-200 px-1.5 py-0.5 font-mono text-[10px] font-medium text-slate-700">
               {shortcut}
@@ -196,6 +210,38 @@ export function IconRail({
                   <Icon className="h-4 w-4" />
                 </Link>
                 {renderTooltip(ext.href, ext.label)}
+              </div>
+            );
+          })}
+        </nav>
+
+        <div className="h-px w-8 bg-white/10" role="separator" />
+
+        {/* Enterprise Preview Pages */}
+        <nav
+          aria-label="Enterprise Preview Pages"
+          className="flex w-full flex-col items-center gap-1 px-2"
+        >
+          {ENTERPRISE_SHORTCUTS.map((ent) => {
+            const Icon = ent.icon;
+            return (
+              <div key={ent.href} className="relative flex w-full justify-center">
+                <Link
+                  href={ent.href}
+                  onMouseEnter={() => setHoveredId(ent.href)}
+                  onMouseLeave={() => setHoveredId(null)}
+                  onFocus={() => setHoveredId(ent.href)}
+                  onBlur={() => setHoveredId(null)}
+                  aria-label={`${ent.label} (${ent.badge})`}
+                  className="relative flex h-9 w-9 items-center justify-center rounded-xl text-slate-400 transition-colors duration-rh-fast hover:bg-amber-500/10 hover:text-amber-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400/80"
+                >
+                  <Icon className="h-4 w-4" />
+                  <span
+                    aria-hidden
+                    className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-amber-400"
+                  />
+                </Link>
+                {renderTooltip(ent.href, ent.label, undefined, ent.badge)}
               </div>
             );
           })}

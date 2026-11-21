@@ -8,18 +8,34 @@ export type Role = "owner" | "admin" | "security_operator" | "viewer";
 export interface NavItem {
   href: string;
   label: string;
-  icon: "insights" | "passports" | "blackbox" | "radar" | "scanner" | "honeytokens" | "coverage" | "organization";
+  icon:
+    | "insights"
+    | "passports"
+    | "blackbox"
+    | "radar"
+    | "scanner"
+    | "honeytokens"
+    | "coverage"
+    | "organization"
+    | "ephemeral_iam"
+    | "cyber_escalation"
+    | "siem_intel";
+  tier?: "core" | "enterprise";
+  badge?: "PREVIEW" | "ENTERPRISE";
 }
 
 export const NAV_ITEMS: readonly NavItem[] = [
-  { href: "/", label: "Insights", icon: "insights" },
-  { href: "/passports", label: "Passports", icon: "passports" },
-  { href: "/blackbox", label: "Black Box", icon: "blackbox" },
-  { href: "/radar", label: "Radar", icon: "radar" },
-  { href: "/scanner", label: "MCP Scanner", icon: "scanner" },
-  { href: "/honeytokens", label: "Honeytokens", icon: "honeytokens" },
-  { href: "/coverage", label: "Coverage", icon: "coverage" },
-  { href: "/organization", label: "Organization", icon: "organization" },
+  { href: "/", label: "Insights", icon: "insights", tier: "core" },
+  { href: "/passports", label: "Passports", icon: "passports", tier: "core" },
+  { href: "/blackbox", label: "Black Box", icon: "blackbox", tier: "core" },
+  { href: "/radar", label: "Radar", icon: "radar", tier: "core" },
+  { href: "/scanner", label: "MCP Scanner", icon: "scanner", tier: "core" },
+  { href: "/honeytokens", label: "Honeytokens", icon: "honeytokens", tier: "core" },
+  { href: "/coverage", label: "Coverage", icon: "coverage", tier: "core" },
+  { href: "/organization", label: "Organization", icon: "organization", tier: "core" },
+  { href: "/ephemeral-iam", label: "Ephemeral IAM", icon: "ephemeral_iam", tier: "enterprise", badge: "ENTERPRISE" },
+  { href: "/cyber-escalation", label: "Cyber-Model Escalation", icon: "cyber_escalation", tier: "enterprise", badge: "PREVIEW" },
+  { href: "/siem-intel", label: "SIEM & Threat Intel", icon: "siem_intel", tier: "enterprise", badge: "ENTERPRISE" },
 ];
 
 /** The nav item for a pathname: the longest href that is the path or a parent of it ("/" only matches exactly). */

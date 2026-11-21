@@ -9,7 +9,24 @@
 import React, { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Archive, Building2, Hand, IdCard, KeyRound, LayoutDashboard, LogOut, Menu, Radar, ScanSearch, ShieldCheck, X } from "lucide-react";
+import {
+  Archive,
+  Building2,
+  Cpu,
+  Hand,
+  IdCard,
+  KeyRound,
+  LayoutDashboard,
+  Lock,
+  LogOut,
+  Menu,
+  Radar,
+  Radio,
+  ScanSearch,
+  ShieldAlert,
+  ShieldCheck,
+  X,
+} from "lucide-react";
 
 import { useAuth } from "@/lib/auth";
 import { activeNavHref, NAV_ITEMS, roleLabel, type NavItem } from "@/lib/nav";
@@ -23,6 +40,9 @@ const ICONS: Record<NavItem["icon"], React.ComponentType<{ className?: string }>
   honeytokens: KeyRound,
   coverage: ShieldCheck,
   organization: Building2,
+  ephemeral_iam: Lock,
+  cyber_escalation: Cpu,
+  siem_intel: Radio,
 };
 
 interface AppShellProps {
@@ -35,32 +55,50 @@ interface AppShellProps {
 }
 
 const TOOLTIP_CLASS =
-  "pointer-events-none absolute left-[calc(100%+12px)] top-1/2 z-50 -translate-y-1/2 whitespace-nowrap rounded-rh-sm border border-control-borderStrong bg-control-elevated px-3 py-1.5 text-xs font-semibold text-rh-text shadow-rh-glass";
+  "pointer-events-none absolute left-[calc(100%+12px)] top-1/2 z-50 -translate-y-1/2 flex items-center gap-2 whitespace-nowrap rounded-rh-sm border border-control-borderStrong bg-control-elevated px-3 py-1.5 text-xs font-semibold text-rh-text shadow-rh-glass";
 
 function MobileNavLinks({ active, onNavigate }: { active: string | null; onNavigate?: () => void }) {
+  const coreItems = NAV_ITEMS.filter((i) => i.tier !== "enterprise");
+  const enterpriseItems = NAV_ITEMS.filter((i) => i.tier === "enterprise");
+
+  const renderItem = (item: NavItem) => {
+    const Icon = ICONS[item.icon];
+    const isActive = item.href === active;
+    return (
+      <Link
+        key={item.href}
+        href={item.href}
+        onClick={onNavigate}
+        aria-current={isActive ? "page" : undefined}
+        className={`relative flex items-center justify-between gap-2 rounded-rh-sm px-3 py-2 text-[13px] font-medium transition-colors duration-rh-fast ${
+          isActive
+            ? "border border-control-crimsonBorder bg-control-crimsonSoft text-rh-text"
+            : "text-rh-text-2 hover:bg-control-glassHover hover:text-rh-text"
+        }`}
+      >
+        {isActive && <span aria-hidden className="absolute inset-y-1.5 left-0 w-[2px] rounded-full bg-control-crimsonBright" />}
+        <span className="flex items-center gap-3">
+          <Icon className="h-4 w-4 shrink-0" />
+          <span>{item.label}</span>
+        </span>
+        {item.badge && (
+          <span className="rounded-full border border-rh-ochre-border bg-rh-ochre-wash px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-rh-ochre">
+            {item.badge}
+          </span>
+        )}
+      </Link>
+    );
+  };
+
   return (
     <nav aria-label="Main" className="flex flex-col gap-1">
-      {NAV_ITEMS.map((item) => {
-        const Icon = ICONS[item.icon];
-        const isActive = item.href === active;
-        return (
-          <Link
-            key={item.href}
-            href={item.href}
-            onClick={onNavigate}
-            aria-current={isActive ? "page" : undefined}
-            className={`relative flex items-center gap-3 rounded-rh-sm px-3 py-2 text-[13px] font-medium transition-colors duration-rh-fast ${
-              isActive
-                ? "border border-control-crimsonBorder bg-control-crimsonSoft text-rh-text"
-                : "text-rh-text-2 hover:bg-control-glassHover hover:text-rh-text"
-            }`}
-          >
-            {isActive && <span aria-hidden className="absolute inset-y-1.5 left-0 w-[2px] rounded-full bg-control-crimsonBright" />}
-            <Icon className="h-4 w-4 shrink-0" />
-            <span>{item.label}</span>
-          </Link>
-        );
-      })}
+      {coreItems.map(renderItem)}
+      <div className="my-1.5 flex items-center gap-2 px-3">
+        <div className="h-px flex-1 bg-control-border" />
+        <span className="text-[9px] font-bold uppercase tracking-widest text-rh-ochre">Enterprise</span>
+        <div className="h-px flex-1 bg-control-border" />
+      </div>
+      {enterpriseItems.map(renderItem)}
     </nav>
   );
 }
@@ -104,33 +142,48 @@ export function AppShell({ title, organization, role, actions, children }: AppSh
           </div>
 
           <nav aria-label="Main" className="flex w-full flex-col items-center gap-1.5 px-2">
-            {NAV_ITEMS.map((item) => {
+            {NAV_ITEMS.map((item, idx) => {
               const Icon = ICONS[item.icon];
               const isActive = item.href === active;
+              const isFirstEnterprise = item.tier === "enterprise" && NAV_ITEMS[idx - 1]?.tier !== "enterprise";
               return (
-                <div key={item.href} className="relative flex w-full justify-center">
-                  <Link
-                    href={item.href}
-                    aria-label={item.label}
-                    aria-current={isActive ? "page" : undefined}
-                    onMouseEnter={() => setHoveredId(item.href)}
-                    onMouseLeave={() => setHoveredId((prev) => (prev === item.href ? null : prev))}
-                    onFocus={() => setHoveredId(item.href)}
-                    onBlur={() => setHoveredId((prev) => (prev === item.href ? null : prev))}
-                    className={`relative flex h-10 w-10 items-center justify-center rounded-xl transition-colors duration-rh-fast ${
-                      isActive
-                        ? "border border-control-crimsonBorder bg-control-crimsonSoft text-rh-text shadow-rh-crimson"
-                        : "text-rh-text-2 hover:bg-control-glassHover hover:text-rh-text"
-                    }`}
-                  >
-                    <Icon className="h-[18px] w-[18px]" />
-                  </Link>
-                  {hoveredId === item.href && (
-                    <div role="tooltip" className={TOOLTIP_CLASS}>
-                      {item.label}
-                    </div>
-                  )}
-                </div>
+                <React.Fragment key={item.href}>
+                  {isFirstEnterprise && <div className="my-1 h-px w-8 bg-control-border" role="separator" />}
+                  <div className="relative flex w-full justify-center">
+                    <Link
+                      href={item.href}
+                      aria-label={item.label}
+                      aria-current={isActive ? "page" : undefined}
+                      onMouseEnter={() => setHoveredId(item.href)}
+                      onMouseLeave={() => setHoveredId((prev) => (prev === item.href ? null : prev))}
+                      onFocus={() => setHoveredId(item.href)}
+                      onBlur={() => setHoveredId((prev) => (prev === item.href ? null : prev))}
+                      className={`relative flex h-10 w-10 items-center justify-center rounded-xl transition-colors duration-rh-fast ${
+                        isActive
+                          ? "border border-control-crimsonBorder bg-control-crimsonSoft text-rh-text shadow-rh-crimson"
+                          : "text-rh-text-2 hover:bg-control-glassHover hover:text-rh-text"
+                      }`}
+                    >
+                      <Icon className="h-[18px] w-[18px]" />
+                      {item.badge && (
+                        <span
+                          aria-hidden
+                          className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-rh-ochre"
+                        />
+                      )}
+                    </Link>
+                    {hoveredId === item.href && (
+                      <div role="tooltip" className={TOOLTIP_CLASS}>
+                        <span>{item.label}</span>
+                        {item.badge && (
+                          <span className="rounded-full border border-rh-ochre-border bg-rh-ochre-wash px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-rh-ochre">
+                            {item.badge}
+                          </span>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </React.Fragment>
               );
             })}
           </nav>
