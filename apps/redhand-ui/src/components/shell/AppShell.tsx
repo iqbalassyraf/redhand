@@ -14,7 +14,6 @@ import {
   Archive,
   Building2,
   Cpu,
-  Hand,
   IdCard,
   KeyRound,
   LayoutDashboard,
@@ -27,6 +26,8 @@ import {
   ShieldCheck,
   X,
 } from "lucide-react";
+
+import { RedHandCrest } from "@/components/brand/RedHandCrest";
 
 import { useAuth } from "@/lib/auth";
 import { activeNavHref, NAV_ITEMS, roleLabel, type NavItem } from "@/lib/nav";
@@ -132,9 +133,9 @@ export function AppShell({ title, organization, role, actions, children }: AppSh
               onMouseLeave={() => setHoveredId((prev) => (prev === "brand" ? null : prev))}
               onFocus={() => setHoveredId("brand")}
               onBlur={() => setHoveredId((prev) => (prev === "brand" ? null : prev))}
-              className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-control-crimsonBright to-control-crimsonDeep text-white shadow-rh-crimson ring-1 ring-control-borderStrong transition-transform duration-rh-fast ease-rh-out hover:scale-105"
+              className="flex h-10 w-10 items-center justify-center rounded-xl ring-1 ring-control-borderStrong transition-transform duration-rh-fast ease-rh-out hover:scale-105"
             >
-              <Hand className="h-5 w-5" />
+              <RedHandCrest size="lg" />
             </Link>
             <AnimatePresence>
               {hoveredId === "brand" && (
@@ -260,9 +261,9 @@ export function AppShell({ title, organization, role, actions, children }: AppSh
             <Link
               href="/"
               aria-label="RedHand Control Room"
-              className="flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-br from-control-crimsonBright to-control-crimsonDeep text-white shadow-rh-crimson lg:hidden"
+              className="flex h-7 w-7 items-center justify-center rounded-lg lg:hidden"
             >
-              <Hand className="h-4 w-4" />
+              <RedHandCrest size="sm" />
             </Link>
             <h1 className="truncate text-[18px] font-semibold tracking-tight text-rh-text">{title}</h1>
           </div>

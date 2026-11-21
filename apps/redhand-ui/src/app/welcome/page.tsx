@@ -6,7 +6,8 @@
  */
 
 import React, { useState } from "react";
-import { Hand } from "lucide-react";
+
+import { RedHandCrest } from "@/components/brand/RedHandCrest";
 
 import { ApiError, onboardingApi } from "@/lib/api";
 import { useAuth, useRequiredSession } from "@/lib/auth";
@@ -63,10 +64,8 @@ export default function WelcomePage() {
     <main className="flex min-h-screen items-center justify-center px-4 py-10">
       <div className="rh-glass w-full max-w-[440px] rounded-rh-lg p-6">
         <div className="mb-4 flex items-center gap-2.5">
-          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-control-crimsonBright to-control-crimsonDeep shadow-rh-crimson ring-1 ring-control-borderStrong">
-            <Hand className="h-4 w-4 text-white" />
-          </div>
-          <span className="text-[20px] font-bold tracking-tight text-rh-text">RedHand</span>
+          <RedHandCrest size="md" />
+          <span className="text-[20px] font-bold tracking-tight text-rh-text">redhand</span>
         </div>
         <p className="mb-4 text-[13px] text-rh-text-2">{session.email}: {CREATE_TEXT.noOrganization}</p>
 

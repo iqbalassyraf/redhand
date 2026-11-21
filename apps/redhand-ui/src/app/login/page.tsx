@@ -2,8 +2,8 @@
 
 import React, { useState } from "react";
 import dynamic from "next/dynamic";
-import { Hand } from "lucide-react";
 
+import { RedHandCrest } from "@/components/brand/RedHandCrest";
 import { useAuth } from "@/lib/auth";
 import { PENDING_INVITE_KEY } from "@/lib/onboarding";
 
@@ -46,10 +46,8 @@ export default function LoginPage() {
     return (
       <main className="flex min-h-screen flex-col items-center justify-center gap-6 px-4 py-8">
         <div className="flex items-center gap-2.5">
-          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-control-crimsonBright to-control-crimsonDeep shadow-rh-crimson ring-1 ring-control-borderStrong">
-            <Hand className="h-4 w-4 text-white" />
-          </div>
-          <span className="text-[20px] font-bold tracking-tight text-rh-text">RedHand</span>
+          <RedHandCrest size="md" />
+          <span className="text-[20px] font-bold tracking-tight text-rh-text">redhand</span>
         </div>
         <ClerkLogin />
       </main>
@@ -60,10 +58,8 @@ export default function LoginPage() {
     <main className="flex min-h-screen items-center justify-center px-4">
       <div className="rh-glass w-full max-w-[380px] rounded-rh-lg p-6">
         <div className="mb-6 flex items-center gap-2.5">
-          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-control-crimsonBright to-control-crimsonDeep shadow-rh-crimson ring-1 ring-control-borderStrong">
-            <Hand className="h-4 w-4 text-white" />
-          </div>
-          <span className="text-[20px] font-bold tracking-tight text-rh-text">RedHand</span>
+          <RedHandCrest size="md" />
+          <span className="text-[20px] font-bold tracking-tight text-rh-text">redhand</span>
         </div>
 
         {supabaseConfigured && mode === "forgot" ? (

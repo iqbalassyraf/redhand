@@ -8,7 +8,6 @@ import {
   Cpu,
   FileClock,
   GitFork,
-  Hand,
   KeyRound,
   Lock,
   Radar,
@@ -18,6 +17,7 @@ import {
   TerminalSquare,
   UserCheck,
 } from "lucide-react";
+import { RedHandCrest } from "@/components/brand/RedHandCrest";
 import type { ControlRoomView } from "@/lib/control-room-data";
 import { EASE_OUT_EXPO, SPRING_SHARED_ELEMENT, usePrefersReducedMotion } from "@/lib/tokens";
 
@@ -131,9 +131,9 @@ export function IconRail({
             onFocus={() => setHoveredId("brand")}
             onBlur={() => setHoveredId(null)}
             aria-label="RedHand Agent Control Room Overview"
-            className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-rose-500 to-rose-700 text-white shadow-rh-crimson ring-1 ring-white/25 transition-transform duration-rh-fast hover:scale-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-400"
+            className="flex h-10 w-10 items-center justify-center rounded-xl ring-1 ring-white/20 transition-transform duration-rh-fast hover:scale-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-400"
           >
-            <Hand className="h-5 w-5" />
+            <RedHandCrest size="lg" />
           </button>
           {renderTooltip("brand", "RedHand Control Room")}
         </div>

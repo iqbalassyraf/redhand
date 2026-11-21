@@ -10,7 +10,8 @@ import {
   type Edge,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import { Hand, Search, Menu, Bell, ShieldCheck, Radio, Sparkles } from "lucide-react";
+import { Search, Menu, Bell, ShieldCheck, Radio, Sparkles } from "lucide-react";
+import { RedHandCrest } from "@/components/brand/RedHandCrest";
 
 import {
   InputVectorNode,
@@ -860,11 +861,9 @@ export default function RedHandCommandCenterPage() {
           </button>
 
           <div className="flex items-center gap-2">
-            <div className="flex h-7 w-9 items-center justify-center rounded-[8px] bg-rh-crimson">
-              <Hand className="h-4 w-4 text-rh-canvas" />
-            </div>
+            <RedHandCrest size="sm" />
             <span className="text-[20px] leading-[28px] font-bold tracking-tight text-rh-text">
-              RedHand
+              redhand
             </span>
             <span className="text-[11px] font-bold uppercase tracking-wider text-rh-text-2 bg-rh-elevated px-1.5 py-0.5 rounded">
               ASPM
